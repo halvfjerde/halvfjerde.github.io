@@ -188,4 +188,6 @@ td {
     background-color: rgb(0, 0, 0);
     animation-name: bow_to_wob;
     animation-duration: 3s;
+    top: 0;
+    left: 0;
 }
