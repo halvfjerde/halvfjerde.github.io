@@ -1,0 +1,197 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-jp.css");
+
+@keyframes font_45_to_500 {
+    from {font-weight: 45;}
+    to {font-weight: 500;}
+}
+
+@keyframes font_45_to_800 {
+    from {font-weight: 45;}
+    to {font-weight: 800;}
+}
+
+@keyframes bow_to_wob {
+    from {background-color: rgb(255, 255, 255); color: rgb(0, 0, 0);}
+    to {background-color: rgb(0, 0, 0); color: rgb(255, 255, 255);}
+}
+
+@keyframes side_content_move {
+    from {left: -25rem;}
+    to {left: -2.5rem;}
+}
+
+* {
+    font-family: "Pretendard JP Variable", "Pretendard JP", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Hiragino Sans", "Apple SD Gothic Neo", Meiryo, "Noto Sans JP", "Noto Sans KR", "Malgun Gothic", Osaka, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+}
+
+bold {
+    font-weight: 600;
+}
+
+
+body {
+    padding: 0;
+    margin: 0;
+}
+
+.right {
+    text-align: right;
+}
+
+.small {
+    font-size: 0.8em;
+}
+
+td {
+    padding: 0;
+    margin: 0;
+    width: 25%;
+    text-align: center;
+}
+
+.title {
+    background-color: rgb(0, 0, 0);
+    color: rgb(255, 255, 255);
+    padding-top: 8rem;
+    text-align: center;
+    font-size: 8rem;
+    animation-name: font_45_to_800, bow_to_wob;
+    animation-duration: 3s;
+    font-weight: 800;
+}
+
+@media (max-width: 380px) {
+    .title {
+        font-size: 7rem;
+    }
+}
+
+.subtitle {
+    background-color: rgb(0, 0, 0);
+    color: rgb(255, 255, 255);
+    padding-bottom: 8rem;
+    text-align: center;
+    font-size: 2rem;
+    animation-name: font_45_to_500, bow_to_wob;
+    animation-duration: 3s;
+    font-weight: 500;
+}
+
+.menu {
+    width: 100%; 
+    margin: 0;
+    padding: 0;
+}
+
+.contact_menu {
+    height: 2rem;
+    margin: 0;
+    border: 0;
+    font-size: 1rem;
+    font-weight: 400;
+    color: rgb(255, 255, 255);
+}
+
+.site_menu {
+    height: 2rem;
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 400;
+    background-color: rgb(0, 0, 0);
+    color: rgb(255, 255, 255);
+    animation-name: bow_to_wob;
+    animation-duration: 3s;
+}
+
+.content {
+    padding: 3rem;
+    padding-left: max(calc(50vw - 250px), 2rem);
+    padding-right: max(calc(50vw - 250px), 2rem);
+}
+
+.section {
+    margin-bottom: 2.5rem;
+}
+
+.section_title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 0.8rem;
+}
+
+#contact {
+    position: sticky;
+    background-color: rgb(0, 0, 0);
+    top: 2rem;
+    padding-left: max(calc(50vw - 250px), 2rem);
+    padding-right: max(calc(50vw - 250px), 2rem);
+    animation-name: bow_to_wob;
+    animation-duration: 3s;
+}
+
+#site {
+    position: sticky;
+    background-color: rgb(0, 0, 0);
+    top: 0;
+    animation-name: bow_to_wob;
+    animation-duration: 3s;
+}
+
+#twitter {
+    background: rgb(0, 166, 255);
+}
+
+#youtube {
+    background: rgb(219, 18, 18);
+}
+
+#behance, #github {
+    background: rgb(0, 0, 0);
+}
+
+.contact_menu:hover {
+    background: rgb(255, 255, 255) !important;
+    color: rgb(0, 0, 0);
+}
+
+.site_menu:hover {
+    background: rgb(255, 255, 255) !important;
+    color: rgb(0, 0, 0);
+}
+
+#nightmode {
+    background-color: rgb(0, 0, 0);
+    color: rgb(255, 255, 255);
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 50%;
+    border: rgb(255, 255, 255) 2px solid;
+    margin: 1rem;
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    font-size: 1rem;
+    
+}
+
+.collapsible {
+    transition: max-height 0.2s ease-out;
+    margin-left: 1rem;
+    max-height: 5rem;
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+.inactive_content {
+    max-height: 0;
+    margin-bottom: 0;
+}
+
+.active {
+    font-weight: 700;
+}
+
+.collbutton:hover {
+    font-weight: 700;
+    color: rgb(0, 152, 112);
+}
