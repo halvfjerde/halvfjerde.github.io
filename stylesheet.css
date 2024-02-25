@@ -84,7 +84,7 @@ td {
 .subtitle {
     background-color: rgb(0, 0, 0);
     color: rgb(255, 255, 255);
-    padding-bottom: 8rem;
+    padding-bottom: 10rem;
     text-align: center;
     font-size: 2rem;
     animation-name: font_45_to_500, bow_to_wob;
