@@ -5,12 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" type="text/css" href="stylesheet.css" />
     <script src="top_script.js"></script>
+    <style>
+        #pf {
+            background-color: rgb(0, 0, 0);
+            color: rgb(255, 255, 255);
+        }
+
+        #home {
+            background-color: rgb(244, 111, 0);
+            color: rgb(255, 255, 255);
+        }
+    </style>
 </head>
 <body>
     <table class="menu" id="site">
         <tr>
-            <td class="site_menu" onclick="window.open('/', '_self').focus();">홈 🏠</td>
-            <td class="site_menu" onclick="window.open('/portfolio', '_self').focus();">포트폴리오 ✍️</td>
+            <td class="site_menu" id="home" onclick="window.open('/', '_self').focus();">홈 🏠</td>
+            <td class="site_menu" id="pf" onclick="window.open('/portfolio', '_self').focus();">포트폴리오 ✍️</td>
         </tr>
     </table>
     <div class="title_background">

@@ -15,6 +15,12 @@
     to {background-color: rgb(0, 0, 0); color: rgb(255, 255, 255);}
 }
 
+@keyframes white_to_orange {
+    from {background-color: rgb(255, 255, 255); color: rgb(0, 0, 0);}
+    to {background-color: rgb(244, 111, 0); color: rgb(255, 255, 255);}
+}
+
+
 @keyframes side_content_move {
     from {left: -25rem;}
     to {left: -2.5rem;}
@@ -99,6 +105,7 @@ td {
     font-size: 1rem;
     font-weight: 400;
     color: rgb(255, 255, 255);
+    border: 1px solid rgb(0, 0, 0);
 }
 
 .site_menu {
@@ -106,10 +113,6 @@ td {
     margin: 0;
     font-size: 1rem;
     font-weight: 400;
-    background-color: rgb(0, 0, 0);
-    color: rgb(255, 255, 255);
-    animation-name: bow_to_wob;
-    animation-duration: 3s;
 }
 
 .content {
@@ -130,20 +133,18 @@ td {
 
 #contact {
     position: sticky;
-    background-color: rgb(0, 0, 0);
+    background-color: rgb(255, 255, 255);
     top: 2rem;
     padding-left: max(calc(50vw - 250px), 2rem);
     padding-right: max(calc(50vw - 250px), 2rem);
-    animation-name: bow_to_wob;
-    animation-duration: 3s;
 }
 
 #site {
     position: sticky;
     background-color: rgb(0, 0, 0);
     top: 0;
-    animation-name: bow_to_wob;
-    animation-duration: 3s;
+    padding-left: max(calc(50vw - 250px), 2rem);
+    padding-right: max(calc(50vw - 250px), 2rem);
 }
 
 #twitter {
@@ -160,12 +161,12 @@ td {
 
 .contact_menu:hover {
     background: rgb(255, 255, 255) !important;
-    color: rgb(0, 152, 112);
+    color: rgb(0, 152, 112) !important;
 }
 
 .site_menu:hover {
     background: rgb(255, 255, 255) !important;
-    color: rgb(0, 152, 112);
+    color: rgb(0, 152, 112) !important;
 }
 
 .collapsible {
