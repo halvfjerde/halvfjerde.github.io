@@ -184,7 +184,6 @@ td {
 .title_background {
     height: 28rem;
     width: 100%;
-    position: absolute;
     background-color: rgb(0, 0, 0);
     animation-name: bow_to_wob;
     animation-duration: 3s;
