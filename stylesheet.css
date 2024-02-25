@@ -162,7 +162,7 @@ td {
 .collapsible {
     transition: margin-bottom 0.2s ease-out;
     margin-left: 1rem;
-    max-height: none;
+    max-height: 8rem;
     margin-bottom: 1rem;
     overflow: hidden;
 }
