@@ -160,12 +160,12 @@ td {
 
 .contact_menu:hover {
     background: rgb(255, 255, 255) !important;
-    color: rgb(0, 0, 0);
+    color: rgb(0, 152, 112);
 }
 
 .site_menu:hover {
     background: rgb(255, 255, 255) !important;
-    color: rgb(0, 0, 0);
+    color: rgb(0, 152, 112);
 }
 
 .collapsible {
@@ -198,4 +198,20 @@ td {
     animation-duration: 3s;
     top: 0;
     left: 0;
+}
+
+.download {
+    height: 1.5rem;
+    width: 5rem;
+    background-color: rgb(86, 152, 0);
+    color: rgb(255, 255, 255);
+    border: 1px solid rgb(255, 255, 255);
+    font-size: 1rem;
+    margin-left: 0.5rem;
+}
+
+.download:hover {
+    background-color: rgb(255, 255, 255);
+    color: rgb(0, 152, 112);
+    border: 1px solid rgb(0, 0, 0);
 }
