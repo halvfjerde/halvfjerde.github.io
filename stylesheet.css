@@ -15,11 +15,6 @@
     to {background-color: rgb(0, 0, 0); color: rgb(255, 255, 255);}
 }
 
-@keyframes white_to_orange {
-    from {background-color: rgb(255, 255, 255); color: rgb(0, 0, 0);}
-    to {background-color: rgb(244, 111, 0); color: rgb(255, 255, 255);}
-}
-
 
 @keyframes side_content_move {
     from {left: -25rem;}
@@ -133,7 +128,7 @@ td {
 
 #contact {
     position: sticky;
-    background-color: rgb(255, 255, 255);
+    background-color: rgb(0, 0, 0);
     top: 2rem;
     padding-left: max(calc(50vw - 250px), 2rem);
     padding-right: max(calc(50vw - 250px), 2rem);
@@ -215,4 +210,18 @@ td {
     background-color: rgb(255, 255, 255);
     color: rgb(0, 152, 112);
     border: 1px solid rgb(0, 0, 0);
+}
+
+#profile {
+    display: block;
+    width: 8rem;
+    margin-left: auto;
+    margin-right: auto;
+    position: relative;
+    bottom: 0;
+    z-index: -100;   
+}
+
+span#profile {
+    margin-bottom: 2rem;
 }
