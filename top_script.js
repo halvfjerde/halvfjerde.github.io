@@ -3,7 +3,6 @@ var j;
 
 function startUp() {
 for (j = 0; j < coll.length; j++) {
-    coll[j].classList.toggle("active");
     var contentR = coll[j].nextElementSibling;  
     if (contentR.classList.contains("inactive_content")) {
         contentR.style.maxHeight = 0;
