@@ -180,3 +180,14 @@ td {
     font-weight: 700;
     color: rgb(0, 152, 112);
 }
+
+.title_background {
+    height: 28rem;
+    width: 100%;
+    position: absolute;
+    background-color: rgb(0, 0, 0);
+    animation-name: bow_to_wob;
+    animation-duration: 3s;
+    top: 0;
+    left: 0;
+}
