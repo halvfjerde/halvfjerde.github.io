@@ -13,5 +13,3 @@ for (j = 0; j < coll.length; j++) {
     });
 };
 };
-
-startUp()
