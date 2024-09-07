@@ -11,8 +11,8 @@
 }
 
 @keyframes bow_to_wob {
-    from {background-color: rgb(255, 255, 255); color: rgb(0, 0, 0);}
-    to {background-color: rgb(0, 0, 0); color: rgb(255, 255, 255);}
+    from {background-color: rgba(129,177,31,1); color: rgb(255, 255, 255);}
+    to {background-color: rgb(255, 255, 255); color: rgba(129,177,31,1);}
 }
 
 @keyframes side_content_move {
@@ -27,7 +27,6 @@
 bold {
     font-weight: 600;
 }
-
 
 body {
     top: 30px;
@@ -78,8 +77,8 @@ td {
 }
 
 .subtitle {
-    background-color: rgb(0, 0, 0);
-    color: rgb(255, 255, 255);
+    background: linear-gradient(90deg, rgba(129,177,31,1) 0%, rgba(255,255,255,1) 35%, rgba(255,255,255,1) 65%, rgba(129,177,31,1) 100%);
+    color: rgba(129,177,31,1);
     padding-bottom: 8rem;
     text-align: center;
     font-size: 2rem;
