@@ -151,6 +151,7 @@ td {
     font-weight: 400;
     color: rgb(255, 255, 255);
     border: 1px solid rgb(0, 0, 0);
+    border-radius: 1rem;
 }
 
 .site_menu {
