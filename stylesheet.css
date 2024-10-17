@@ -91,7 +91,7 @@ td {
 }
 
 .title {
-    background: linear-gradient(90deg, rgba(129,177,31,1) 0%, rgba(255,255,255,1) 35%, rgba(255,255,255,1) 65%, rgba(129,177,31,1) 100%);
+    background: rgba(255,255,255,1);
     color: rgba(129,177,31,1);
     padding-top: 8rem;
     text-align: center;
