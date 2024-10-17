@@ -150,7 +150,7 @@ td {
     font-size: 1rem;
     font-weight: 400;
     color: rgb(255, 255, 255);
-    border: 1px solid rgb(0, 0, 0);
+    border: 3px solid rgba(0, 0, 0, .3);
     border-radius: 1rem;
 }
 
