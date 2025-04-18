@@ -184,7 +184,7 @@ td {
 #contact {
     position: sticky;
     background-color: rgb(255, 255, 255);
-    top: 2rem;
+    top: calc(2rem + 3px);
     padding-left: max(calc(50vw - 250px), 2rem);
     padding-right: max(calc(50vw - 250px), 2rem);
 }
