@@ -1185,6 +1185,7 @@ const modeContent = {
 };
 
 function updateMode(value) {
+  updateURLState();
   modeContainer.innerHTML = ''; // remove existing
   modeContainer.innerHTML = (modeContent[value]());
 }
