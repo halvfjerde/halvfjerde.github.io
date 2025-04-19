@@ -1185,7 +1185,6 @@ const modeContent = {
 };
 
 function updateMode(value) {
-  updateURLState();
   modeContainer.innerHTML = ''; // remove existing
   modeContainer.innerHTML = (modeContent[value]());
 }
@@ -1247,6 +1246,7 @@ function loadURLState() {
 }
 
 document.getElementById('mode-select').addEventListener('change', e => {
+  updateURLState();
   updateMode(e.target.value);
     setupMap();
   updateLegend();
