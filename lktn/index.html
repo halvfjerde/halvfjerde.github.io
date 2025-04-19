@@ -1685,7 +1685,7 @@ function updateMode(value) {
   modeContainer.innerHTML = (modeContent[value]());
 }
 
-    function updateURLState() {
+function updateURLState() {
   const coloredRegions = [...document.querySelectorAll('#regions path, #regions polygon, #regions polyline, #regions rect')]
     .filter(el => el.getAttribute('data-party'))
     .map(el => {
@@ -1695,51 +1695,67 @@ function updateMode(value) {
       return `${id}:${party}-${level}`;
     });
 
-  const regionParam = `r=${coloredRegions.join(',')}`;
-  const selectedParam = selectedParty !== null ? `s=${parties.findIndex(p => p.id === selectedParty)}-${selectedLevel}` : '';
-  
-  // Example: if using dropdown
+  const regionEncoded = btoa(encodeURIComponent(coloredRegions.join(',')));
+
+  const selectedParam = selectedParty !== null
+    ? btoa(encodeURIComponent(`${parties.findIndex(p => p.id === selectedParty)}-${selectedLevel}`))
+    : '';
+
   const dropdownParam = `d=${document.getElementById('mode-select').value}`;
 
-  const params = [regionParam, selectedParam, dropdownParam].filter(Boolean).join('&');
-  const newUrl = `${location.pathname}?${params}`;
+  const params = [`r=${regionEncoded}`];
+  if (selectedParam) params.push(`s=${selectedParam}`);
+  params.push(dropdownParam);
+
+  const newUrl = `${location.pathname}?${params.join('&')}`;
   history.replaceState(null, '', newUrl);
 }
+
 
 function loadURLState() {
   const params = new URLSearchParams(window.location.search);
 
-  // Restore dropdown if used
+  // Restore dropdown
   const d = params.get('d');
   if (d !== null) {
-      currentPresetIndex = d;
-      document.getElementById('mode-select').value = d; // Your function for dropdown state
+    currentPresetIndex = d;
+    document.getElementById('mode-select').value = d;
   }
 
   // Restore selected swatch
   const s = params.get('s');
   if (s) {
-    const [partyIdx, level] = s.split('-').map(Number);
-    if (!isNaN(partyIdx) && !isNaN(level)) {
-      selectSwatch(parties[partyIdx].id, level);
+    try {
+      const [partyIdx, level] = decodeURIComponent(atob(s)).split('-').map(Number);
+      if (!isNaN(partyIdx) && !isNaN(level)) {
+        selectSwatch(parties[partyIdx].id, level);
+      }
+    } catch (e) {
+      console.warn('Failed to decode swatch selection:', e);
     }
   }
 
-  // Restore region fills
+  // Restore region colors
   const r = params.get('r');
   if (r) {
-    r.split(',').forEach(pair => {
-      const [id, val] = pair.split(':');
-      const [partyIdx, level] = val.split('-').map(Number);
-      const el = document.getElementById(id);
-      if (el && parties[partyIdx] && parties[partyIdx].levels[level]) {
-        el.style.fill = parties[partyIdx].levels[level];
-        el.setAttribute('data-party', parties[partyIdx].id);
-        el.setAttribute('data-level', level);
-      }
-    });
+    try {
+      const regionList = decodeURIComponent(atob(r)).split(',');
+      regionList.forEach(pair => {
+        const [id, val] = pair.split(':');
+        const [partyIdx, level] = val.split('-').map(Number);
+        const el = document.getElementById(id);
+        if (el && parties[partyIdx] && parties[partyIdx].levels[level]) {
+          el.style.fill = parties[partyIdx].levels[level];
+          el.setAttribute('data-party', parties[partyIdx].id);
+          el.setAttribute('data-level', level);
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to decode region coloring:', e);
+    }
   }
 }
+
 
 document.getElementById('mode-select').addEventListener('change', e => {
   updateURLState();
