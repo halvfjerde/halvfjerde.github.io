@@ -31,26 +31,62 @@
       padding: 20px;
     }
 
-    #toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 20px;
-      width: 900px;
-      justify-content: center;
-      background: #ffffff;
-      padding: 15px 20px;
-      border-radius: 12px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-      margin: 0 auto  20px;
-    }
+       #toolbar-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  margin: 20px auto;
+  width: 920px;
+}
+
+#toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+  padding: 15px 20px;
+  background: #ffffff;
+  border-radius: 12px;
+  padding-left: 30px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  scrollbar-width: none;
+  width: 635px;
+  margin-left: 20px;
+  margin-right: 20px;
+}
+
+#toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.scroll-button {
+  background: #ffffff;
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: background 0.2s ease;
+}
+
+.scroll-button:hover {
+  background: #f0f0f0;
+}
+
+
 
     .party-selector {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin-top: auto;
-    margin-bottom: auto;
-    }
+  scroll-snap-align: end; /* Optional: snap to the end of each item */
+  flex: 0 0 auto; /* Prevent shrinking, no wrapping */
+  display: flex;
+  padding-right: 30px;
+  flex-direction: column;
+  align-items: center;
+}
 
     .party-selector input[type="color"] {
       width: 50px;
@@ -90,6 +126,7 @@
     z-index: 100
     }
 
+
     #remove-color {
         background: #ff4d4f;
         display: inline-block;
@@ -100,7 +137,6 @@
         transition: transform 0.1s ease, box-shadow 0.2s;
         border: none;
         margin: 10px;
-        margin-left: 0;
     }
 
     #remove-color.selected {
@@ -129,8 +165,8 @@
         transition: transform 0.1s ease, box-shadow 0.2s;
         border: none;
         margin: 10px;
-        margin-left: -15px;
-        margin-right: 25px;
+        margin-left: 5px;
+        margin-right: 35px;
     }
 
     #save-png-button:hover {
@@ -142,7 +178,6 @@
     box-shadow: 0 2px 6px rgba(0, 205, 144, 0.4); 
     z-index: 100
     }
-
     #map-container {
       position: relative;
       max-width: 900px;
@@ -167,12 +202,24 @@
       padding: 10px 15px;
       font-size: 14px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    }
+      scroll-snap-type: y mandatory;
+      max-height: 530px;
+      overflow-y: auto;
+      padding-top: 17px;
+      padding-bottom: 0;
+      width: 120px;
+      scrollbar-width: none;
+}
+
+#legend::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
 
     .legend-item {
-        padding-top: 7px;
-      padding-bottom: 7px;
+      scroll-snap-align: end;
+      padding-bottom: 17px;
       margin-right: 5px;
+      flex: 0 0 auto;
     }
 
     .legend-item > div {
@@ -306,15 +353,16 @@
     z-index: 1000;
   "></div>
 
-  <div id="toolbar">
-    <button id="remove-color"
+  <div id="toolbar-wrapper">
+  <button id="remove-color"
     style="padding: 10px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#fff" viewBox="0 0 24 24">
       <path d="M9 3V4H4V6H5V19C5 20.1 5.9 21 7 21H17C18.1 21 19 20.1 19 19V6H20V4H15V3H9M7 6H17V19H7V6Z" />
     </svg>
   </button>
 
-  <button id="save-png-button" onclick="downloadSVGAsPNG()"
+  <button id="save-png-button" 
+    onclick="downloadSVGAsPNG()"
   style="padding: 10px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
     <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <title/>     
@@ -331,7 +379,10 @@
         </g>
         </svg>
 </button>
-  </div>
+  <button id="scroll-left" class="scroll-button">←</button>
+  <div id="toolbar"></div>
+  <button id="scroll-right" class="scroll-button">→</button>
+</div>
 
   <div id="map-container">
     <svg id="map" viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg">
@@ -371,6 +422,12 @@
       { id: 'party2', name: '국민의힘', base: '#E61E2B', levels: [] },
       { id: 'party3', name: '개혁신당', base: '#FF7210', levels: [] },
       { id: 'party4', name: '진보당', base: '#d60072', levels: [] },
+      { id: 'party5', name: '정의당', base: '#f6b93b', levels: [] },
+      { id: 'party6', name: '녹색당', base: '#22AC38', levels: [] },
+      { id: 'party7', name: '새미래민주당', base: '#59afb5', levels: [] },
+      { id: 'party8', name: '기본소득당', base: '#00D2C3', levels: [] },
+      { id: 'party9', name: '조국혁신당', base: '#2188bf', levels: [] },
+      { id: 'party10', name: '자유통일당', base: '#4371a3', levels: [] },
     ];
   
     function generateShades(baseColor, options = {}) {
@@ -502,12 +559,14 @@ function setupMap() {
         region.setAttribute('data-party', selectedParty);
         region.setAttribute('data-level', selectedLevel);
         updateUncoloredRegionsList();
+        updateLegend();
       } else {
         // remove fill
         region.style.fill = null;
         region.removeAttribute('data-party');
         region.removeAttribute('data-level');
         updateUncoloredRegionsList();
+        updateLegend();
       }
     });
 
@@ -547,17 +606,27 @@ function setupMap() {
 }
 
   
-    function updateLegend() {
-      const legend = document.getElementById('legend');
-      legend.innerHTML = parties.map(p => `
-        <div class="legend-item">
-          <div style="padding-bottom: 5px; font-weight: 600;">${p.name}</div>
-          ${p.levels.map((color, i) => `
-            <div><span class="legend-color" style="background:${color};"></span>${100-(i + 1)*10}</div>
-          `).join('')}
-        </div>
-      `).join('');
-    }
+function updateLegend() {
+  const legendScroll = document.getElementById('legend');
+
+  // Find used parties
+  const usedPartyIds = new Set();
+  document.querySelectorAll('#regions path, #regions polygon, #regions polyline').forEach(region => {
+    const party = region.getAttribute('data-party');
+    if (party) usedPartyIds.add(party);
+  });
+
+  const usedParties = parties.filter(p => usedPartyIds.has(p.id));
+
+  legendScroll.innerHTML = usedParties.map(p => `
+    <div class="legend-item">
+      <div style="padding-bottom: 5px; font-weight: 600;">${p.name}</div>
+      ${p.levels.map((color, i) => `
+        <div><span class="legend-color" style="background:${color};"></span>${100-(i + 1)*10}</div>
+      `).join('')}
+    </div>
+  `).join('');
+}
 
 
     function setupRemoveButton() {
@@ -577,6 +646,7 @@ function setupMap() {
             region.removeAttribute('data-party');
             region.removeAttribute('data-level');
             updateUncoloredRegionsList();
+            updateLegend();
         }
         });
     });
@@ -645,6 +715,18 @@ function setupMap() {
       setupRemoveButton();
       updateUncoloredRegionsList();
     }
+
+const toolbar = document.getElementById('toolbar');
+const scrollLeftBtn = document.getElementById('scroll-left');
+const scrollRightBtn = document.getElementById('scroll-right');
+
+scrollLeftBtn.addEventListener('click', () => {
+  toolbar.scrollBy({ left: -300, behavior: 'smooth' });
+});
+
+scrollRightBtn.addEventListener('click', () => {
+  toolbar.scrollBy({ left: 300, behavior: 'smooth' });
+});
 
     function downloadSVGAsPNG(scale = 2) {
   const svgElement = document.getElementById("map");
