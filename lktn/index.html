@@ -719,14 +719,26 @@ function updateLegend() {
 const toolbar = document.getElementById('toolbar');
 const scrollLeftBtn = document.getElementById('scroll-left');
 const scrollRightBtn = document.getElementById('scroll-right');
+    
+    let isScrolling = false;
 
-scrollLeftBtn.addEventListener('click', () => {
-  toolbar.scrollBy({ left: -300, behavior: 'smooth' });
-});
+function scrollLegendBy(offset) {
+  if (isScrolling) return;
 
-scrollRightBtn.addEventListener('click', () => {
-  toolbar.scrollBy({ left: 300, behavior: 'smooth' });
-});
+  const container = document.getElementById('legend-scroll');
+  isScrolling = true;
+
+  container.scrollBy({ left: offset, behavior: 'smooth' });
+
+  // Re-enable after scroll ends (approx 400ms)
+  setTimeout(() => {
+    isScrolling = false;
+  }, 400);
+}
+
+document.getElementById('legend-left').addEventListener('click', () => { toolbar.scrollBy({ left: -300, behavior: 'smooth' });
+document.getElementById('legend-right').addEventListener('click', () => { toolbar.scrollBy({ left: 300, behavior: 'smooth' });
+    
 
     function downloadSVGAsPNG(scale = 2) {
   const svgElement = document.getElementById("map");
