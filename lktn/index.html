@@ -573,7 +573,7 @@ function setupMap() {
     document.querySelectorAll('#regions path, #regions polygon, #regions polyline').forEach(region => {
         region.addEventListener('click', () => {
         if (selectedParty === null && selectedLevel === null) {
-            region.style.fill = '#b9b9b9';
+            region.style.fill = null;
             region.removeAttribute('data-party');
             region.removeAttribute('data-level');
             updateUncoloredRegionsList();
