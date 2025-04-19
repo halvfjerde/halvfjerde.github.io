@@ -202,14 +202,24 @@
       padding: 10px 15px;
       font-size: 14px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-      scroll-snap-type: y mandatory;
       max-height: 530px;
       overflow-y: auto;
       padding-top: 17px;
-      padding-bottom: 17px;
+      padding-bottom: 0px;
       width: 120px;
       scrollbar-width: none;
-      transition: height 0.4s ease;
+}
+ 
+#legend-wrapper {
+  scrollbar-width: none;
+  transition: height 0.4s ease;
+  scroll-snap-type: y mandatory;
+  margin: 0;
+  padding: 0;
+}
+
+#legend-wrapper::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
 }
 
 #legend::-webkit-scrollbar {
@@ -410,7 +420,7 @@
 </svg>
       </g>
     </svg>
-    <div id="legend"></div>
+    <div id="legend"><div id="legend-wrapper"></div></div>
   </div>
 
   <div id="uncolored-regions-list" style="
@@ -624,7 +634,7 @@ function setupMap() {
 }
 
 function updateLegend() {
-const legend = document.getElementById('legend');
+const legend = document.getElementById('legend-wrapper');
 const existingItems = Array.from(legend.querySelectorAll('.legend-item'));
   const usedParties = parties.filter(p =>
     document.querySelector(`#regions path[data-party="${p.id}"], #regions polygon[data-party="${p.id}"], #regions polyline[data-party="${p.id}"], #regions rect[data-party="${p.id}"]`)
