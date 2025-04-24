@@ -474,6 +474,39 @@
   </style>
 </head>
 <body>
+  <div id="tutorial-overlay" style="
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  z-index: 99999;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 30px;
+  text-align: center;
+  transition: opacity 0.5s ease-out;
+">
+  <div style="max-width: 500px;">
+    <h1 style="font-size: 24px; margin-bottom: 20px;">LKTN<span style="font-size: 0.8em; font-weight: 400;">(v1.5.0)</span> 사용 안내</h1>
+    <p style="font-size: 16px; margin-bottom: 16px;">정당 색상을 선택해 지도나 하단 목록을 클릭해 보세요.<br />모바일에서는 색상 목록을 스크롤할 수 있습니다.<br />색상 제거 버튼을 길게 누르거나<br/>Shift와 함께 누르면 전체 초기화됩니다.</p>
+    <p style="font-size: 15px; opacity: 0.7;">처음 한 번만 표시됩니다.</p>
+    <button id="tutorial-close" style="
+      margin-top: 30px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background: #00c690;
+      color: white;
+      cursor: pointer;
+    ">시작하기</button>
+  </div>
+</div>
+
+
     <header id="topbar">
         <div class="topbar-left">
           <a class="logo" style="font-weight: 700; font-size: 24px;">LKTN</a>
@@ -882,28 +915,58 @@ function updateLegend() {
 
 function setupRemoveButton() {
   const removeBtn = document.getElementById('remove-color');
+  let pressTimer = null;
 
+  removeBtn.addEventListener('mousedown', startPress);
+  removeBtn.addEventListener('touchstart', startPress);
+  removeBtn.addEventListener('mouseup', cancelPress);
+  removeBtn.addEventListener('mouseleave', cancelPress);
+  removeBtn.addEventListener('touchend', cancelPress);
+  removeBtn.addEventListener('touchcancel', cancelPress);
+
+  function startPress(e) {
+    // prevent accidental triggers
+    if (pressTimer === null) {
+      pressTimer = setTimeout(() => {
+        const confirmReset = confirm('모든 색상을 제거하시겠습니까?');
+        if (confirmReset) {
+          document.querySelectorAll('#regions path, #regions polygon, #regions polyline, #regions rect').forEach(region => {
+            region.style.fill = null;
+            region.removeAttribute('data-party');
+            region.removeAttribute('data-level');
+          });
+          updateLegend();
+          updateRegionList();
+          updateURLState();
+        }
+      }, 1000); // Long press = 700ms
+    }
+  }
+
+  function cancelPress() {
+    if (pressTimer !== null) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+  }
+
+  // Regular tap = toggle remove mode
   removeBtn.addEventListener('click', (e) => {
-    if (e.shiftKey) {
-      // SHIFT + click = Reset all
-      document.querySelectorAll('#regions path:not(.cls-3), #regions polygon:not(.cls-3), #regions polyline:not(.cls-3), #regions rect:not(.cls-3)').forEach(region => {
-        region.style.fill = null;
-        region.removeAttribute('data-party');
-        region.removeAttribute('data-level');
-      });
+    // Prevent conflict with long press
+    if (pressTimer !== null) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
 
-      updateRegionList();
-      updateLegend();
-      updateURLState();
-    } else {
-      // Regular click = Deselect only
+    const isActive = removeBtn.classList.toggle('selected');
+    if (isActive) {
       selectedParty = null;
       selectedLevel = null;
-      removeBtn.classList.add('selected');
       document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
     }
   });
 }
+
   
 function updateRegionList() {
   const listContainer = document.getElementById('uncolored-regions');
@@ -1853,6 +1916,21 @@ function updateMode(value) {
   modeContainer.innerHTML = (modeContent[value]());
 }
 
+function maybeShowTutorial() {
+  const shownBefore = localStorage.getItem('lktn_tutorial_shown');
+  if (!shownBefore) {
+    document.getElementById('tutorial-overlay').style.display = 'flex';
+  }
+
+  document.getElementById('tutorial-close').addEventListener('click', () => {
+    localStorage.setItem('lktn_tutorial_shown', 'true');
+    document.getElementById('tutorial-overlay').style.opacity = '0';
+    setTimeout(() => {
+      document.getElementById('tutorial-overlay').style.display = 'none';
+    }, 500);
+  });
+}
+
 
 function updateURLState() {
   const colored = regionList.map((el, i) => {
@@ -1940,6 +2018,7 @@ document.getElementById('mode-select').addEventListener('change', e => {
     loadURLState();
     updateLegend();
     updateRegionList();
+    maybeShowTutorial();
   </script>
 </body>
 </html>
