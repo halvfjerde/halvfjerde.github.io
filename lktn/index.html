@@ -332,7 +332,7 @@
   padding: 5px 10px;
   border-radius: 8px;
   border: 1px solid #ccc;
-  font-size: 15px;
+  font-size: 14px;
 }
 
     #topbar select {
@@ -352,10 +352,95 @@
   transition: border 0.2s ease;
 }
 
+#toolbar-inside-wrapper {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 100%;
+}
+
 #topbar select:hover,
 #topbar select:focus {
   border-color: #007acc;
 }
+
+@media (max-width: 1000px) {
+  #topbar {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+  }
+
+  #map-container {
+    width: 100%;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  #toolbar-wrapper {
+    width: 100%;
+    max-width: 900px;
+    position: sticky;
+    top: 75px;
+    z-index: 60000;
+    background: #fffc;
+    border-radius: 12px;
+    padding: 5px;
+    margin-top: -5px;
+    margin-bottom: 15px;
+  }
+
+  #toolbar {
+    margin: 0 8px;
+  }
+
+  .scroll-button {
+    display: none; /* hide arrow buttons on mobile */
+  }
+
+  #map {
+    width: 100%;
+    max-width: 900px;
+    padding-left: 0;
+  }
+
+  #legend {
+    display: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #uncolored-regions-list {
+    width: 100% !important;
+    max-width: 900px;
+    display: flex;
+    flex-wrap: wrap;         /* allow wrapping */
+    overflow-x: visible;     /* no horizontal scroll needed */
+    padding: 13px 30px 25px !important;
+  }
+
+  h2 {
+    padding-left: 5px;
+  }
+
+  #scroll-left, #scroll-right {
+    display: none !important; /* hide scroll buttons on mobile */
+  }
+}
+
+@media (max-width: 750px) {
+  #remove-color {
+    margin-right: 7px;
+  }
+
+  #save-png-button {
+    margin-right: 7px;
+  }
+}
+ 
+
   </style>
 </head>
 <body>
@@ -390,7 +475,7 @@
     z-index: 1000;
   "></div>
 
-  <div id="toolbar-wrapper">
+  <div id="toolbar-wrapper"> <div id="toolbar-inside-wrapper">
   <button id="remove-color"
     style="padding: 10px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#fff" viewBox="0 0 24 24">
@@ -427,7 +512,7 @@
       <path d="M8 4L14 10L8 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   </button>
-</div>
+</div> </div>
 
   <div id="map-container">
     <svg id="map" viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg">
