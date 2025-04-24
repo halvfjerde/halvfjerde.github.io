@@ -428,6 +428,7 @@
   #scroll-left, #scroll-right {
     display: none !important; /* hide scroll buttons on mobile */
   }
+
 }
 
 @media (max-width: 750px) {
@@ -439,7 +440,27 @@
     margin-right: 7px;
   }
 }
+
+@media (max-width: 480px) {
+  .topbar-links {
+    display: none;
+  }
+
+  #topbar {
+    padding: 15px 18px;
+  }
+}
  
+@media (max-width: 400px) {
+  #maker {
+    display: block;
+  }
+
+  #toolbar-wrapper {
+    top: 90px;
+  }
+
+}
 
   </style>
 </head>
@@ -447,7 +468,7 @@
     <header id="topbar">
         <div class="topbar-left">
           <a class="logo" style="font-weight: 700; font-size: 24px;">LKTN</a>
-          <a href="https://halv.kr/">by 삼쩌모</a>
+          <a id="maker" href="https://twitter.com/halvfjerde">by 삼쩌모</a>
         </div>
         <nav class="topbar-links">
           <a href="https://w.halv.kr/">쩌모위키</a>
