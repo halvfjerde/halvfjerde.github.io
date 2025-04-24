@@ -9,6 +9,21 @@
       box-sizing: border-box;
     }
 
+    @keyframes region-pulse {
+  0% {
+    stroke: rgba(0, 205, 144, 0.6);
+    stroke-width: 3;
+  }
+  50% {
+    stroke: rgba(0, 205, 144, 0.2);
+    stroke-width: 6;
+  }
+  100% {
+    stroke: rgba(0, 205, 144, 0);
+    stroke-width: 3;
+  }
+}
+
     @font-face {
         font-family: 'Pretendard';
         src: url('https://fastly.jsdelivr.net/gh/Project-Noonnu/noonfonts_2107@1.1/Pretendard-Regular.woff') format('woff');
@@ -200,7 +215,7 @@
       background: rgba(255, 255, 255, 0.95);
       border-radius: 10px;
       padding: 10px 15px;
-      font-size: 14px;
+      font-size: 15px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       max-height: 530px;
       overflow-y: auto;
@@ -254,6 +269,10 @@
 
     .uncolored-regions {
       width: 900px;
+      display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  white-space: nowrap;
     }
 
     .cls-1, .cls-2 {
@@ -313,7 +332,7 @@
   padding: 5px 10px;
   border-radius: 8px;
   border: 1px solid #ccc;
-  font-size: 14px;
+  font-size: 15px;
 }
 
     #topbar select {
@@ -322,13 +341,13 @@
   border: 1px solid #ccc;
   border-radius: 8px;
   padding: 6px 10px;
-  font-size: 14px;
+  font-size: 15px;
   outline: none;
   appearance: none;
   background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='gray' class='bi bi-caret-down-fill' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14l-4.796-5.481c-.566-.648-.106-1.659.753-1.659h9.592c.86 0 1.32 1.01.753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
-  background-size: 14px;
+  background-size: 15px;
   padding-right: 30px;
   transition: border 0.2s ease;
 }
@@ -363,7 +382,7 @@
     background: #333;
     color: white;
     padding: 5px 10px;
-    font-size: 13px;
+    font-size: 14.5px;
     border-radius: 4px;
     pointer-events: none;
     opacity: 0;
@@ -438,11 +457,13 @@
     font-weight: 700;
     display: inline-block;
     text-align: center;
-  ">색칠되지 않은 지역</h2>
+  ">목록으로 색칠하기</h2>
   <div id="uncolored-regions"></div>
 </div>
 
   <script>
+    let regionList = []; 
+
     const parties = [
       { id: 'party1', name: '더불어민주당', base: '#3546b5', levels: [] },
       { id: 'party2', name: '국민의힘', base: '#E61E2B', levels: [] },
@@ -575,8 +596,11 @@ function clamp(value, min, max) {
 function setupMap() {
   const tooltip = document.getElementById('tooltip');
 
-  document.querySelectorAll('#regions path, #regions polygon, #regions polyline, #regions rect').forEach(region => {
+  document.querySelectorAll('#regions path:not(.cls-3), #regions polygon:not(.cls-3), #regions polyline:not(.cls-3), #regions rect:not(.cls-3)').forEach(region => {
+    if (region.classList.contains('cls-3')) return;
     region.style.cursor = 'pointer';
+
+    regionList = [...document.querySelectorAll('#regions path:not(.cls-3), #regions polygon:not(.cls-3), #regions polyline:not(.cls-3), #regions rect:not(.cls-3)')];
 
     region.addEventListener('click', () => {
       if (selectedParty && selectedLevel !== null) {
@@ -584,15 +608,16 @@ function setupMap() {
         region.style.fill = party.levels[selectedLevel];
         region.setAttribute('data-party', selectedParty);
         region.setAttribute('data-level', selectedLevel);
-        updateUncoloredRegionsList();
+        updateRegionList();
         updateLegend();
         updateURLState();
+
       } else {
         // remove fill
         region.style.fill = null;
         region.removeAttribute('data-party');
         region.removeAttribute('data-level');
-        updateUncoloredRegionsList();
+        updateRegionList();
         updateLegend();
         updateURLState();
       }
@@ -714,7 +739,7 @@ function updateLegend() {
   legend.innerHTML = '';
 
   const usedPartyIds = new Set();
-  document.querySelectorAll('#regions path, #regions polygon, #regions polyline, #regions rect').forEach(region => {
+  document.querySelectorAll('#regions path:not(.cls-3), #regions polygon:not(.cls-3), #regions polyline:not(.cls-3), #regions rect:not(.cls-3)').forEach(region => {
     const party = region.getAttribute('data-party');
     if (party) usedPartyIds.add(party);
   });
@@ -740,98 +765,126 @@ function updateLegend() {
 }
 */
 
-    function setupRemoveButton() {
-      document.getElementById('remove-color').addEventListener('click', (e) => {
+function setupRemoveButton() {
   const removeBtn = document.getElementById('remove-color');
-  if (e.shiftKey) {
-    // SHIFT + click = Reset all
-    document.querySelectorAll('#regions path, #regions polygon, #regions polyline, #regions rect').forEach(region => {
-      region.style.fill = null;
-            region.removeAttribute('data-party');
-            region.removeAttribute('data-level');
-    });
 
-    updateUncoloredRegionsList();
-            updateLegend();
-            updateURLState();
-  } else {
-    // Regular click = Deselect
-  removeBtn.addEventListener('click', () => {
-    // Just deselects any selected swatch
-    selectedParty = null;
-    selectedLevel = null;
-    removeBtn.classList.add('selected');
-    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
-  });
+  removeBtn.addEventListener('click', (e) => {
+    if (e.shiftKey) {
+      // SHIFT + click = Reset all
+      document.querySelectorAll('#regions path:not(.cls-3), #regions polygon:not(.cls-3), #regions polyline:not(.cls-3), #regions rect:not(.cls-3)').forEach(region => {
+        region.style.fill = null;
+        region.removeAttribute('data-party');
+        region.removeAttribute('data-level');
+      });
 
-    document.querySelectorAll('#regions path, #regions polygon, #regions polyline, #regions rect').forEach(region => {
-        region.addEventListener('click', () => {
-        if (selectedParty === null && selectedLevel === null) {
-            region.style.fill = null;
-            region.removeAttribute('data-party');
-            region.removeAttribute('data-level');
-            updateUncoloredRegionsList();
-            updateLegend();
-            updateURLState();
-        }
-        });
-    });
-  }
+      updateRegionList();
+      updateLegend();
+      updateURLState();
+    } else {
+      // Regular click = Deselect only
+      selectedParty = null;
+      selectedLevel = null;
+      removeBtn.classList.add('selected');
+      document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
     }
-  )};
-  
-    function updateUncoloredRegionsList() {
-  const uncoloredRegions = [];
-  document.querySelectorAll('#regions path, #regions polygon, #regions polyline').forEach(region => {
-    const fillColor = region.dataset.party;
-    if (!fillColor || fillColor === '#b9b9b9' || fillColor === 'rgb(185, 185, 185)') { // Default color check
-      // Get region name
-      const regionName = region.id
-        .replace(/^_+/, '')
-        .replace(/_/g, ' ')
-        .replace(/\b\w/g, c => c.toUpperCase());
-
-      // Get parent group name
-      let parent = region.parentElement;
-      let groupName = '';
-      while (parent && parent.tagName !== 'svg') {
-        if (parent.id && parent.id !== 'regions') {
-          groupName = parent.id
-            .replace(/^_+/, '')
-            .replace(/_/g, ' ')
-            .replace(/\b\w/g, c => c.toUpperCase());
-          break;
-        }
-        parent = parent.parentElement;
-      }
-
-      const displayName = groupName ? `<span style="font-weight: 400;">${groupName}</span> <span style="font-weight: 700;">${regionName}</span>` : regionName;
-      uncoloredRegions.push(displayName);
-    }
-  });
-
-  const listContainer = document.getElementById('uncolored-regions');
-  listContainer.innerHTML = ''; // Clear existing list
-  uncoloredRegions.forEach(name => {
-    const listItem = document.createElement('span');
-    listItem.style.paddingRight = '12px';
-    listItem.style.cursor = 'pointer';
-    listItem.style.transition = 'background 0.3s';
-    listItem.style.fontSize = '14px';
-    listItem.style.color = '#333';
-    listItem.style.whiteSpace = 'nowrap';
-    listItem.style.letterSpacing = '-0.04em';
-    listItem.style.lineHeight = '1.6em';
-    listItem.addEventListener('click', () => {
-      const region = document.querySelector(`#regions #${name.replace(/<.*?>/g, '').replace(/\s+/g, '_')}`);
-      if (region) {
-        region.click(); // Trigger click event to color the region
-      }
-    });
-    listItem.innerHTML = name;
-    listContainer.appendChild(listItem);
   });
 }
+  
+function updateRegionList() {
+  const listContainer = document.getElementById('uncolored-regions');
+  listContainer.innerHTML = '';
+
+  const regions = document.querySelectorAll('#regions path:not(.cls-3), #regions polygon:not(.cls-3), #regions polyline:not(.cls-3), #regions rect:not(.cls-3)');
+
+  regions.forEach(region => {
+    const regionId = region.id;
+    const regionName = regionId
+      .replace(/^_+/, '')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
+
+    let parent = region.parentElement;
+    let groupName = '';
+    while (parent && parent.tagName !== 'svg') {
+      if (parent.id && parent.id !== 'regions') {
+        groupName = parent.id
+          .replace(/^_+/, '')
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, c => c.toUpperCase());
+        break;
+      }
+      parent = parent.parentElement;
+    }
+
+    const displayName = groupName
+      ? `<span style="font-weight: 400;">${groupName}</span> <span style="font-weight: 700;">${regionName}</span>`
+      : regionName;
+
+    const color = region.getAttribute('data-party') 
+      ? region.style.fill 
+      : '#b9b9b9';
+
+    const isColored = region.hasAttribute('data-party');
+
+    const listItem = document.createElement('div');
+    listItem.style.display = 'inline-flex';
+    listItem.style.alignItems = 'center';
+    listItem.style.padding = '6px 10px';
+    listItem.style.borderRadius = '6px';
+    listItem.style.whiteSpace = 'nowrap';
+    listItem.style.marginRight = '4px';
+
+
+    listItem.innerHTML = `
+<div class="region-circle" style="
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    flex-shrink: 0;
+    background: ${isColored ? 'transparent' : color};
+    border: ${isColored ? `2px solid ${color}` : 'none'};
+    box-sizing: border-box;
+  "></div>
+  <div style="font-size: 15px; line-height: 1; letter-spacing: -0.04em;">${displayName}</div>
+    `;
+
+    // Hover effect
+    listItem.addEventListener('mouseenter', () => {
+      listItem.style.transition = 'all 0.2s ease';
+      listItem.style.backgroundColor = '#f0f0f0';
+      listItem.style.transition = 'none';
+    });
+    listItem.addEventListener('mouseleave', () => {
+      listItem.style.transition = 'all 0.2s ease';
+      listItem.style.backgroundColor = 'transparent';
+    });
+
+    // Click to apply color
+    listItem.addEventListener('click', () => {
+
+if (selectedParty !== null && selectedLevel !== null) {
+  const party = parties.find(p => p.id === selectedParty);
+  region.style.fill = party.levels[selectedLevel];
+  region.setAttribute('data-party', selectedParty);
+  region.setAttribute('data-level', selectedLevel);
+} else {
+  // If no color is selected (i.e. remove mode)
+  region.style.fill = null;
+  region.removeAttribute('data-party');
+  region.removeAttribute('data-level');
+}
+
+updateLegend();
+updateRegionList();
+updateURLState();
+    });
+
+    listContainer.appendChild(listItem);
+      listItem.style.color = isColored ? '#bbb' : '#333';
+  });
+}
+
 
 
 
@@ -841,7 +894,7 @@ function updateLegend() {
       updateLegend();
       selectSwatch('party1', 2);
       setupRemoveButton();
-      updateUncoloredRegionsList();
+      updateRegionList();
     }
 
 const toolbar = document.getElementById('toolbar');
@@ -1081,7 +1134,7 @@ const modeContent = {
     <path id="_보령" data-name="보령" class="cls-2" d="M135.38,437.88l2.5,2.25-.5,1.12-2.88-1.25-5.38-.75-.25-1.62s5.12-.88,5.62-.88l.88,1.12ZM151.88,467l2.62,2.62,8.12-.75,4-2,3.62-4.75,2.75-1.38.62-2.62-3.38-1.38-2.12-4.12-2.25-5.5,4.12-8.38v-1.75l-.62-2.75-2-4.38-3.5-5.88-5.62-2.12-2.62-.38-1.62-2.88-4.38-.5-2.38-1.62-3.5-.88-3.12.38-1.12,1.75.12,5.38,3.5,3.88-.62,6.5-2.62,3.38,6.75,1.62,2.5,2.88-1.12,2.38-5.25,1.62,5.38,6.88-.62,5.25-1.5,4,1.75,2.38v2.25l4.12.88Z"/>
     <polygon id="_서천" data-name="서천" class="cls-2" points="169.12 496 173 495.38 176.62 491.38 183.25 491.12 188.62 486.88 190.5 484 187.25 484.38 186.38 479.25 183.75 475.88 180.38 474.62 180.25 469.25 171.38 469.88 166.62 466.88 163.12 468.75 154.5 469.62 151.88 467 146.12 467.12 144.88 470.62 142.62 471.88 142.75 475.12 145.38 473.62 149.75 475.5 152.75 476.12 157.62 481.25 160.38 481.5 158.12 484.5 159.88 486.62 161.5 488.5 163 490.88 164 495.25 169.12 496"/>
   </g>
-  <g id="_제주" data-name="제주">
+  <g id="__제주" data-name="제주">
     <path id="_제주" data-name="제주" class="cls-1" d="M430.33,742.5l12.67-11.67.33-3.17,4.33-2.83,2.5-3,8.83-.33,7.33-3.5,7.33-4h10.33l5.67-2.5,6.33-2,8.83-.33,2.83-2.5,9,.33,2,4.83,6.17,1.67,2.83.17.5,4-.5,3.5-11.5,5.83-3.67.33-3.17,3.67h-8.67l-2.67,2.17-3.5.5-5.17,3.83-8.5.17-2.33,2.33-11,.5-.5,3.33-8.33-1-6.5,1.17-9.5,6.67-2.17,2.67-6.17-3.83-4,1.33v-8.33ZM533.83,714.83l-1.5,3.17,2,2.33,1.5-1.17.83-3.33-2.83-1Z"/>
     <path id="_서귀포" data-name="서귀포" class="cls-1" d="M432.5,754.83l-2.17-4,4-1.33,6.17,3.83,2.17-2.67,9.17-6.83,6.33-1,8.83,1,.5-3.33,11-.5,2.33-2.33,8.5-.17,5.17-3.83,3.5-.5,2.67-2.17h8.67l3.17-3.67,4.33-.5,10.83-5.67,3.17,2.5,1.33,2-2.33,2.83,1.33,2.17-4,3.83-3.33,3.33-5.83,8-.17,3.33-7.5.83-5.5,4.5s-10.67-.5-11,0-6,6.33-6,6.33l-4.33-1.5-11,1.17-5-.5h-3.17l-2.67-1.33-2.33,1.67-9-.67-3.33,2.33-.5,3.17-2.83-.33-5.67-6-3.67-.83-1.83-3.17ZM443.67,775.17l-.5,3.5,1.5.33,1.33-2.33-2.33-1.5Z"/>
   </g>
@@ -1685,92 +1738,93 @@ function updateMode(value) {
   modeContainer.innerHTML = (modeContent[value]());
 }
 
-function updateURLState() {
-  const coloredRegions = [...document.querySelectorAll('#regions path, #regions polygon, #regions polyline, #regions rect')]
-    .filter(el => el.getAttribute('data-party'))
-    .map(el => {
-      const id = el.id;
-      const party = parties.findIndex(p => p.id === el.getAttribute('data-party'));
-      const level = el.getAttribute('data-level');
-      return `${id}:${party}-${level}`;
-    });
 
-  const regionEncoded = btoa(encodeURIComponent(coloredRegions.join(',')));
+function updateURLState() {
+  const colored = regionList.map((el, i) => {
+  const party = el.getAttribute('data-party');
+  const level = el.getAttribute('data-level');
+  if (party && level !== null) {
+    const partyIdx = parties.findIndex(p => p.id === party);
+    return `${i.toString(36)}_${partyIdx.toString(36)}_${parseInt(level).toString(36)}`;
+  }
+  return null;
+}).filter(Boolean);
+
+const encoded = btoa(colored.join('|'));
 
   const selectedParam = selectedParty !== null
-    ? btoa(encodeURIComponent(`${parties.findIndex(p => p.id === selectedParty)}-${selectedLevel}`))
+    ? btoa(`${parties.findIndex(p => p.id === selectedParty).toString(36)}${selectedLevel.toString(36)}`)
     : '';
 
-  const dropdownParam = `d=${document.getElementById('mode-select').value}`;
-
-  const params = [`r=${regionEncoded}`];
-  if (selectedParam) params.push(`s=${selectedParam}`);
-  params.push(dropdownParam);
-
-  const newUrl = `${location.pathname}?${params.join('&')}`;
+  const modeVal = document.getElementById('mode-select').value;
+  const newUrl = `${location.pathname}?r=${encoded}${selectedParam ? `&s=${selectedParam}` : ''}&d=${modeVal}`;
   history.replaceState(null, '', newUrl);
 }
+
 
 
 function loadURLState() {
   const params = new URLSearchParams(window.location.search);
 
-  // Restore dropdown
   const d = params.get('d');
   if (d !== null) {
-    currentPresetIndex = d;
     document.getElementById('mode-select').value = d;
   }
 
-  // Restore selected swatch
   const s = params.get('s');
   if (s) {
     try {
-      const [partyIdx, level] = decodeURIComponent(atob(s)).split('-').map(Number);
+      const raw = atob(s);
+      const partyIdx = parseInt(raw[0], 36);
+      const level = parseInt(raw[1], 36);
       if (!isNaN(partyIdx) && !isNaN(level)) {
         selectSwatch(parties[partyIdx].id, level);
       }
     } catch (e) {
-      console.warn('Failed to decode swatch selection:', e);
+      console.warn('Invalid swatch state');
     }
   }
 
-  // Restore region colors
   const r = params.get('r');
-  if (r) {
-    try {
-      const regionList = decodeURIComponent(atob(r)).split(',');
-      regionList.forEach(pair => {
-        const [id, val] = pair.split(':');
-        const [partyIdx, level] = val.split('-').map(Number);
-        const el = document.getElementById(id);
-        if (el && parties[partyIdx] && parties[partyIdx].levels[level]) {
-          el.style.fill = parties[partyIdx].levels[level];
-          el.setAttribute('data-party', parties[partyIdx].id);
-          el.setAttribute('data-level', level);
-        }
-      });
-    } catch (e) {
-      console.warn('Failed to decode region coloring:', e);
+if (r) {
+  try {
+    const decoded = atob(r).split('|');
+    decoded.forEach(code => {
+      const [regionCode, partyCode, levelCode] = code.split('_');
+      const regionIdx = parseInt(regionCode, 36);
+      const partyIdx = parseInt(partyCode, 36);
+      const level = parseInt(levelCode, 36);
+
+      const el = regionList[regionIdx];
+      if (el && parties[partyIdx] && parties[partyIdx].levels[level]) {
+        el.style.fill = parties[partyIdx].levels[level];
+        el.setAttribute('data-party', parties[partyIdx].id);
+        el.setAttribute('data-level', level);
+      }
+    });
+  } catch (e) {
+    console.warn('Failed to decode region state', e);
     }
   }
 }
 
 
+
 document.getElementById('mode-select').addEventListener('change', e => {
   updateURLState();
   updateMode(e.target.value);
-    setupMap();
+  setupMap();
   updateLegend();
-  updateUncoloredRegionsList();
+  updateRegionList();
 });
 
 // Optional: initialize with default
-loadURLState();
-updateMode(document.getElementById('mode-select').value);
+    loadURLState();
+    updateMode(document.getElementById('mode-select').value);
     init();
     loadURLState();
     updateLegend();
+    updateRegionList();
   </script>
 </body>
 </html>
