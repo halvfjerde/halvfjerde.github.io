@@ -477,6 +477,7 @@ function updateCellAndRefresh(r, c, fn){
 }
 
 /* ---------- Pretty custom dropdown inside each cell (safe attributes) ---------- */
+/* ---------- Pretty custom dropdown inside each cell (no prompt) ---------- */
 function buildPrettyChipMenu(r, c){
   const wrap = document.createElement('span');
   wrap.className = 'chipMenu';
@@ -484,21 +485,30 @@ function buildPrettyChipMenu(r, c){
   const btn = document.createElement('button');
   btn.className = 'chipAddBtn';
   btn.type = 'button';
-  btn.textContent = '칸 서식 추가';
+  btn.textContent = '서식 추가';
   wrap.appendChild(btn);
 
   const menu = document.createElement('div');
   menu.className = 'chipMenuList';
-  // NOTE: using data-act="lt" instead of raw "<" to avoid any parsing weirdness.
   menu.innerHTML = `
     <div class="menuItem" data-act="h"><span class="menuIcon">H</span> 머리말 <span class="menuHint">(h)</span></div>
     <div class="menuItem" data-act="bangbang"><span class="menuIcon">!!</span> 병합됨 <span class="menuHint">(!!)</span></div>
-    <div class="menuItem" data-act="mr"><span class="menuIcon">↓</span> 행 병합 <span class="menuHint">(^n)</span></div>
-    <div class="menuItem" data-act="md"><span class="menuIcon">→</span> 열 병합 <span class="menuHint">(&lt;n)</span></div>
+
     <div class="menuSep"></div>
-    <div class="menuItem" data-act="amp"><span class="menuIcon">&amp;</span> 행 경계 추가 <span class="menuHint">(&)</span></div>
-    <div class="menuItem" data-act="hash"><span class="menuIcon">#</span> 행 경계 제거 <span class="menuHint">(#)</span></div>
-    <div class="menuItem" data-act="tilde"><span class="menuIcon">~</span> 행 높이 <span class="menuHint">(~n)</span></div>
+    
+    <div class="menuItem" data-act="mr">
+      <span class="menuIcon">→</span> 열 병합 <span class="menuHint">(^n)</span>
+    </div>
+    <div class="menuItem" data-act="md">
+      <span class="menuIcon">↓</span> 행 병합 <span class="menuHint">(&lt;n)</span>
+    </div>
+    <div class="menuItem" data-act="tilde">
+      <span class="menuIcon">~</span> 행 높이 <span class="menuHint">(~n px)</span>
+    </div>
+
+    <div class="menuSep"></div>
+    <div class="menuItem" data-act="amp"><span class="menuIcon">&amp;</span> 열 경계 추가 <span class="menuHint">(&)</span></div>
+    <div class="menuItem" data-act="hash"><span class="menuIcon">#</span> 열 경계 제거 <span class="menuHint">(#)</span></div>
   `;
   wrap.appendChild(menu);
 
@@ -506,42 +516,91 @@ function buildPrettyChipMenu(r, c){
   const closeMenu = ()=> menu.classList.remove('open');
   const toggleMenu = (e)=>{ e.stopPropagation(); menu.classList.toggle('open'); };
   btn.addEventListener('click', toggleMenu);
-  document.addEventListener('click', (e)=>{
-    if(!wrap.contains(e.target)) closeMenu();
-  });
+  document.addEventListener('click', (e)=>{ if(!wrap.contains(e.target)) closeMenu(); });
   document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeMenu(); });
 
-  // actions (map safe tokens to real ops)
+  // small helper: inline number editor row
+  function inlineNumberEditor(targetItem, opts){
+    // remove any existing editor
+    menu.querySelectorAll('.menuInlineEditor').forEach(n=> n.remove());
+
+    const row = document.createElement('div');
+    row.className = 'menuInlineEditor';
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;padding:8px 8px 12px 36px;';
+    row.innerHTML = `
+      <input type="number" min="${opts.min ?? 0}" step="${opts.step ?? 1}"
+             value="${opts.value ?? 1}"
+             style="width:88px;padding:6px;border:1px solid var(--line);border-radius:8px" />
+      <button class="menuOk"  style="padding:6px 9px;border:1px solid var(--line);border-radius:999px;cursor:pointer">확인</button>
+    `;
+    targetItem.insertAdjacentElement('afterend', row);
+
+    const input = row.querySelector('input');
+    const ok    = row.querySelector('.menuOk');
+    const cancel= row.querySelector('.menuCancel');
+
+    const apply = ()=>{
+      const n = parseInt(input.value, 10);
+      if (Number.isFinite(n) && n >= (opts.min ?? 0)){
+        opts.onApply(n);
+        closeMenu();
+      } else {
+        input.focus();
+      }
+    };
+    ok.addEventListener('click', apply);
+    cancel.addEventListener('click', ()=> row.remove());
+    input.addEventListener('keydown', e=>{
+      if(e.key==='Enter') apply();
+      if(e.key==='Escape') row.remove();
+    });
+    setTimeout(()=> input.select(), 0);
+  }
+
+  // actions
   menu.querySelectorAll('.menuItem').forEach(item=>{
-    item.addEventListener('click', ()=>{
+    item.addEventListener('click', (ev)=>{
       const token = item.getAttribute('data-act');
-      updateCellAndRefresh(r, c, (cell)=>{
-        if (token.startsWith('val:')){
-          cell.text = token.split(':')[1];
-          cell.markups = [];
-          return;
-        }
-        if (token === 'h'){ cell.ops.header = true; return; }
-        if (token === 'bangbang'){ cell.ops.removed = true; return; }
-        if (token === 'amp'){ cell.ops.colBorder = true; cell.ops.colNoBorder = false; return; }
-        if (token === 'hash'){ cell.ops.colNoBorder = true; cell.ops.colBorder = false; return; }
-        if (token === 'mr'){
-          const n = prompt('몇 개의 열을 병합할까요?', String(cell.ops.mergeRight || 1));
-          const k = parseInt(n,10); if(!isNaN(k) && k>=0) cell.ops.mergeRight = k;
-          return;
-        }
-        if (token === 'md'){
-          const n = prompt('몇 개의 행을 병합할까요?', String(cell.ops.mergeDown || 1));
-          const k = parseInt(n,10); if(!isNaN(k) && k>=0) cell.ops.mergeDown = k;
-          return;
-        }
-        if (token === 'tilde'){
-          const n = prompt('행의 높이를 px로 입력하십시오. 5나 12의 배수를 추천합니다.', String(cell.ops.heightPx || 24));
-          const k = parseInt(n,10); if(!isNaN(k) && k>=0) cell.ops.heightPx = k;
-          return;
-        }
-      });
-      closeMenu();
+
+      // value setters
+      if (token?.startsWith('val:')){
+        const v = token.slice(4); // may be ''
+        updateCellAndRefresh(r, c, (cell)=>{ cell.text=v; cell.markups=[]; });
+        closeMenu();
+        return;
+      }
+
+      // simple toggles
+      if (token === 'h'){ updateCellAndRefresh(r,c, cell=> cell.ops.header = true); closeMenu(); return; }
+      if (token === 'bangbang'){ updateCellAndRefresh(r,c, cell=> cell.ops.removed = true); closeMenu(); return; }
+      if (token === 'amp'){ updateCellAndRefresh(r,c, cell=> { cell.ops.colBorder = true; cell.ops.colNoBorder = false; }); closeMenu(); return; }
+      if (token === 'hash'){ updateCellAndRefresh(r,c, cell=> { cell.ops.colNoBorder = true; cell.ops.colBorder = false; }); closeMenu(); return; }
+
+      // inline numeric editors (no prompt)
+      if (token === 'mr'){
+        inlineNumberEditor(item, {
+          value: state.rows[r][c].ops.mergeRight || 1,
+          min: 0,
+          onApply: (n)=> updateCellAndRefresh(r,c, cell=> cell.ops.mergeRight = n)
+        });
+        return;
+      }
+      if (token === 'md'){
+        inlineNumberEditor(item, {
+          value: state.rows[r][c].ops.mergeDown || 1,
+          min: 0,
+          onApply: (n)=> updateCellAndRefresh(r,c, cell=> cell.ops.mergeDown = n)
+        });
+        return;
+      }
+      if (token === 'tilde'){
+        inlineNumberEditor(item, {
+          value: state.rows[r][c].ops.heightPx || 24,
+          min: 0,
+          onApply: (n)=> updateCellAndRefresh(r,c, cell=> cell.ops.heightPx = n)
+        });
+        return;
+      }
     });
   });
 
