@@ -24,6 +24,7 @@
 header {
   padding-top: 10px;
 }
+
 html,body{height:100%}
 body{
   margin:0;
@@ -350,6 +351,12 @@ p {
 .mk-g{font-size:1.12em;background:rgba(59,130,246,0.08);color:#1e3a8a}
 .mk-b{font-weight:800;font-size:1.12em;background:rgba(16,185,129,0.08);color:#064e3b}
 .mk-r{background:rgba(239,68,68,0.08);color:#7f1d1d;border-bottom:1px dashed #dc2626}
+
+@media (max-width: 700px){
+  .row{ grid-template-columns: 1fr; column-gap: 0px; row-gap: 12px; }
+  .gridwrap{ max-height: 50vh; }
+  .hint{ font-size: 12px; }
+}
   </style>
 </head>
 <body>
@@ -495,7 +502,7 @@ function buildPrettyChipMenu(r, c){
     <div class="menuItem" data-act="bangbang"><span class="menuIcon">!!</span> 병합됨 <span class="menuHint">(!!)</span></div>
 
     <div class="menuSep"></div>
-    
+
     <div class="menuItem" data-act="mr">
       <span class="menuIcon">→</span> 열 병합 <span class="menuHint">(^n)</span>
     </div>
@@ -889,6 +896,42 @@ function cellToString(cell){
   if(left) return left + ';';
   return rightParts.join(' ');
 }
+
+(function(){
+  const tbl = document.getElementById('grid');
+  let touchTimer = null;
+
+  // single tap selects, long-press opens editor
+  tbl.addEventListener('touchstart', (e)=>{
+    const td = e.target.closest('td,th'); if(!td) return;
+    const r = td.parentNode.rowIndex, c = td.cellIndex;
+    selectCell(r,c);
+    clearTimeout(touchTimer);
+    touchTimer = setTimeout(()=> {
+      if (window.__openOverlayEditor) window.__openOverlayEditor(r,c);
+    }, 500); // ~0.35s press
+  }, {passive:true});
+
+  tbl.addEventListener('touchend', ()=> clearTimeout(touchTimer), {passive:true});
+  tbl.addEventListener('touchmove', ()=> clearTimeout(touchTimer), {passive:true});
+
+  // desktop still uses dblclick (you already wired it)
+})();
+
+(function(){
+  function reposition(){
+    const sel = state.sel || {};
+    if (sel.r==null) return;
+    // Re-run your positioning so it uses the *current* rect
+    if (window.positionCellTools) positionCellTools(sel.r, sel.c);
+  }
+
+  if (window.visualViewport){
+    visualViewport.addEventListener('resize', reposition, {passive:true});
+    visualViewport.addEventListener('scroll',  reposition, {passive:true});
+  }
+  window.addEventListener('orientationchange', ()=> setTimeout(reposition, 50), {passive:true});
+})();
 
 // --- Grid rendering ----------------------------------------------------------
 function renderGrid(){
