@@ -666,8 +666,8 @@ function renderChipsInto(container, r, c){
   // Existing chips (click to remove)
   if(cell.ops.header)       container.appendChild(makeChip('머리말','good', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.header=false)));
   if(cell.ops.removed)      container.appendChild(makeChip('병합됨','bad', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.removed=false)));
-  if(cell.ops.mergeRight>0) container.appendChild(makeChip(cell.ops.mergeRight+'열', '', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.mergeRight=0)));
-  if(cell.ops.mergeDown>0)  container.appendChild(makeChip(cell.ops.mergeDown+'행', '', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.mergeDown=0)));
+  if(cell.ops.mergeRight>0) container.appendChild(makeChip(cell.ops.mergeRight+'행', '', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.mergeRight=0)));
+  if(cell.ops.mergeDown>0)  container.appendChild(makeChip(cell.ops.mergeDown+'열', '', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.mergeDown=0)));
   if(cell.ops.colBorder)    container.appendChild(makeChip('경계추가','good', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.colBorder=false)));
   if(cell.ops.colNoBorder)  container.appendChild(makeChip('경계제거','bad',  ()=> updateCellAndRefresh(r,c, cell=> cell.ops.colNoBorder=false)));
   if(cell.ops.heightPx>0)   container.appendChild(makeChip('높이'+cell.ops.heightPx, 'warn', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.heightPx=0)));
