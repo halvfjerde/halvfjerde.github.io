@@ -525,17 +525,17 @@ function buildPrettyChipMenu(r, c){
         if (token === 'amp'){ cell.ops.colBorder = true; cell.ops.colNoBorder = false; return; }
         if (token === 'hash'){ cell.ops.colNoBorder = true; cell.ops.colBorder = false; return; }
         if (token === 'mr'){
-          const n = prompt('Merge right by how many? (^n)', String(cell.ops.mergeRight || 1));
+          const n = prompt('몇 개의 열을 병합할까요?', String(cell.ops.mergeRight || 1));
           const k = parseInt(n,10); if(!isNaN(k) && k>=0) cell.ops.mergeRight = k;
           return;
         }
         if (token === 'md'){
-          const n = prompt('Merge down by how many? (<n)', String(cell.ops.mergeDown || 1));
+          const n = prompt('몇 개의 행을 병합할까요?', String(cell.ops.mergeDown || 1));
           const k = parseInt(n,10); if(!isNaN(k) && k>=0) cell.ops.mergeDown = k;
           return;
         }
         if (token === 'tilde'){
-          const n = prompt('Cell height in pixels (~n)', String(cell.ops.heightPx || 24));
+          const n = prompt('행의 높이를 px로 입력하십시오. 5나 12의 배수를 추천합니다.', String(cell.ops.heightPx || 24));
           const k = parseInt(n,10); if(!isNaN(k) && k>=0) cell.ops.heightPx = k;
           return;
         }
@@ -1240,7 +1240,7 @@ function ensureInlineEditor(){
       <button class="ieBtn primary" data-act="save">저장</button>
     </div>
     <textarea class="ieText" rows="2" placeholder="Type… (use kTEXT., gTEXT., bTEXT., rTEXT. anywhere; “/” makes a line break)"></textarea>
-    <div class="ieHint">Enter inserts “/”. Shift+Enter = newline · Esc = cancel · Ctrl/Cmd+Enter = save</div>
+    <div class="ieHint"><span class="kbd">Enter</span>로 줄바꿈 · <span class="kbd">Esc</span>로 취소 · <span class="kbd">Ctrl/Cmd</span>+<span class="kbd">Enter</span>로 입력</div>
   `;
   document.body.appendChild(host);
 
