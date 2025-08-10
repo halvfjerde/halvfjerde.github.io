@@ -513,6 +513,14 @@ function mapSymbols(s){
           .replaceAll('i','=')
           .replaceAll('q','〃');
 }
+
+function mapSymbolsButton(s){
+  // apply only to plain text, never across HTML tags
+  return s.replaceAll('v','⇂')
+          .replaceAll('x','⋯')
+          .replaceAll('i','‖')
+          .replaceAll('q','〃');
+}
   // Clickable chip (removes on click)
 function makeChip(label, kind, onClick){
   const el = document.createElement('span');
@@ -675,7 +683,7 @@ function buildValueButtons(r,c){
     const b=document.createElement('button');
     b.className='valBtn';
     b.type='button';
-    b.innerHTML = renderInlineMarkupsInText(v);
+    b.innerHTML = mapSymbolsButton(v);
     b.title = `Set value to “${v}”`;
     b.addEventListener('click', ()=> updateCellAndRefresh(r,c, cell=>{ cell.text=v; cell.markups=[]; }));
     wrap.appendChild(b);
