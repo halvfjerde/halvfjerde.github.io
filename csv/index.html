@@ -64,7 +64,7 @@ font-size: 15px;
   color: #334155;
 }
 .card .body{padding:12px;display:flex;flex-direction:column;gap:10px}
-
+#shortcuts{overflow-y: scroll; width: 180px; padding: 8px; height: 250px;}
 textarea{
   width:100%;
   min-height:160px;
@@ -357,6 +357,7 @@ p {
   .gridwrap{ max-height: 50vh; }
   .hint{ font-size: 12px; }
   #cheatsheet{ display: flex; flex-direction: column; }
+  #shortcuts{ width: 100%; }
 }
 @media (max-width: 410px){
   .ieToolbar { display: block; }
@@ -426,13 +427,17 @@ p {
         <p><span class="kbd">'</span>로 둘러싸인 부분은 <b>글자가 양쪽으로 맞추어</b>집니다.</p>
         <p><b>새로고침하면 초기화되며 복구할 수 없습니다.</b> 중요한 변경사항은 <b>저장</b>하세요.</p>
       </div>
-       <div id="shortcuts" class="card" style="overflow-y: scroll; width: 180px; padding: 8px; height: 250px;">
+       <div id="shortcuts" class="card">
         <div class="menuGroupTitle" data-act="h">약어</div>
        <div class="menuItem" data-act="h"><span class="menuIcon">⇂</span><span class="menuHint">통과</span> v</div>
        <div class="menuItem" data-act="h"><span class="menuIcon">‖</span><span class="menuHint">타선로 경유</span> i</div>
        <div class="menuItem" data-act="h"><span class="menuIcon">⋯</span><span class="menuHint">말줄임표</span> x</div>
        <div class="menuItem" data-act="h"><span class="menuIcon">〃</span><span class="menuHint">노노지텐</span> q</div>
        <div class="menuItem" data-act="h"><span class="menuIcon">⇨</span><span class="menuHint">화살표</span> ></div>
+       <div class="menuSep"></div>
+       <div class="menuGroupTitle" data-act="h">기호</div>
+       <div class="menuItem" data-act="h"><span class="menuIcon">①</span><span class="menuHint">원 기호</span> C{_}</div>
+       <div class="menuItem" data-act="h"><span class="menuIcon">🄰</span><span class="menuHint">사각형 기호</span> S{_}</div>
        <div class="menuSep"></div>
        <div class="menuGroupTitle" data-act="h">대체어</div>
        <div class="menuItem" data-act="h"><span class="menuIcon">發</span><span class="menuHint">필 발</span> DEP</div>
