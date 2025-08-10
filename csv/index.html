@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0; maximum-scale=1.0; minimum-scale=1.0; user-scalable=no;" />
   <title>위키 시각표용 CSV 편집기</title>
   <style>
 :root{
@@ -239,7 +239,7 @@ textarea {
   box-shadow: 0 16px 36px rgba(0,0,0,.12);
 }
 .ie.show { display: flex; }
-.ieToolbar { display:flex; gap:4px; align-items:center; }
+.ieToolbar { display: flex; flex-direction: row; justify-content: space-between; gap:4px; align-items:center; }
 .ieToolbar .sp { flex: 1 1 auto; }
 .ieBtn {
   font-size:13px; font-weight:600; line-height:1;
@@ -356,6 +356,11 @@ p {
   .row{ grid-template-columns: 1fr; column-gap: 0px; row-gap: 12px; }
   .gridwrap{ max-height: 50vh; }
   .hint{ font-size: 12px; }
+}
+@media (max-width: 410px){
+  .ieToolbar { display: block; }
+  .ieToolbar > div:first-child { text-align: left;}
+  .ieToolbar > div:last-child { text-align: right; }
 }
   </style>
 </head>
@@ -1333,14 +1338,18 @@ function ensureInlineEditor(){
   host.className = 'ie';
   host.innerHTML = `
     <div class="ieToolbar">
+      <div>
       <button class="ieBtn" data-act="slash">줄바꿈</button>
       <button class="ieBtn" data-act="k">굵게</button>
       <button class="ieBtn" data-act="g">크게</button>
       <button class="ieBtn" data-act="b">강조</button>
       <button class="ieBtn" data-act="r">세로쓰기</button>
+      </div>
+      <div>
       <span class="sp"></span>
       <button class="ieBtn" data-act="cancel">취소</button>
       <button class="ieBtn primary" data-act="save">저장</button>
+      </div>
     </div>
     <textarea class="ieText" rows="2" placeholder="Type… (use kTEXT., gTEXT., bTEXT., rTEXT. anywhere; “/” makes a line break)"></textarea>
     <div class="ieHint"><span class="kbd">Enter</span>로 줄바꿈 · <span class="kbd">Esc</span>로 취소 · <span class="kbd">Ctrl/Cmd</span>+<span class="kbd">Enter</span>로 입력</div>
