@@ -1,0 +1,1616 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>위키 시각표용 CSV 편집기</title>
+  <style>
+:root{
+  --bg:#fafaf8; 
+  --panel:#ffffff; 
+  --ink:#2d2d2b; 
+  --muted:#7a7a75; 
+  --line:#dcdcd6; 
+  --accent:#5bb6a5; /* Soft teal–mint accent */
+  --chip:#f4f5f3; 
+  --warn:#e0a94f; 
+  --bad:#e26d6d; 
+  --good:#4ea87d;
+  --radius:14px; 
+  --gap:12px;
+}
+
+*{box-sizing:border-box;}
+header {
+  padding-top: 10px;
+}
+html,body{height:100%}
+body{
+  margin:0;
+  background:linear-gradient(180deg,#f9fafb,#f3f4f6);
+  color:var(--ink);
+  font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"
+}
+td.removedCell{
+  background: repeating-linear-gradient(135deg,#fee2e2,#fee2e2 8px,#fff 8px,#fff 16px);
+  color:#9ca3af;
+}
+th.removedCell{
+  background: repeating-linear-gradient(135deg,#fee2e2,#fee2e2 8px,#f1f5f9 8px,#f1f5f9 16px);
+  color:#9ca3af;
+}
+.wrap{max-width:1200px;margin:20px auto;padding:0 16px}
+header{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px}
+h1{font-size:18px;margin:0;font-weight:700;letter-spacing:0.2px}
+.hint{color:var(--muted);font-size:13px}
+.row{display:grid;grid-template-columns: 1.15fr 1.8fr 1.05fr; gap:var(--gap)}
+
+.card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  min-height:220px;
+}
+.card h2{
+font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 9px 16px 8px;
+  color: #334155;
+}
+.card .body{padding:12px;display:flex;flex-direction:column;gap:10px}
+
+textarea{
+  width:100%;
+  min-height:160px;
+  resize:vertical;
+  background:#f8fafc;
+  color:var(--ink);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:10px;
+  font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace
+}
+
+button{
+  appearance:none;
+  border:1px solid var(--line);
+  background:#f3f4f6;
+  color:var(--ink);
+  border-radius:10px;
+  padding:8px 10px;
+  font-weight:600;
+  cursor:pointer;
+}
+button.primary{
+  background:linear-gradient(180deg,#6bc3b1,#4ea693);
+  color:#fff;
+  border-color:#4ea693;
+}
+button:hover{filter:brightness(1.05)}
+
+.toolbar{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Grid */
+.gridwrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
+table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}
+td,th{
+  border-right:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+  padding:6px 8px;
+  vertical-align:middle;
+  text-align: center;
+  min-width:60px;
+  max-width:180px;
+  font-size:15px;
+}
+tr:first-child th, tr:first-child td{border-top:1px solid var(--line)}
+tr > :first-child{border-left:1px solid var(--line)}
+th, .headerCell{background:#f1f5f9;color:#1e293b}
+
+.cell{position:relative}
+.cell input{width:100%;background:transparent;color:inherit;border:none;outline:none;font:inherit;padding:0;margin:0}
+
+.chips{display:flex;gap:3px;flex-wrap:wrap;margin-top:8px;}
+.chip{
+  background:var(--chip);
+  border:1px solid #cbd5e1;
+  border-radius:999px;
+  padding:2px 8px;
+  font-size:11px;
+  color:#334155;
+  font-weight: 700;
+}
+.chip.warn{border-color:#f59e0b;color:#92400e;background:#fef3c7}
+.chip.bad{border-color:#ef4444;color:#7f1d1d;background:#fee2e2}
+.chip.good{border-color:#10b981;color:#064e3b;background:#d1fae5}
+/* inline add-chip dropdown */
+/* Fancy add-chip dropdown */
+.chipAdd {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: var(--bg2);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 24px 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  background-image: url('data:image/svg+xml;utf8,<svg fill="%23888" height="12" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg"><path d="M5 7l5 5 5-5z"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 10px 10px;
+}
+
+.chipAdd:hover {
+  background: var(--bg3);
+  border-color: var(--accent);
+}
+
+.chipAdd optgroup {
+  font-style: normal;
+  font-weight: bold;
+  color: var(--ink2);
+  background: var(--bg2);
+}
+
+.chipAdd option {
+  background: var(--bg1);
+  color: var(--ink);
+}
+/* Quick value buttons (v/x/i) */
+.valBtns { display:inline-flex; gap:3px; margin-right:6px; }
+.valBtn {
+  font-size:13px; font-weight:600;
+  padding:2px 8px; border-radius:999px;
+  border:1px solid var(--line); background:#fff; color:var(--ink);
+  cursor:pointer; transition:.15s;
+  width: 30px; height: 26px;
+}
+.valBtn:hover { border-color:var(--accent); box-shadow:0 1px 0 rgba(0,0,0,.04) }
+
+/* Custom add-menu */
+.chipMenu { position:relative; display:inline-block; }
+.chipAddBtn {
+  font-size:13px; font-weight:600; line-height: 1;
+  padding:6px 10px 6px 21px; border-radius:999px;
+  border:1px solid var(--line); background:#fff; color:var(--ink);
+  cursor:pointer; transition:.15s; position:relative;
+}
+.chipAddBtn::before { /* plus icon */
+  content:'+'; position:absolute; left:8px; top:50%; transform:translateY(-50%);
+  font-weight:800; opacity:.85;
+}
+.chipAddBtn::after { /* caret */
+  content:''; position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  width:10px; height:10px;
+  background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill="%23888" d="M5 7l5 5 5-5z"/></svg>');
+  background-size:10px 10px; background-repeat:no-repeat;
+}
+.chipAddBtn:hover { border-color:var(--accent); }
+
+.chipMenuList {
+  position:absolute; z-index:50; right:0; top:calc(100% + 6px);
+  min-width:210px; max-height:260px; overflow:auto;
+  background:#fff; border:1px solid var(--line); border-radius:10px;
+  box-shadow:0 10px 24px rgba(0,0,0,.08);
+  padding:6px; display:none;
+}
+.chipMenuList.open { display:block; }
+
+.menuGroupTitle {
+  font-size:11px; font-weight:700; color:#475569; padding:4px 6px 6px;
+}
+.menuItem {
+  display:flex; align-items:center; gap:8px;
+  padding:8px 8px; border-radius:8px; cursor:pointer;
+  font-size:13px; color:#111827;
+  font-weight:600;
+}
+.menuItem:hover { background:#f8fafc; }
+.menuIcon {
+  width:20px; height:20px; border-radius:6px;
+  display:flex; align-items:center; justify-content:center;
+  background:#f1f5f9; color:#334155; font-weight:800; font-size:12px;
+}
+.menuHint { margin-left:auto; color:#64748b; font-size:11px; font-weight:400 }
+.menuSep { height:1px; background:#eef2f7; margin:6px 4px; }
+/* Floating inline editor */
+textarea {
+  font-size: 14px;
+}
+.ie {
+  position: fixed; z-index: 10000;
+  display: none; flex-direction: column; gap: 6px;
+  width: min(400px, calc(100vw - 24px));
+  background: #fff; color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 16px 36px rgba(0,0,0,.12);
+}
+.ie.show { display: flex; }
+.ieToolbar { display:flex; gap:4px; align-items:center; }
+.ieToolbar .sp { flex: 1 1 auto; }
+.ieBtn {
+  font-size:13px; font-weight:600; line-height:1;
+  padding:6px 10px; border-radius: 999px;
+  border:1px solid var(--line); background:#fff; cursor:pointer;
+}
+.ieBtn:hover { border-color: var(--accent); }
+.ieBtn.primary { background: linear-gradient(180deg,#6bc3b1,#4ea693); color:#fff; border-color:#4ea693; }
+.ieText {
+  width: 100%; min-height: 35px; max-height: 240px; resize: none;
+  font: 14px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px;
+  background: #f8fafc; color: var(--ink); outline: none;
+}
+.ieHint { font-size: 11px; color: #64748b; }
+
+.colBorderCell { box-shadow: inset 3px 0 0 0 var(--accent); }
+.colNoBorderCell { box-shadow: inset 3px 0 0 0 var(--bad); }
+.muted{color:var(--muted)}
+/* Floating tools for the selected cell */
+.cellTools {
+  position: fixed; z-index: 9999;
+  display: none; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  background: #fff; color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.08);
+}
+.cellTools.show { display: inline-flex; }
+
+/* optional: a tiny arrow */
+.cellTools::after{
+  content:''; position:absolute; width:10px; height:10px; background:#fff;
+  border-left:1px solid var(--line); border-top:1px solid var(--line);
+  transform: rotate(-135deg);
+}
+
+/* when above the cell */
+.cellTools[data-pos="top"]::after{ bottom:-6px; left:16px; }
+/* when below the cell */
+.cellTools[data-pos="bottom"]::after{ top:-6px; left:16px; transform: rotate(225deg); }
+
+/* group value buttons + add menu together */
+.toolsGroup { display:inline-flex; gap:6px; align-items:center; }
+
+/* Side editor */
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:13px;color:#475569}
+.rowX2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pill{
+  display:inline-flex;
+  gap:8px;
+  align-items:center;
+  background:#f1f5f9;
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:6px 10px
+}
+.pill input{width:60px;text-align:center}
+.marklist{display:flex;flex-wrap:wrap;gap:8px}
+.mark{
+  display:flex;
+  gap:6px;
+  align-items:center;
+  background:#f8fafc;
+  border:1px dashed #cbd5e1;
+  border-radius:10px;
+  padding:6px 8px
+}
+.mark b{
+  font-size:11px;
+  background:#e2e8f0;
+  padding:2px 6px;
+  border-radius:6px
+}
+.mark input{
+  background:transparent;
+  border:none;
+  border-bottom:1px solid #cbd5e1;
+  outline:none;
+  color:var(--ink)
+}
+.mark .del{cursor:pointer;color:#dc2626}
+.small{font-size:14px;color:#475569}
+p {
+  margin:0 0 8px 0;
+}
+.footer{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-top:8px;
+  color:var(--muted);
+  font-size:13px
+}
+.kbd{
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  background:#f8fafc;
+  border:1px solid #cbd5e1;
+  border-bottom-width:2px;
+  padding:2px 6px;
+  border-radius:6px
+}
+
+/* markup visual styles */
+.mk{padding:0 2px;border-radius:4px}
+.mk-k{font-weight:700;background:rgba(0,0,0,0.04);color:#1e293b}
+.mk-g{font-size:1.12em;background:rgba(59,130,246,0.08);color:#1e3a8a}
+.mk-b{font-weight:800;font-size:1.12em;background:rgba(16,185,129,0.08);color:#064e3b}
+.mk-r{background:rgba(239,68,68,0.08);color:#7f1d1d;border-bottom:1px dashed #dc2626}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>위키 시각표용 CSV 편집기</h1>
+    </header>
+
+    <div class="row">
+      <!-- INPUT -->
+      <section class="card">
+        <h2>① CSV 불러오기</h2>
+        <div class="body">
+          <textarea id="csvIn" placeholder="여기에 CSV를 붙여넣으세요."></textarea>
+          <div class="toolbar">
+            <button class="primary" id="parseBtn">표로 불러오기</button>
+            <button id="loadSample">예시 불러오기</button>
+            <button id="clearInput">초기화</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- GRID -->
+      <section class="card" style="grid-column:span 2;">
+        <h2>② 편집하기</h2>
+        <div class="body" style="gap:10px">
+          <div class="gridwrap">
+            <table id="grid"></table>
+          </div>
+          <div class="small">클릭하여 선택하고 더블클릭하여 편집하세요.</div>
+        </div>
+      </section>
+    </div>
+
+    <div class="row" style="margin-top:12px; margin-bottom: 30px;">
+      <!-- CELL EDITOR -->
+
+      <!-- OUTPUT -->
+      <section class="card">
+        <h2>③ 내보내기</h2>
+        <div class="body">
+          <textarea id="csvOut" placeholder="표를 내보내면 이곳에 표시돼요."></textarea>
+          <div class="toolbar">
+            <button class="primary" id="exportBtn">표에서 내보내기</button>
+            <button id="copyOut">복사</button>
+          </div>
+          <div class="footer">
+            <span>💡 <span class="kbd">Ctrl/Cmd</span>+<span class="kbd">C</span>로도 복사할 수 있어요.</span>
+            <span id="status"></span>
+          </div>
+        </div>
+      </section>
+
+    <section class="card"  style="grid-column:span 2;">
+      <h2>참고사항</h2>
+      <div class="body" style="display: flex; flex-direction: row; justify-content: space-between;">
+        <div class="small" style="padding: 5px;">
+        <p>툴 없이도 쉬운 편집을 위해 본래 시각표에서 <b>행과 열을 전환한</b> 형태로 편집됩니다.<br>칸 서식에서 '행'은 <b>시각표에서의 행</b>으로, 편집기에서는 <b>열</b>을 의미합니다.<br>다만 다른 곳에서는 혼란을 방지하기 위해 시각표에서의 행과 열을 각각 <b>역</b>과 <b>열차</b>로 표시하였습니다.<br>위키에서는 행과 열이 전환되어 제대로 표시됩니다.</p>
+        <p><span class="kbd">&</span>, <span class="kbd">#</span>로 경계를 추가·제거하면 <b>해당 행 전체</b>에 적용되며, <b>행 위의 경계</b>에 대해 적용됩니다.</p>
+        <p>통과 기호(レ)는 <span class="kbd">v</span>, 타선로 경유 기호(‖)는 <span class="kbd">i</span>로 입력할 수 있는 등 여러 가지 약어가 있으며,<br>복잡한 기호도 대문자 조합을 통해 입력하나, 편집기에서 바로 변환되지는 않습니다. <br>오른쪽 목록을 참고하십시오.</p>
+        <p><span class="kbd">'</span>로 둘러싸인 부분은 <b>글자가 양쪽으로 맞추어</b>집니다.</p>
+        <p><b>새로고침하면 초기화되며 복구할 수 없습니다.</b> 중요한 변경사항은 <b>저장</b>하세요.</p>
+      </div>
+       <div id="shortcuts" class="card" style="overflow-y: scroll; width: 180px; padding: 8px; height: 250px;">
+        <div class="menuGroupTitle" data-act="h">약어</div>
+       <div class="menuItem" data-act="h"><span class="menuIcon">レ</span><span class="menuIcon">⇀</span><span class="menuHint">통과</span> v</div>
+       <div class="menuItem" data-act="h"><span class="menuIcon">‖</span><span class="menuIcon">=</span><span class="menuHint">타선로 경유</span> i</div>
+       <div class="menuItem" data-act="h"><span class="menuIcon">⋯</span><span class="menuHint">말줄임표</span> x</div>
+       <div class="menuItem" data-act="h"><span class="menuIcon">〃</span><span class="menuHint">노노지텐</span> q</div>
+       <div class="menuItem" data-act="h"><span class="menuIcon">⇨</span><span class="menuHint">화살표</span> ></div>
+       <div class="menuSep"></div>
+       <div class="menuGroupTitle" data-act="h">대체어</div>
+       <div class="menuItem" data-act="h"><span class="menuIcon">發</span><span class="menuHint">필 발</span> DEP</div>
+       <div class="menuItem" data-act="h"><span class="menuIcon">着</span><span class="menuHint">붙을 착</span> ARR</div>
+       </div>
+      </div>
+    </section>
+    </div>
+<script>
+  // after DOM ready
+(function(){
+  const gridWrap = document.querySelector('.gridwrap');
+  let scheduled = false;
+  function schedule(){
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(()=>{
+      scheduled = false;
+      const {r,c} = state.sel || {};
+      if(r==null) return hideCellTools();
+      positionCellTools(r,c);
+    });
+  }
+  window.addEventListener('scroll', schedule, {passive:true});
+  window.addEventListener('resize', schedule, {passive:true});
+  gridWrap && gridWrap.addEventListener('scroll', schedule, {passive:true});
+})();
+
+
+function mapSymbols(s){
+  // apply only to plain text, never across HTML tags
+  return s.replaceAll('v','⇀')
+          .replaceAll('x','⋯')
+          .replaceAll('i','=')
+          .replaceAll('q','〃');
+}
+  // Clickable chip (removes on click)
+function makeChip(label, kind, onClick){
+  const el = document.createElement('span');
+  el.className = 'chip' + (kind? ' '+kind:'');
+  el.textContent = label;
+  if (onClick) {
+    el.style.cursor = 'pointer';
+    el.title = 'Click to remove';
+    el.addEventListener('click', onClick);
+  }
+  return el;
+}
+
+function updateCellAndRefresh(r, c, fn){
+  const cell = state.rows[r][c];
+  fn(cell);
+  renderGrid(); syncExportNote();
+  selectCell(r,c);
+}
+
+/* ---------- Pretty custom dropdown inside each cell (safe attributes) ---------- */
+function buildPrettyChipMenu(r, c){
+  const wrap = document.createElement('span');
+  wrap.className = 'chipMenu';
+
+  const btn = document.createElement('button');
+  btn.className = 'chipAddBtn';
+  btn.type = 'button';
+  btn.textContent = '칸 서식 추가';
+  wrap.appendChild(btn);
+
+  const menu = document.createElement('div');
+  menu.className = 'chipMenuList';
+  // NOTE: using data-act="lt" instead of raw "<" to avoid any parsing weirdness.
+  menu.innerHTML = `
+    <div class="menuItem" data-act="h"><span class="menuIcon">H</span> 머리말 <span class="menuHint">(h)</span></div>
+    <div class="menuItem" data-act="bangbang"><span class="menuIcon">!!</span> 병합됨 <span class="menuHint">(!!)</span></div>
+    <div class="menuItem" data-act="mr"><span class="menuIcon">↓</span> 행 병합 <span class="menuHint">(^n)</span></div>
+    <div class="menuItem" data-act="md"><span class="menuIcon">→</span> 열 병합 <span class="menuHint">(&lt;n)</span></div>
+    <div class="menuSep"></div>
+    <div class="menuItem" data-act="amp"><span class="menuIcon">&amp;</span> 행 경계 추가 <span class="menuHint">(&)</span></div>
+    <div class="menuItem" data-act="hash"><span class="menuIcon">#</span> 행 경계 제거 <span class="menuHint">(#)</span></div>
+    <div class="menuItem" data-act="tilde"><span class="menuIcon">~</span> 행 높이 <span class="menuHint">(~n)</span></div>
+  `;
+  wrap.appendChild(menu);
+
+  // open/close
+  const closeMenu = ()=> menu.classList.remove('open');
+  const toggleMenu = (e)=>{ e.stopPropagation(); menu.classList.toggle('open'); };
+  btn.addEventListener('click', toggleMenu);
+  document.addEventListener('click', (e)=>{
+    if(!wrap.contains(e.target)) closeMenu();
+  });
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeMenu(); });
+
+  // actions (map safe tokens to real ops)
+  menu.querySelectorAll('.menuItem').forEach(item=>{
+    item.addEventListener('click', ()=>{
+      const token = item.getAttribute('data-act');
+      updateCellAndRefresh(r, c, (cell)=>{
+        if (token.startsWith('val:')){
+          cell.text = token.split(':')[1];
+          cell.markups = [];
+          return;
+        }
+        if (token === 'h'){ cell.ops.header = true; return; }
+        if (token === 'bangbang'){ cell.ops.removed = true; return; }
+        if (token === 'amp'){ cell.ops.colBorder = true; cell.ops.colNoBorder = false; return; }
+        if (token === 'hash'){ cell.ops.colNoBorder = true; cell.ops.colBorder = false; return; }
+        if (token === 'mr'){
+          const n = prompt('Merge right by how many? (^n)', String(cell.ops.mergeRight || 1));
+          const k = parseInt(n,10); if(!isNaN(k) && k>=0) cell.ops.mergeRight = k;
+          return;
+        }
+        if (token === 'md'){
+          const n = prompt('Merge down by how many? (<n)', String(cell.ops.mergeDown || 1));
+          const k = parseInt(n,10); if(!isNaN(k) && k>=0) cell.ops.mergeDown = k;
+          return;
+        }
+        if (token === 'tilde'){
+          const n = prompt('Cell height in pixels (~n)', String(cell.ops.heightPx || 24));
+          const k = parseInt(n,10); if(!isNaN(k) && k>=0) cell.ops.heightPx = k;
+          return;
+        }
+      });
+      closeMenu();
+    });
+  });
+
+  return wrap;
+}
+
+/* ---------- v/x/i quick buttons ---------- */
+function buildValueButtons(r,c){
+  const wrap = document.createElement('span');
+  wrap.className = 'valBtns';
+  ['v','x','i','q',''].forEach(v=>{
+    const b=document.createElement('button');
+    b.className='valBtn';
+    b.type='button';
+    b.innerHTML = renderInlineMarkupsInText(v);
+    b.title = `Set value to “${v}”`;
+    b.addEventListener('click', ()=> updateCellAndRefresh(r,c, cell=>{ cell.text=v; cell.markups=[]; }));
+    wrap.appendChild(b);
+  });
+  return wrap;
+}
+
+/* ---------- Render chips + controls into a cell ---------- */
+function renderChipsInto(container, r, c){
+  const cell = state.rows[r][c];
+
+  // Existing chips (click to remove)
+  if(cell.ops.header)       container.appendChild(makeChip('머리말','good', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.header=false)));
+  if(cell.ops.removed)      container.appendChild(makeChip('병합됨','bad', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.removed=false)));
+  if(cell.ops.mergeRight>0) container.appendChild(makeChip(cell.ops.mergeRight+'열', '', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.mergeRight=0)));
+  if(cell.ops.mergeDown>0)  container.appendChild(makeChip(cell.ops.mergeDown+'행', '', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.mergeDown=0)));
+  if(cell.ops.colBorder)    container.appendChild(makeChip('경계추가','good', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.colBorder=false)));
+  if(cell.ops.colNoBorder)  container.appendChild(makeChip('경계제거','bad',  ()=> updateCellAndRefresh(r,c, cell=> cell.ops.colNoBorder=false)));
+  if(cell.ops.heightPx>0)   container.appendChild(makeChip('높이'+cell.ops.heightPx, 'warn', ()=> updateCellAndRefresh(r,c, cell=> cell.ops.heightPx=0)));
+
+  // NOTE: no value buttons / add menu here anymore; they live in the floating toolbar
+}
+</script>
+<script>
+// ---------------- Hardened floating tools overlay ----------------------------
+// ---------------- Robust floating tools overlay (DOM-safe) -------------------
+(function(){
+  let cellToolsEl = null;
+
+  // Small ready helper
+  function onReady(fn){
+    if (document.readyState === 'complete' || document.readyState === 'interactive') fn();
+    else document.addEventListener('DOMContentLoaded', fn, { once:true });
+  }
+
+  // Fallback builders if pretty ones aren't defined yet
+  function _fallbackValueButtons(r,c){
+    const wrap = document.createElement('span');
+    wrap.style.display='inline-flex'; wrap.style.gap='6px';
+    ['v','x','i'].forEach(v=>{
+      const b=document.createElement('button');
+      b.type='button'; b.textContent=v;
+      b.style.cssText='font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer';
+      b.addEventListener('click', ()=> updateCellAndRefresh(r,c, cell=>{ cell.text=v; cell.markups=[]; }));
+      wrap.appendChild(b);
+    });
+    return wrap;
+  }
+  function _fallbackAddMenu(r,c){
+    const btn=document.createElement('button');
+    btn.type='button'; btn.textContent='Add…';
+    btn.style.cssText='font-size:11px;padding:2px 10px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer';
+    btn.addEventListener('click', ()=>{
+      const choice = prompt('Add: h, !!, ^n, <n, &, #, ~n, or set value (v/x/i)', '');
+      if(!choice) return;
+      updateCellAndRefresh(r,c, (cell)=>{
+        if(['v','x','i'].includes(choice)){ cell.text=choice; cell.markups=[]; return; }
+        if(choice==='h'){ cell.ops.header=true; return; }
+        if(choice==='!!'){ cell.ops.removed=true; return; }
+        if(choice==='&'){ cell.ops.colBorder=true; cell.ops.colNoBorder=false; return; }
+        if(choice==='#'){ cell.ops.colNoBorder=true; cell.ops.colBorder=false; return; }
+        if(/^(\^|<)\d+$/.test(choice)){
+          const n=parseInt(choice.slice(1),10);
+          if(choice[0]==='^') cell.ops.mergeRight=n; else cell.ops.mergeDown=n;
+          return;
+        }
+        if(/^~\d+$/.test(choice)){ cell.ops.heightPx=parseInt(choice.slice(1),10); return; }
+        console.warn('Unknown choice:', choice);
+      });
+    });
+    return btn;
+  }
+
+  function ensureCellTools(){
+    // Body may not exist yet
+    const parent = document.body || document.documentElement;
+    if(!parent) return null;
+
+    if(!cellToolsEl || !parent.contains(cellToolsEl)){
+      cellToolsEl = document.createElement('div');
+      cellToolsEl.className = 'cellTools';
+      cellToolsEl.setAttribute('data-pos','top');
+      const group = document.createElement('span');
+      group.className = 'toolsGroup';
+      cellToolsEl.appendChild(group);
+      parent.appendChild(cellToolsEl);
+    } else if(!cellToolsEl.querySelector('.toolsGroup')){
+      const group = document.createElement('span');
+      group.className = 'toolsGroup';
+      cellToolsEl.innerHTML = '';
+      cellToolsEl.appendChild(group);
+    }
+    return cellToolsEl;
+  }
+
+  function buildCellTools(r, c){
+    const host = ensureCellTools();
+    if(!host){ onReady(()=> buildCellTools(r,c)); return; }
+
+    const group = host.querySelector('.toolsGroup');
+    group.innerHTML = '';
+
+    const makeVals = (typeof window.buildValueButtons === 'function') ? window.buildValueButtons : _fallbackValueButtons;
+    const makeMenu = (typeof window.buildPrettyChipMenu === 'function') ? window.buildPrettyChipMenu : _fallbackAddMenu;
+
+    try{
+      const vals = makeVals(r,c);
+      const menu = makeMenu(r,c);
+      if(vals) group.appendChild(vals);
+      if(menu) group.appendChild(menu);
+      if(!vals && !menu) console.warn('[cellTools] No tools built.');
+    }catch(err){
+      console.error('[cellTools] Build failed:', err);
+    }
+  }
+
+// ---- drop-in replacement ----
+let _toolsRaf = 0;
+function positionCellTools(r, c){
+  const host = ensureCellTools();
+  if(!host){ /* DOM not ready yet */ return; }
+
+  const tbl = document.getElementById('grid');
+  const cellEl = tbl && tbl.rows && tbl.rows[r] && tbl.rows[r].cells && tbl.rows[r].cells[c];
+  if(!cellEl){ hideCellTools(); return; }
+
+  // Ensure content exists
+  const group = host.querySelector('.toolsGroup');
+  if(group && !group.children.length) buildCellTools(r,c);
+
+  // rAF throttle to avoid jank during scroll
+  if (_toolsRaf) cancelAnimationFrame(_toolsRaf);
+  _toolsRaf = requestAnimationFrame(()=>{
+    const rect = cellEl.getBoundingClientRect();
+    const margin = 8;
+
+    // Measure host (show temporarily to get size)
+    host.style.visibility = 'hidden';
+    host.classList.add('show');
+    const w = host.offsetWidth || 220;
+    const h = host.offsetHeight || 36;
+    host.classList.remove('show');
+    host.style.visibility = '';
+
+    const preferTop = rect.top > h + 24;
+    const pos = preferTop ? 'top' : 'bottom';
+
+    // NOTE: position: fixed uses viewport coordinates — DO NOT add window.scrollX/Y
+    let top = preferTop ? rect.top - h - margin : rect.bottom + margin;
+    let left = Math.min(Math.max(6, rect.left), window.innerWidth - w - 6);
+
+    host.style.top = `${top}px`;
+    host.style.left = `${left}px`;
+    host.dataset.pos = pos;
+    host.classList.add('show');
+  });
+}
+
+
+  function hideCellTools(){
+    const host = ensureCellTools();
+    if(host) host.classList.remove('show');
+  }
+
+  // Expose globally
+  window.buildCellTools = buildCellTools;
+  window.positionCellTools = positionCellTools;
+  window.hideCellTools = hideCellTools;
+
+  // Reposition on scroll/resize after DOM ready
+  onReady(()=>{
+    const handler = ()=>{
+      const {r,c} = state.sel || {};
+      if(r==null) return hideCellTools();
+      positionCellTools(r,c);
+    };
+    window.addEventListener('scroll', handler, {passive:true});
+    window.addEventListener('resize', handler, {passive:true});
+    document.querySelector('.gridwrap')?.addEventListener('scroll', handler, {passive:true});
+  });
+})();
+
+</script>
+<script>
+// --- Data model --------------------------------------------------------------
+// Each cell stores: { text, ops: {header, removed, mergeRight, mergeDown, colBorder}, markups: [{t:'k|g|b|r', v:string}] }
+
+const state = { rows: [], sel: {r:null,c:null} };
+
+function parseCSV(text){
+  const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
+  const rows = lines.map(line=> line.split(/,(?=(?:[^']*'[^']*')*[^']*$)/).map(s=> s.trim()));
+  return rows.map(r=> r.map(parseCell));
+}
+
+function parseCell(raw){
+  const cell = { 
+  raw, text:"", 
+  ops:{
+    header:false, removed:false, 
+    mergeRight:0, mergeDown:0, 
+    colBorder:false,     // &  (teal)
+    colNoBorder:false,   // #  (red)
+    heightPx:0           // ~n
+  }, 
+  markups:[] 
+};
+  if(!raw) return cell;
+
+    // ...
+  let pre = "", post="";
+  const idx = raw.indexOf(";");
+  if(idx>=0){ pre = raw.slice(0, idx).trim(); post = raw.slice(idx+1).trim(); }
+  else { post = raw.trim(); }
+
+  // NEW: allow ops-only cells without a semicolon (e.g., "!!", "^2", "<3", "~120", "#", "&", "h")
+  if (!pre && post && /^(\s*(?:!!|h|&|#|~\s*\d+|\^\s*\d+|<\s*\d+))+\s*$/.test(post)) {
+    pre = post; 
+    post = '';
+  }
+
+
+  // parse ops in `pre`
+  if(pre){
+    if(pre.includes('h')) cell.ops.header = true;
+    if(pre.includes('!!')) cell.ops.removed = true;
+    const mR = pre.match(/\^(\d+)/); if(mR) cell.ops.mergeRight = parseInt(mR[1],10);
+    const mD = pre.match(/<\s*(\d+)/); if(mD) cell.ops.mergeDown = parseInt(mD[1],10);
+    const mH = pre.match(/~\s*(\d+)/); if(mH) cell.ops.heightPx = parseInt(mH[1], 10);
+    if(pre.includes('&')) cell.ops.colBorder = true;
+    // add after existing &/^/</!!/h parsing
+if (pre.includes('#')) cell.ops.colNoBorder = true;
+  }
+
+  // parse markups sequence like kTEXT. gTEXT. bTEXT. rTEXT.
+  let rest = post;
+  const marks=[];
+  while(/^([kgrb])/.test(rest)){
+    const t = rest[0];
+    const afterT = rest.slice(1);
+    const dot = afterT.indexOf('.')
+    if(dot>=0){
+      const v = afterT.slice(0, dot);
+      marks.push({t,v});
+      rest = afterT.slice(dot+1).trim();
+    } else { break; }
+  }
+  cell.markups = marks;
+  cell.text = rest; // remaining plain text (may be empty)
+  cell.raw = post;
+  return cell;
+}
+
+function cellToString(cell){
+  const ops = [];
+  if(cell.ops.header) ops.push('h');
+  if(cell.ops.removed) ops.push('!!');
+  if(cell.ops.mergeRight>0) ops.push('^'+cell.ops.mergeRight);
+  if(cell.ops.mergeDown>0) ops.push('<'+cell.ops.mergeDown);
+  if(cell.ops.colBorder) ops.push('&');
+  if (cell.ops.colNoBorder) ops.push('#');   // new
+  if (cell.ops.heightPx>0)  ops.push('~' + cell.ops.heightPx); // new
+
+  const left = ops.join('');
+
+  const rightParts = [];
+  for(const m of cell.markups){ rightParts.push(m.t + (m.v??'' ) + '.') }
+  if(cell.text) rightParts.push(cell.text);
+
+  if(left && rightParts.length) return left + '; ' + rightParts.join(' ');
+  if(left) return left + ';';
+  return rightParts.join(' ');
+}
+
+// --- Grid rendering ----------------------------------------------------------
+function renderGrid(){
+  const host = document.getElementById('cellEditor');
+  // If the side editor panel isn't in this layout, just no-op safely
+  if(!host){ return; }
+
+  host.innerHTML='';
+  const {r,c} = state.sel || {};
+  if(r==null){ host.innerHTML='<div class="muted">Select a cell in the grid.</div>'; return; }
+  const cell = state.rows[r][c];
+  const tbl = document.getElementById('grid');
+  tbl.innerHTML = '';
+  state.rows.forEach((row,ri)=>{
+    const tr = document.createElement('tr');
+    row.forEach((cell,ci)=>{
+      const td = document.createElement(ri<2? 'th':'td');
+td.className = 'cell' + (cell.ops.header? ' headerCell':'');
+if (cell.ops.colBorder)   td.classList.add('colBorderCell');
+if (cell.ops.colNoBorder) td.classList.add('colNoBorderCell'); // NEW
+if (cell.ops.removed) {
+  td.classList.add('removedCell');
+}
+
+      const div = document.createElement('div');
+div.innerHTML = renderMarkupHTML(cell) || '&nbsp;';
+td.appendChild(div);
+
+      const chips = document.createElement('div');
+chips.className='chips';
+renderChipsInto(chips, ri, ci);
+td.appendChild(chips);
+
+      td.addEventListener('click',()=> selectCell(ri,ci));
+      td.addEventListener('dblclick',()=> window.__openOverlayEditor(ri, ci));td.addEventListener('dblclick',()=> startInlineEdit(td, ri, ci));
+      if(state.sel.r===ri && state.sel.c===ci){ td.style.outline='2px solid var(--accent)'; td.style.outlineOffset='-2px'; }
+      tr.appendChild(td);
+    });
+    tbl.appendChild(tr);
+  });
+}
+
+function displayText(cell){
+  let t = cell.text || cell.markups.map(m=>m.v).filter(Boolean).join(' ');
+  if(!t && cell.markups.some(m=>m.v)) t = cell.markups.map(m=>m.v).join(' ');
+  return t || cellToString(cell) || '';
+}
+
+function clip(s){ return s.length>8? s.slice(0,8)+'…': s }
+
+function startInlineEdit(td, r, c){
+  const cell = state.rows[r][c];
+
+  // Show the whole editable post-semicolon string: existing markups as "kA. gB. rC." + tail text
+  const prefix = (cell.markups||[]).map(m => (m.t || '') + (m.v || '') + '.').join(' ');
+  const seed = prefix + (prefix && cell.text ? ' ' : '') + (cell.text || '');
+
+  const ta = document.createElement('textarea');
+  ta.value = seed;
+  ta.rows = 1;
+  const auto = ()=>{ ta.style.height='auto'; ta.style.height = (ta.scrollHeight)+"px"; };
+  td.innerHTML='';
+  td.appendChild(ta);
+  ta.focus(); auto();
+  ta.addEventListener('input', auto);
+  ta.addEventListener('keydown', e=>{
+    if(e.key==='Enter' && !e.shiftKey){
+      e.preventDefault();
+      const {selectionStart:s, selectionEnd:ePos, value:v} = ta;
+      ta.value = v.slice(0,s) + '/' + v.slice(ePos);
+      ta.selectionStart = ta.selectionEnd = s+1; auto();
+    }
+    if(e.key==='Escape'){ renderGrid(); selectCell(r,c); }
+  });
+  ta.addEventListener('blur', ()=>{
+    // Re-parse the user's text as post-semicolon content (keep ops as-is)
+    const parsed = parseCell('; ' + ta.value); // reuse parser
+    cell.markups = parsed.markups || [];
+    cell.text = parsed.text || '';
+    renderGrid(); selectCell(r,c);
+  });
+}
+
+function selectCell(r,c){
+  state.sel={r,c};
+  renderGrid();
+  // NEW:
+  buildCellTools(r,c);
+  positionCellTools(r,c);
+}
+
+
+// --- Cell editor -------------------------------------------------------------
+// --- Step 3: Selected Cell editor (intuitive inline markup editing) ----------
+function renderEditor(){
+  const host = document.getElementById('cellEditor');
+  host.innerHTML='';
+  const {r,c} = state.sel || {};
+  if(r==null){ host.innerHTML='<div class="muted">Select a cell in the grid.</div>'; return; }
+  const cell = state.rows[r][c];
+
+  // Build a single "post content" string (all after the semicolon)
+  const postString = buildPostString(cell); // e.g., "k굵게. ITX/r마음. 끝"
+
+  // --- Post content field (full, editable, markups anywhere) ---
+  const postField = el(`
+    <div class="field">
+      <label>Post content (markups anywhere: kTEXT. gTEXT. bTEXT. rTEXT.) — “/” renders as line break</label>
+      <textarea id="edPost" rows="3" style="background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:8px;color:var(--ink);resize:vertical"></textarea>
+    </div>
+  `);
+  postField.querySelector('#edPost').value = postString;
+  host.appendChild(postField);
+
+  // --- Quick insert bar ---
+  const bar = el(`
+    <div class="toolbar" style="margin-top:4px">
+      <button data-t="k" title="Insert kTEXT.">+ Bold (k)</button>
+      <button data-t="g" title="Insert gTEXT.">+ Larger (g)</button>
+      <button data-t="b" title="Insert bTEXT.">+ Bold+Larger (b)</button>
+      <button data-t="r" title="Insert rTEXT.">+ Rotate (r)</button>
+      <span class="small" style="margin-left:auto">Tip: select text first to wrap; otherwise you’ll be prompted.</span>
+    </div>
+  `);
+  host.appendChild(bar);
+
+  const ta = postField.querySelector('#edPost');
+  bar.querySelectorAll('button[data-t]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const t = btn.getAttribute('data-t');
+      insertMarkupSnippet(ta, t);
+      previewNow(); // update live preview
+    });
+  });
+
+  // --- Live preview (HTML) ---
+  const prevWrap = el(`
+    <div class="field">
+      <label>Preview</label>
+      <div id="edPreview" style="min-height:36px;background:#f8fafc;border:1px dashed var(--line);border-radius:10px;padding:8px"></div>
+    </div>
+  `);
+  host.appendChild(prevWrap);
+  const prevEl = prevWrap.querySelector('#edPreview');
+
+  function previewNow(){
+    // parse with your parser by prepending a semicolon
+    const parsed = parseCell('; ' + ta.value);
+    // render with your inline renderer
+    const html = renderMarkupHTML(parsed) || '&nbsp;';
+    prevEl.innerHTML = html;
+  }
+  ta.addEventListener('input', previewNow);
+  previewNow();
+
+  // --- Ops (header/removed/merges/colBorder) ---
+  host.appendChild(el(`
+    <div class="rowX2" style="margin-top:6px">
+      <label class="pill">Header <input type="checkbox" id="edHeader" ${cell.ops.header?'checked':''}></label>
+      <label class="pill">Removed (!!) <input type="checkbox" id="edRemoved" ${cell.ops.removed?'checked':''}></label>
+    </div>
+  `));
+  host.appendChild(el(`
+    <div class="rowX2" style="margin-top:6px">
+      <div class="pill">^ Right merge <input id="edMR" type="number" min="0" value="${cell.ops.mergeRight}"></div>
+      <div class="pill">&lt; Down merge <input id="edMD" type="number" min="0" value="${cell.ops.mergeDown}"></div>
+    </div>
+  `));
+  host.appendChild(el(`
+    <div class="field" style="margin-top:6px">
+      <label>Column Border (&amp;)</label>
+      <label class="pill"><input type="checkbox" id="edColBorder" ${cell.ops.colBorder? 'checked':''}/> &nbsp; Show border on this column</label>
+    </div>
+  `));
+  // Add below the Header/Removed row:
+host.appendChild(el(`
+  <div class="rowX2" style="margin-top:6px">
+    <label class="pill">Column Border (&) <input type="checkbox" id="edColBorder" ${cell.ops.colBorder?'checked':''}></label>
+    <label class="pill">No Column Border (#) <input type="checkbox" id="edColNoBorder" ${cell.ops.colNoBorder?'checked':''}></label>
+  </div>
+`));
+
+// Height input
+host.appendChild(el(`
+  <div class="field" style="margin-top:6px">
+    <label>Cell height (~n px)</label>
+    <div class="pill">~ <input id="edHeight" type="number" min="0" value="${cell.ops.heightPx||0}" style="width:80px"> px</div>
+  </div>
+`));
+
+
+  // --- Apply ---
+  const saveBar = el(`<div class="toolbar" style="margin-top:8px"><button class="primary" id="apply">Apply Changes</button></div>`);
+  host.appendChild(saveBar);
+  saveBar.querySelector('#apply').addEventListener('click', ()=>{
+    // Re-parse entire post content so leading markups become cell.markups, rest stays in text
+    const parsed = parseCell('; ' + ta.value);
+    cell.markups   = parsed.markups || [];
+    cell.text      = parsed.text    || '';
+    // Ops
+    cell.ops.header     = document.getElementById('edHeader').checked;
+    cell.ops.removed    = document.getElementById('edRemoved').checked;
+    cell.ops.mergeRight = parseInt(document.getElementById('edMR').value||'0',10);
+    cell.ops.mergeDown  = parseInt(document.getElementById('edMD').value||'0',10);
+cell.ops.colBorder   = document.getElementById('edColBorder').checked;
+cell.ops.colNoBorder = document.getElementById('edColNoBorder').checked;
+cell.ops.heightPx    = parseInt(document.getElementById('edHeight').value||'0', 10) || 0;
+
+    // Refresh
+    renderGrid(); syncExportNote();
+    // Keep selection
+    selectCell(r,c);
+  });
+}
+
+// Build a single editable string for the "post content" area from a cell
+function buildPostString(cell){
+  const prefix = (cell.markups||[]).map(m => (m.t||'') + (m.v||'') + '.').join(' ');
+  return prefix + (prefix && cell.text ? ' ' : '') + (cell.text || '');
+}
+
+// Insert k/g/b/r snippet at caret (or wrap selection)
+function insertMarkupSnippet(textarea, t){
+  textarea.focus();
+  const selStart = textarea.selectionStart ?? 0;
+  const selEnd   = textarea.selectionEnd   ?? selStart;
+  const value = textarea.value;
+
+  let insertText = '';
+  if(selStart !== selEnd){
+    // wrap selection -> kSELECTED.
+    const selected = value.slice(selStart, selEnd);
+    insertText = `${t}${selected}.`;
+  }else{
+    // prompt for text
+    const v = prompt(`${t.toUpperCase()} text:`, '');
+    if(v===null) return; // canceled
+    insertText = `${t}${v}.`;
+  }
+
+  const newVal = value.slice(0, selStart) + insertText + value.slice(selEnd);
+  textarea.value = newVal;
+
+  // place caret after inserted snippet
+  const newPos = selStart + insertText.length;
+  textarea.selectionStart = textarea.selectionEnd = newPos;
+}
+
+function esc(s){ return (s??'').replace(/[&<>"']/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]) ); }
+function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstChild }
+
+// --- Controls ----------------------------------------------------------------
+
+document.getElementById('parseBtn').addEventListener('click', ()=>{
+  const input = document.getElementById('csvIn').value;
+  state.rows = parseCSV(input);
+  state.sel={r:0,c:0};
+  renderGrid();;
+  syncExportNote();
+});
+
+document.getElementById('clearInput').addEventListener('click', ()=>{
+  document.getElementById('csvIn').value='';
+});
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const out = exportCSV();
+  const ta = document.getElementById('csvOut');
+  ta.value = out; ta.focus(); ta.select();
+  setStatus('Exported.');
+});
+
+document.getElementById('copyOut').addEventListener('click', ()=>{
+  const ta = document.getElementById('csvOut');
+  ta.focus(); ta.select(); document.execCommand('copy');
+  setStatus('Copied to clipboard.');
+});
+
+function exportCSV(){
+  const lines = state.rows.map(row=> row.map(cellToString).join(', '));
+  return lines.join('\n');
+}
+
+function setStatus(msg){ const el=document.getElementById('status'); if(!el) return; el.textContent=msg; setTimeout(()=> el.textContent='', 2000); }
+
+function syncExportNote(){ const o=document.getElementById('csvOut'); if(o) o.value = exportCSV(); }
+
+// Sample data
+const SAMPLE = ` h<100~50; b　서울 > 대전 > 동대구 > 부산・신해운대　., h; '열차번호', h#~80; '열차종별', h; '시발', h; '행선', ^2; b'서울'., !!, '영등포', '안양', '수원', '오산', '서정리', '평택', '성환', '천안', '전의', '조치원', '부강', '신탄진', ^2; b'대전'., !!, '옥천', '이원', '지탄', '심천', '영동', '황간', '추풍령', '김천', ^2; b'구미'., !!, '약목', '왜관', '신동', '대구', ^2; b'동대구'., !!, '경산', '남성현', '청도', '상동', '밀양', '삼랑진', '원동', '물금', '화명', '구포', &; '부전', ^2; b'신해운대'., !!, &; '사상', ^2; b'부산'., !!, h~120; '비고'
+!!, !!, !!, !!, !!, x, &; DEP, q, q, q, q, q, q, q, q, q, q, q, q, ARR, &; DEP, q, q, q, q, q, q, q, q, ARR, &; DEP, q, q, q, q, ARR, &; DEP, q, q, q, q, q, q, q, q, q, q, q, ARR, x, q, ARR, x, !!
+!!, 1341, r무궁화호., 동대/구, 부산, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, -, 600, 611, 622, 630, 639, 647, 657, 704, 712, 719, 724, i, i, i, 730, 740, -, 
+!!, 1131, ITX/r마음., 동대/구, 부산, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, -, 709, 721, v, 737, 746, 753, 804, 811, 819, 826, 832, i, i, i, 838, 848, -, 
+!!, 1351, r무궁화호., 대전, 부산, x, x, x, x, x, x, x, x, x, x, x, x, x, x, -, 525, 537, v, v, v, 556, v, v, 624, 639, 641, 653, 659, 708, 722, 726, 728, 739, v, 755, 809, 819, 829, 837, 845, v, 855, i, i, i, v, 907, -, 
+!!, 1353, r무궁화호., 대전, 부산, x, x, x, x, x, x, x, x, x, x, x, x, x, x, -, 625, 637, v, v, v, 656, 708, 715, 730, 745, 747, 757, 804, 813, 826, 831, 833, 843, v, 859, 908, 916, 927, v, 940, v, 950, i, i, i, v, 1003, -, 
+!!, 1355, r무궁화호., 대전, 부산, x, x, x, x, x, x, x, x, x, x, x, x, x, x, -, 715, 727, v, v, v, 746, v, v, 815, 829, 831, 842, 849, v, 908, 912, 914, 925, v, 940, v, 954, 1005, v, 1017, v, 1026, i, i, i, v, 1039, -, 
+!!, 1001, ITX/r새마을., 서울, 부산, -, 613, 623, v, 647, v, v, 705, v, 719, v, 739, 737, v, 802, 804, v, v, v, v, 831, v, v, 858, 912, 914, v, 928, v, 947, 951, 953, v, v, 1014, v, 1027, v, v, 1045, v, 1054, i, i, i, v, 1106, -, 
+!!, 1301, r무궁화호., 서울, 부산, -, 554, 607, v, 631, v, v, 652, v, 706, v, 728, 737, 747, 804, 806, 819, v, v, v, 840, 851, v, 911, 925, 927, v, 941, v, 1001, 1005, 1007, 1017, v, 1034, 1042, 1056, 1107, v, v, v, 1126, i, i, i, v, 1139, -, 
+!!, 1303, r무궁화호., 서울, 부산, -, 637, 648, 700, 714, 725, v, 737, v, 756, v, 819, v, v, 844, 846, v, v, v, v, 919, v, v, 949, 1003, 1005, v, 1019, v, 1041, 1044, 1046, 1057, v, 1112, v, 1126, v, v, 1146, 1153, 1158, i, i, i, v, 1211, -, 
+!!, 1021, ITX/r새마을., 서울, 신해/운대, -, 702, 712, v, 734, v, v, 753, v, 806, v, 827, v, v, 849, 851, v, v, v, v, v, v, v, 943, 957, 959, v, v, v, 1029, 1033, 1035, 1044, v, v, v, 1110, v, v, v, v, 1134, 1149, 1202, -, x, x, x, 
+!!, 1305, r무궁화호., 서울, 부산, -, 716, 728, v, 752, 803, v, 815, v, 829, v, 851, 900, v, 920, 922, 934, v, v, v, 954, v, 1010, 1025, 1039, 1041, v, 1055, v, 1115, 1120, 1122, 1137, 1153, 1202, v, 1216, 1226, v, 1239, v, 1249, i, i, i, v, 1301, -, 
+!!, 4302, r무궁화호., 영주, 동대/구, x, x, x, x, x, x, x, ^3; r영주발/　635., !!, !!, r>, 858, 907, v, 926, 928, 940, 947, v, 956, 1005, 1017, v, 1037, 1051, 1053, v, 1106, v, 1126, 1130, -, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, x, `;
+
+document.getElementById('loadSample').addEventListener('click', ()=>{
+  document.getElementById('csvIn').value = SAMPLE;
+});
+
+// Keyboard nav (basic)
+document.addEventListener('keydown', (e)=>{
+  if(!document.activeElement || document.activeElement.tagName==='INPUT' || document.activeElement.tagName==='TEXTAREA') return;
+  const {r,c} = state.sel; if(r==null) return;
+  if(e.key==='ArrowRight') selectCell(r, Math.min(c+1, state.rows[r].length-1));
+  if(e.key==='ArrowLeft')  selectCell(r, Math.max(c-1, 0));
+  if(e.key==='ArrowDown')  selectCell(Math.min(r+1, state.rows.length-1), c);
+  if(e.key==='ArrowUp')    selectCell(Math.max(r-1, 0), c);
+});
+</script>
+<script>
+// Safely escape HTML
+function escapeHTML(s){
+  return (s??'').replace(/[&<>"']/g, m => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]
+  ));
+}
+
+// Turn a cell into inline-rendered HTML with styled markups.
+// Also converts '/' to <br/> for display only.
+// Safely escape HTML
+function escapeHTML(s){
+  return (s??'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"\'":'&#39;'}[m]));
+}
+
+function renderInlineMarkupsInText(text){
+  const parts = [];
+  let rest = text ?? '';
+  const re = /([kgrb])([^.]*)\./g;
+  let lastIndex = 0, m;
+  while ((m = re.exec(rest))){
+    const start = m.index;
+    const end = re.lastIndex;
+    // preceding plain text
+    if(start > lastIndex){
+      const chunk = rest.slice(lastIndex, start);
+      const safe = escapeHTML(chunk).replaceAll('/', '<br/>');
+      parts.push(mapSymbols(safe));
+    }
+    // the markup
+    const t = m[1], v = m[2] || '';
+    const cls = t==='k' ? 'mk mk-k'
+            : t==='g' ? 'mk mk-g'
+            : t==='b' ? 'mk mk-b'
+            :            'mk mk-r';
+    const val = mapSymbols(escapeHTML(v).replaceAll('/', '<br/>'));
+    if(t==='r'){
+      parts.push(`<span class="${cls}">${val}<span class="rot">↻</span></span>`);
+    }else{
+      parts.push(`<span class="${cls}">${val}</span>`);
+    }
+    lastIndex = end;
+  }
+  // trailing plain text
+  if(lastIndex < rest.length){
+    const safeTail = escapeHTML(rest.slice(lastIndex)).replaceAll('/', '<br/>');
+    parts.push(mapSymbols(safeTail));
+  }
+  return parts.join('');
+}
+
+// Render k/g/b/r that were parsed at the front *and*
+// any inline markups found in the remaining text.
+function renderMarkupHTML(cell){
+  const blocks = [];
+  // leading markups
+  for(const m of (cell.markups||[])){
+    const cls = m.t==='k' ? 'mk mk-k'
+              : m.t==='g' ? 'mk mk-g'
+              : m.t==='b' ? 'mk mk-b'
+              :            'mk mk-r';
+    const val = mapSymbols(escapeHTML(m.v||'').replaceAll('/', '<br/>'));
+    if(m.t==='r'){
+      blocks.push(`<span class="${cls}">${val}<span class="rot">↻</span></span>`);
+    }else{
+      blocks.push(`<span class="${cls}">${val}</span>`);
+    }
+  }
+  // the remaining text (may include inline markups)
+  const tailHTML = renderInlineMarkupsInText(cell.text||'');
+  if(blocks.length && tailHTML) return blocks.join(' ') + ' ' + tailHTML;
+  return blocks.join(' ') || tailHTML || '';
+}
+
+</script>
+<script>
+  // ---------- Floating inline editor (doesn't change table size) ---------------
+let _ieEl = null, _ieTA = null, _ieCell = null;
+
+function ensureInlineEditor(){
+  if (_ieEl && document.body.contains(_ieEl)) return _ieEl;
+  const host = document.createElement('div');
+  host.className = 'ie';
+  host.innerHTML = `
+    <div class="ieToolbar">
+      <button class="ieBtn" data-act="slash">줄바꿈</button>
+      <button class="ieBtn" data-act="k">굵게</button>
+      <button class="ieBtn" data-act="g">크게</button>
+      <button class="ieBtn" data-act="b">강조</button>
+      <button class="ieBtn" data-act="r">세로쓰기</button>
+      <span class="sp"></span>
+      <button class="ieBtn" data-act="cancel">취소</button>
+      <button class="ieBtn primary" data-act="save">저장</button>
+    </div>
+    <textarea class="ieText" rows="2" placeholder="Type… (use kTEXT., gTEXT., bTEXT., rTEXT. anywhere; “/” makes a line break)"></textarea>
+    <div class="ieHint">Enter inserts “/”. Shift+Enter = newline · Esc = cancel · Ctrl/Cmd+Enter = save</div>
+  `;
+  document.body.appendChild(host);
+
+  _ieEl = host;
+  _ieTA = host.querySelector('.ieText');
+
+  // toolbar actions
+  host.querySelectorAll('.ieBtn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const act = btn.getAttribute('data-act');
+      if (act==='save') _ieSave();
+      else if (act==='cancel') _ieClose(false);
+      else if (act==='slash') _ieInsert('/');
+      else if (['k','g','b','r'].includes(act)) _ieInsertMarkup(act);
+    });
+  });
+
+  // key handling
+  _ieTA.addEventListener('keydown', (e)=>{
+    if(e.key==='Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey){
+      e.preventDefault();
+      _ieInsert('/');
+    } else if ((e.key==='Enter' && (e.ctrlKey || e.metaKey))){
+      e.preventDefault(); _ieSave();
+    } else if (e.key==='Escape'){
+      e.preventDefault(); _ieClose(false);
+    }
+  });
+
+  // stop clicks from bubbling (don’t change selection)
+  host.addEventListener('mousedown', e=> e.stopPropagation());
+  host.addEventListener('click', e=> e.stopPropagation());
+
+  // click outside closes (save)
+  document.addEventListener('mousedown', (e)=>{
+    if(!_ieEl || _ieEl.style.display!=='flex') return;
+    if(!_ieEl.contains(e.target)) _ieSave();
+  });
+
+  return _ieEl;
+}
+
+function _ieAutosize(){
+  if(!_ieTA) return;
+  _ieTA.style.height = 'auto';
+  _ieTA.style.height = Math.min(240, _ieTA.scrollHeight) + 'px';
+}
+
+function _ieInsert(text){
+  const ta = _ieTA; if(!ta) return;
+  const s = ta.selectionStart ?? ta.value.length;
+  const e = ta.selectionEnd ?? s;
+  ta.value = ta.value.slice(0,s) + text + ta.value.slice(e);
+  ta.selectionStart = ta.selectionEnd = s + text.length;
+  _ieAutosize();
+}
+
+function _ieInsertMarkup(t){
+  const ta = _ieTA; if(!ta) return;
+  const s = ta.selectionStart ?? 0;
+  const e = ta.selectionEnd ?? s;
+  let content = '';
+  if (s !== e){
+    content = ta.value.slice(s,e);
+  } else {
+    const v = prompt(`${t.toUpperCase()} text:`, '');
+    if(v===null) return;
+    content = v;
+  }
+  const insertText = `${t}${content}.`;
+  ta.value = ta.value.slice(0,s) + insertText + ta.value.slice(e);
+  const pos = s + insertText.length;
+  ta.selectionStart = ta.selectionEnd = pos;
+  _ieAutosize();
+}
+
+function _ieOpen(r, c, seed){
+  ensureInlineEditor();
+  _ieCell = { r, c };
+  const cell = state.rows[r][c];
+
+  // Seed value = existing markups (as “kA. gB. …”) + text
+  const prefix = (cell.markups||[]).map(m => (m.t||'') + (m.v||'') + '.').join(' ');
+  const initial = (seed!==undefined ? seed : (prefix + (prefix && cell.text ? ' ' : '') + (cell.text || '')));
+
+  _ieTA.value = initial;
+  _ieAutosize();
+
+  // position: fixed near the cell
+  const tbl = document.getElementById('grid');
+  const td = tbl?.rows?.[r]?.cells?.[c];
+  if(td){
+    const rect = td.getBoundingClientRect();
+    const host = _ieEl;
+    // show to measure
+    host.style.visibility='hidden';
+    host.classList.add('show');
+    const w = host.offsetWidth || 360;
+    const h = host.offsetHeight || 80;
+    host.classList.remove('show');
+    host.style.visibility='';
+
+    // prefer top if space allows
+    const margin = 8;
+    const preferTop = rect.top > h + 24;
+    const top = preferTop ? rect.top - h - margin : rect.bottom + margin;
+    const left = Math.min(Math.max(6, rect.left), window.innerWidth - w - 6);
+
+    host.style.top = `${top}px`;
+    host.style.left = `${left}px`;
+    host.classList.add('show');
+  }
+
+  // hide floating tools while editing
+  hideCellTools?.();
+
+  // focus
+  setTimeout(()=> _ieTA.focus(), 0);
+}
+
+function _ieSave(){
+  if(!_ieCell) return _ieClose(false);
+  const {r,c} = _ieCell;
+  const cell = state.rows[r][c];
+  const parsed = parseCell('; ' + _ieTA.value);
+  cell.markups = parsed.markups || [];
+  cell.text    = parsed.text || '';
+  _ieClose(true);
+  // re-render + keep selection + show tools again
+  renderGrid(); syncExportNote();
+  selectCell(r,c);
+}
+
+function _ieClose(_saved){
+  if(_ieEl) _ieEl.classList.remove('show');
+  _ieCell = null;
+}
+
+// Public entrypoints (replace your old inline editors with these)
+function startInlineEdit(td, r, c, seedKey){
+  _ieOpen(r, c, seedKey);
+}
+function startInlineEditFast(td, r, c, seedKey){
+  _ieOpen(r, c, seedKey);
+}
+// expose overlay starters
+window.__openOverlayEditor = (r,c,seed) => _ieOpen(r,c,seed);
+
+
+</script>
+<script>
+// Lightweight extras: type-to-edit + add/remove rows/cols (no MutationObserver)
+(function(){
+  // Type-to-edit & enter-to-open editor
+  window.addEventListener('keydown', (e)=>{
+    const active = document.activeElement;
+    if(active && ['INPUT','TEXTAREA'].includes(active.tagName)) return;
+    if(!state || state.sel.r==null) return;
+
+    const tbl = document.getElementById('grid');
+    const row = tbl?.rows[state.sel.r];
+    const cell = row?.cells[state.sel.c];
+    if(!cell) return;
+
+    if(e.key.length===1 && !e.metaKey && !e.ctrlKey && !e.altKey){
+      // start editing with initial char
+      if(typeof window.__openOverlayEditor === 'function') window.__openOverlayEditor(state.sel.r, state.sel.c, e.key);
+    } else if(e.key==='Enter'){
+      if(typeof window.__openOverlayEditor === 'function') window.__openOverlayEditor(state.sel.r, state.sel.c);
+    }
+  });
+
+  // Toolbar for rows/cols
+  function ensureTools(){
+    const grid = document.getElementById('grid');
+    const gridWrap = grid && grid.parentElement; if(!gridWrap) return;
+    if(document.getElementById('gridTools')) return;
+    const tools = document.createElement('div');
+    tools.className='toolbar'; tools.id='gridTools';
+    tools.innerHTML = `
+      <button id="__addRowAbove">앞 열차 추가</button>
+      <button id="__addRowBelow">뒤 열차 추가</button>
+      <button id="__delRow">열차 삭제</button>
+      <span style="width:6px"></span>
+      <button id="__addColLeft">앞 역 추가</button>
+      <button id="__addColRight">뒤 역 추가</button>
+      <button id="__delCol">역 삭제</button>
+      <span style="width:6px"></span>
+      <button id="__appendRow">맨 뒤에 열차 추가</button>
+      <button id="__appendCol">맨 뒤에 역 추가</button>`;
+    gridWrap.parentElement.insertBefore(tools, gridWrap);
+
+    const addRow = (i)=>{ const cols = state.rows[0]?.length || 1; const row = Array.from({length:cols}, ()=> parseCell('')); state.rows.splice(i,0,row); };
+    const delRow = (i)=>{ if(i>=0 && i<state.rows.length) state.rows.splice(i,1); };
+    const addCol = (i)=>{ state.rows.forEach(r=> r.splice(i,0, parseCell(''))); };
+    const delCol = (i)=>{ state.rows.forEach(r=>{ if(i>=0 && i<r.length) r.splice(i,1); }); };
+
+    const click = (id, fn)=>{ const b=document.getElementById(id); if(!b) return; b.addEventListener('click', ()=>{ const {r,c}=state.sel; fn(r,c); renderGrid(); }); };
+
+    click('__addRowAbove', (r)=> addRow(Math.max(0,r)) );
+    click('__addRowBelow', (r)=> addRow(Math.max(0,r+1)) );
+    click('__delRow', (r)=> { delRow(r); state.sel.r=Math.min(r, state.rows.length-1); });
+    click('__addColLeft',  (r,c)=> addCol(Math.max(0,c)) );
+    click('__addColRight', (r,c)=> addCol(Math.max(0,c+1)) );
+    click('__delCol',      (r,c)=> { delCol(c); state.sel.c=Math.min(c,(state.rows[0]?.length||1)-1); });
+    click('__appendRow',   ()=> { addRow(state.rows.length); state.sel.r=state.rows.length-1; });
+    click('__appendCol',   ()=> { addCol((state.rows[0]?.length||0)); state.sel.c=(state.rows[0]?.length||1)-1; });
+  }
+  ensureTools();
+})();
+
+</script>
+<script>
+
+// ⚡ Performance overlay: async CSV parsing (Web Worker) + chunked rendering + non-blocking edits
+(function(){
+  const tbl = document.getElementById('grid');
+  const statusEl = document.getElementById('status');
+  const parseBtn = document.getElementById('parseBtn');
+
+  // 1) Build a tiny worker for CSV parsing so the UI won't freeze
+  const workerSrc = `self.onmessage = (e)=>{\n  const text = e.data.text||'';\n  const lines = text.split(/\\r?\\n/).filter(l=>l.trim().length>0);\n  const rows = new Array(lines.length);\n  for(let i=0;i<lines.length;i++){\n    const line = lines[i];\n    const cells = line.split(/,(?=(?:[^']*'[^']*')*[^']*$)/).map(s=> s.trim());\n    rows[i] = cells;\n    if(i%500===0) postMessage({type:'progress', done:i, total:lines.length});\n  }\n  postMessage({type:'done', rows});\n}`;
+  const worker = new Worker(URL.createObjectURL(new Blob([workerSrc], {type:'application/javascript'})));
+
+  function setStatus(t){ if(!statusEl) return; statusEl.textContent=t; if(!t) return; }
+
+  // Swap the old Parse button to remove previous listeners
+  if(parseBtn){
+    const clone = parseBtn.cloneNode(true);
+    parseBtn.parentNode.replaceChild(clone, parseBtn);
+    clone.addEventListener('click', ()=>{
+      const input = document.getElementById('csvIn').value;
+      setStatus('Parsing…');
+      worker.postMessage({text: input});
+    });
+  }
+
+  worker.onmessage = (e)=>{
+    const {type} = e.data;
+    if(type==='progress'){
+      const {done,total} = e.data; setStatus(`Parsing… ${Math.floor(done/Math.max(1,total)*100)}%`);
+    } else if(type==='done'){
+      setStatus('Building grid…');
+      const rawRows = e.data.rows;
+      state.rows = rawRows.map(r => r.map(raw => parseCell(raw)));
+      chunkedRender(state.rows);
+      state.sel = {r:0,c:0};
+      syncExportNote();
+      buildCellTools(0,0);
+positionCellTools(0,0);
+      setStatus('');
+    }
+  };
+
+  // 2) Chunked rendering with requestAnimationFrame
+  function chunkedRender(rows){
+    tbl.innerHTML = '';
+    const total = rows.length;
+    const CHUNK = 150; // rows per frame
+    let i = 0;
+    function frame(){
+      const frag = document.createDocumentFragment();
+      for(let k=0; k<CHUNK && i<total; k++, i++){
+        frag.appendChild(buildRow(rows[i], i));
+      }
+      tbl.appendChild(frag);
+      if(i<total){ requestAnimationFrame(frame); }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function buildRow(row, ri){
+    const tr = document.createElement('tr');
+    row.forEach((cell,ci)=>{
+      const td = document.createElement(ri<2? 'th':'td');
+      td.className = 'cell' + (cell.ops.header? ' headerCell':'' );
+      if(cell.ops.colBorder) td.classList.add('colBorderCell');
+      if(cell.ops.colNoBorder) td.classList.add('colNoBorderCell');
+      if (cell.ops.removed) {
+  td.classList.add('removedCell');
+}
+
+const div = document.createElement('div');
+div.innerHTML = renderMarkupHTML(cell) || '&nbsp;';
+div.style.whiteSpace = 'pre-wrap';
+td.appendChild(div);
+const chips = document.createElement('div');
+chips.className='chips';
+renderChipsInto(chips, ri, ci);
+td.appendChild(chips);
+      td.addEventListener('click',()=> selectCellFast(ri,ci));
+      td.addEventListener('dblclick',()=> window.__openOverlayEditor(ri, ci));
+      tr.appendChild(td);
+    });
+    return tr;
+  }
+
+  function displayTextFast(cell){
+    let t = cell.text || cell.markups.map(m=>m.v).filter(Boolean).join(' ');
+    if(!t && cell.markups.some(m=>m.v)) t = cell.markups.map(m=>m.v).join(' ');
+    return (t || cellToString(cell) || '').replaceAll('/', '\n');
+  }
+
+  function selectCellFast(r,c){
+    const prev = state.sel || {}; const tblRows = tbl.rows;
+    if(prev.r!=null && tblRows[prev.r] && tblRows[prev.r].cells[prev.c]){
+      const el = tblRows[prev.r].cells[prev.c]; el.style.outline='none'; el.style.outlineOffset='';
+    }
+    state.sel={r,c};
+    const cur = tblRows[r]?.cells[c];
+    if(cur){ cur.style.outline='2px solid var(--accent)'; cur.style.outlineOffset='-2px'; }
+    buildCellTools(r,c);
+positionCellTools(r,c);
+
+  }
+
+function startInlineEditFast(td, r, c, seedKey){
+  const cell = state.rows[r][c];
+  const prefix = (cell.markups||[]).map(m => (m.t || '') + (m.v || '') + '.').join(' ');
+  const seed = (seedKey!==undefined ? seedKey : '') ||
+               (prefix + (prefix && cell.text ? ' ' : '') + (cell.text || ''));
+
+  const ta = document.createElement('textarea');
+  ta.value = seed;
+  ta.rows = 1;
+  const auto = ()=>{ ta.style.height='auto'; ta.style.height=(ta.scrollHeight)+"px"; };
+  const first = td.firstChild; const chips = td.lastChild;
+  td.insertBefore(ta, first);
+  if(first) first.remove();
+  ta.focus(); auto();
+  ta.addEventListener('input', auto);
+  ta.addEventListener('keydown', e=>{
+    if(e.key==='Enter' && !e.shiftKey){
+      e.preventDefault();
+      const {selectionStart:s, selectionEnd:ePos, value:v} = ta;
+      ta.value = v.slice(0,s) + '/' + v.slice(ePos);
+      ta.selectionStart = ta.selectionEnd = s+1; auto();
+    }
+    if(e.key==='Escape'){ cancel(); }
+  });
+  ta.addEventListener('blur', save);
+
+  function save(){
+    const parsed = parseCell('; ' + ta.value);
+    cell.markups = parsed.markups || [];
+    cell.text = parsed.text || '';
+    const div=document.createElement('div');
+    div.className='content';
+    div.innerHTML = renderMarkupHTML(cell) || '&nbsp;';
+    div.style.whiteSpace='pre-wrap';
+    td.insertBefore(div, chips);
+    ta.remove();
+  }
+  function cancel(){
+    const div=document.createElement('div');
+    div.className='content';
+    div.innerHTML = renderMarkupHTML(cell) || '&nbsp;';
+    div.style.whiteSpace='pre-wrap';
+    td.insertBefore(div, chips);
+    ta.remove();
+  }
+}
+
+  // Expose overrides and helpers for tests
+  window.renderGrid = ()=> chunkedRender(state.rows);
+  window.startInlineEdit = startInlineEditFast;
+  window.selectCell = selectCellFast;
+  window.displayTextFast = displayTextFast;
+})();
+</script>
+    <div class="footer" style="padding-bottom:30px;"></div>
+</body>
+</html>
