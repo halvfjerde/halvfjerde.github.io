@@ -565,18 +565,18 @@ function buildPrettyChipMenu(r, c){
     <div class="menuSep"></div>
 
     <div class="menuItem" data-act="mr">
-      <span class="menuIcon">→</span> 열 병합 <span class="menuHint">(^n)</span>
+      <span class="menuIcon">↓</span> 행 병합 <span class="menuHint">(^n)</span>
     </div>
     <div class="menuItem" data-act="md">
-      <span class="menuIcon">↓</span> 행 병합 <span class="menuHint">(&lt;n)</span>
+      <span class="menuIcon">→</span> 열 병합 <span class="menuHint">(&lt;n)</span>
     </div>
     <div class="menuItem" data-act="tilde">
       <span class="menuIcon">~</span> 행 높이 <span class="menuHint">(~n px)</span>
     </div>
 
     <div class="menuSep"></div>
-    <div class="menuItem" data-act="amp"><span class="menuIcon">&amp;</span> 열 경계 추가 <span class="menuHint">(&)</span></div>
-    <div class="menuItem" data-act="hash"><span class="menuIcon">#</span> 열 경계 제거 <span class="menuHint">(#)</span></div>
+    <div class="menuItem" data-act="amp"><span class="menuIcon">&amp;</span> 행 경계 추가 <span class="menuHint">(&)</span></div>
+    <div class="menuItem" data-act="hash"><span class="menuIcon">#</span> 행 경계 제거 <span class="menuHint">(#)</span></div>
   `;
   wrap.appendChild(menu);
 
@@ -1269,13 +1269,13 @@ document.getElementById('exportBtn').addEventListener('click', ()=>{
   const out = exportCSV();
   const ta = document.getElementById('csvOut');
   ta.value = out; ta.focus(); ta.select();
-  setStatus('Exported.');
+  setStatus('내보내기 완료.');
 });
 
 document.getElementById('copyOut').addEventListener('click', ()=>{
   const ta = document.getElementById('csvOut');
   ta.focus(); ta.select(); document.execCommand('copy');
-  setStatus('Copied to clipboard.');
+  setStatus('복사 완료.');
 });
 
 function exportCSV(){
@@ -1651,7 +1651,7 @@ window.__openOverlayEditor = (r,c,seed) => _ieOpen(r,c,seed);
     parseBtn.parentNode.replaceChild(clone, parseBtn);
     clone.addEventListener('click', ()=>{
       const input = document.getElementById('csvIn').value;
-      setStatus('Parsing…');
+      setStatus('불러오는 중...');
       worker.postMessage({text: input});
     });
   }
@@ -1659,9 +1659,9 @@ window.__openOverlayEditor = (r,c,seed) => _ieOpen(r,c,seed);
   worker.onmessage = (e)=>{
     const {type} = e.data;
     if(type==='progress'){
-      const {done,total} = e.data; setStatus(`Parsing… ${Math.floor(done/Math.max(1,total)*100)}%`);
+      const {done,total} = e.data; setStatus(`불러오는 중... ${Math.floor(done/Math.max(1,total)*100)}%`);
     } else if(type==='done'){
-      setStatus('Building grid…');
+      setStatus('편집기 로딩 중...');
       const rawRows = e.data.rows;
       state.rows = rawRows.map(r => r.map(raw => parseCell(raw)));
       chunkedRender(state.rows);
