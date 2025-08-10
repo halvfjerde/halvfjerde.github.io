@@ -441,6 +441,27 @@ p {
     </section>
     </div>
 <script>
+
+  // put this once (top-level)
+function withGridScrollRestored(work){
+  const wrap = document.querySelector('.gridwrap');
+  const sL = wrap ? wrap.scrollLeft : 0;
+  const sT = wrap ? wrap.scrollTop  : 0;
+  const wX = window.scrollX, wY = window.scrollY;
+
+  work(); // do the DOM changes
+
+  // restore on next frame (after layout)
+  requestAnimationFrame(()=>{
+    if (wrap){
+      wrap.scrollLeft = sL;
+      wrap.scrollTop  = sT;
+    }
+    // in case page itself jumped
+    window.scrollTo(wX, wY);
+  });
+}
+
   // after DOM ready
 (function(){
   const gridWrap = document.querySelector('.gridwrap');
@@ -484,7 +505,10 @@ function makeChip(label, kind, onClick){
 function updateCellAndRefresh(r, c, fn){
   const cell = state.rows[r][c];
   fn(cell);
-  renderGrid(); syncExportNote();
+   withGridScrollRestored(()=>{
+    renderGrid();          // (already overridden to chunkedRender)
+    syncExportNote();
+  });
   selectCell(r,c);
 }
 
@@ -1009,20 +1033,27 @@ function startInlineEdit(td, r, c){
       ta.value = v.slice(0,s) + '/' + v.slice(ePos);
       ta.selectionStart = ta.selectionEnd = s+1; auto();
     }
-    if(e.key==='Escape'){ renderGrid(); selectCell(r,c); }
+    if(e.key==='Escape'){  withGridScrollRestored(()=>{
+    renderGrid();          // (already overridden to chunkedRender)
+  }); selectCell(r,c); }
   });
   ta.addEventListener('blur', ()=>{
     // Re-parse the user's text as post-semicolon content (keep ops as-is)
     const parsed = parseCell('; ' + ta.value); // reuse parser
     cell.markups = parsed.markups || [];
     cell.text = parsed.text || '';
-    renderGrid(); selectCell(r,c);
+    withGridScrollRestored(()=>{
+    renderGrid();          // (already overridden to chunkedRender)
+  });
+     selectCell(r,c);
   });
 }
 
 function selectCell(r,c){
   state.sel={r,c};
+  withGridScrollRestored(()=>{
   renderGrid();
+  });
   // NEW:
   buildCellTools(r,c);
   positionCellTools(r,c);
@@ -1482,7 +1513,9 @@ function _ieSave(){
   cell.text    = parsed.text || '';
   _ieClose(true);
   // re-render + keep selection + show tools again
+    withGridScrollRestored(()=>{
   renderGrid(); syncExportNote();
+  });
   selectCell(r,c);
 }
 
@@ -1609,7 +1642,10 @@ positionCellTools(0,0);
 
   // 2) Chunked rendering with requestAnimationFrame
   function chunkedRender(rows){
-    tbl.innerHTML = '';
+     const tbl = document.getElementById('grid');
+    withGridScrollRestored(()=>{
+    tbl.innerHTML = ''; // clear
+  });
     const total = rows.length;
     const CHUNK = 150; // rows per frame
     let i = 0;
