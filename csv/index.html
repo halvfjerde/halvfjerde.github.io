@@ -1350,12 +1350,16 @@ function setStatus(msg){ const el=document.getElementById('status'); if(!el) ret
 function syncExportNote(){ const o=document.getElementById('csvOut'); if(o) o.value = exportCSV(); }
 
 // Sample data
-const SAMPLE = ` h<100~50; bSPA행복 > 말랑 > 폭신SPA., ^3; r거리., !!;, !!;, 0..0, ^2; 5..0, !!;, 10..0, SPA, h<4; '비고'
-!!;, h; '열차번호', h; '열차명', h; '시발', SPA, ^2; 弁, !!;, SPA, h; '행선', !!;
-!!;, !!;, !!;, !!;, '행복', ^2; b'말랑'., !!;, '폭신', !!;, !!;
-!!;, !!;, !!;, !!;, DEP, ARR, &; DEP, ARR, !!;, !!;
-!!;, N{9999}, XSL/S{k急行.}/r말랑., 귀염/2250, 400, 420, --, x, 말랑/420, 가나/아야
-!!;, N{1}, C{快速}, 행복/510, 510, 540, 545, 615, 폭신/615, 다라/어여 `;
+const SAMPLE = ` h<100~50; bSPA행복 > 말랑 > 폭신SPA.,!!;,!!;,!!;,!!;,!!;
+^3; r거리., h; '열차번호', !!;, !!;, N{9999}, N{1}
+!!;, h; '열차명', !!;, !!;, XSL/S{k急行.}/r말랑., C{快速}
+!!;, h; '시발', !!;, !!;, 귀염/2250, 행복/510
+0..0, SPA, '행복', DEP, 400, 510
+^2; 5..0, ^2; 弁, ^2; b'말랑'., ARR, 420, 540
+!!;, !!;, !!;, &; DEP, --, 545
+10..0, SPA, '폭신', ARR, x, 615
+SPA, h; '행선', !!;, !!;, 말랑/420, 폭신/615
+h<4; '비고', !!;, !!;, !!;, 가나/아야, 다라/어여`;
 
 document.getElementById('loadSample').addEventListener('click', ()=>{
   document.getElementById('csvIn').value = SAMPLE;
