@@ -1862,16 +1862,16 @@ window.__openOverlayEditor = (r,c,seed) => _ieOpen(r,c,seed);
     const tools = document.createElement('div');
     tools.className='toolbar'; tools.id='gridTools';
     tools.innerHTML = `
-      <button id="__addRowAbove">앞 열 추가</button>
-      <button id="__addRowBelow">뒤 열 추가</button>
-      <button id="__delRow">열 삭제</button>
+      <button id="__addRowAbove">앞 행 추가</button>
+      <button id="__addRowBelow">뒤 행 추가</button>
+      <button id="__delRow">행 삭제</button>
       <span style="width:6px"></span>
-      <button id="__addColLeft">앞 행 추가</button>
-      <button id="__addColRight">뒤 행 추가</button>
-      <button id="__delCol">행 삭제</button>
+      <button id="__addColLeft">앞 열 추가</button>
+      <button id="__addColRight">뒤 열 추가</button>
+      <button id="__delCol">열 삭제</button>
       <span style="width:6px"></span>
-      <button id="__appendRow">맨 뒤에 열 추가</button>
-      <button id="__appendCol">맨 뒤에 행 추가</button>`;
+      <button id="__appendRow">맨 뒤에 행 추가</button>
+      <button id="__appendCol">맨 뒤에 열 추가</button>`;
     gridWrap.parentElement.insertBefore(tools, gridWrap);
 
     const addRow = (i)=>{ const cols = state.rows[0]?.length || 1; const row = Array.from({length:cols}, ()=> parseCell('')); state.rows.splice(i,0,row); };
