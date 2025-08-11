@@ -249,7 +249,7 @@ textarea {
 .ieBtn:hover { border-color: var(--accent); }
 .ieBtn.primary { background: linear-gradient(180deg,#6bc3b1,#4ea693); color:#fff; border-color:#4ea693; }
 .ieText {
-  width: 100%; min-height: 35px; max-height: 240px; resize: none;
+  width: 100%; min-height: 54px; max-height: 240px; resize: none;
   font: 14px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
   border: 1px solid var(--line); border-radius: 10px; padding: 8px;
   background: #f8fafc; color: var(--ink); outline: none;
@@ -351,6 +351,15 @@ p {
 .mk-g{font-size:1.12em;background:rgba(59,130,246,0.08);color:#1e3a8a}
 .mk-b{font-weight:800;font-size:1.12em;background:rgba(16,185,129,0.08);color:#064e3b}
 .mk-r{background:rgba(239,68,68,0.08);color:#7f1d1d;border-bottom:1px dashed #dc2626}
+.mk-n { font-style: italic; background:rgba(0,0,0,0.04); color:#1e293b; padding:0 2px; border-radius:4px }
+.mk-c, .mk-s, .mk-bc, .mk-bs {
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:1.25em; min-height:1.25em; padding:0 .35em; line-height:1;
+}
+.mk-c { border:1px solid #cbd5e1; border-radius:999px; color:#111827; background:#fff }
+.mk-s { border:1px solid #cbd5e1; border-radius:6px;    color:#111827; background:#fff }
+.mk-bc{ background:#111827; color:#fff; border-radius:999px }
+.mk-bs{ background:#111827; color:#fff; border-radius:6px }
 #cheatsheet{display: flex; flex-direction: row; justify-content: space-between;}
 @media (max-width: 700px){
   .row{ grid-template-columns: 1fr; column-gap: 0px; row-gap: 12px; }
@@ -363,6 +372,38 @@ p {
   .ieToolbar { display: block; }
   .ieToolbar > div:first-child { text-align: left;}
   .ieToolbar > div:last-child { text-align: right; }
+}
+/* Inline editor: bottom-right floating composite menu */
+.ieInputWrap { position: relative; }
+.compFloat { position: absolute; right: 8px; bottom: 8px; z-index: 2; }
+
+.compBtn {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:6px 10px; border-radius:999px; border:1px solid var(--line);
+  background:#fff; color:var(--ink); font-size:13px; font-weight:600; cursor:pointer;
+}
+.compBtn:hover { border-color: var(--accent); }
+
+.compBtn .menuIconSm{
+  width:18px; height:18px; border-radius:6px;
+  display:flex; align-items:center; justify-content:center;
+  background:#f1f5f9; color:#334155; font-weight:800; font-size:12px;
+}
+
+/* open/close + list positioning (open upward) */
+.compMenuList{
+  position:absolute; right:0; bottom: calc(100% + 6px);
+  min-width:220px; max-height:260px; overflow:auto;
+  background:#fff; border:1px solid var(--line); border-radius:10px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.08);
+  padding:6px; display:none; z-index: 3;
+}
+.compMenuList.open{ display:block; }
+
+/* Active item highlight + check */
+.compMenuList .menuItem.active{ background:#e2e8f0; }
+.compMenuList .menuItem.active::after{
+  content:'✓'; margin-left:auto; color:#0f766e; font-weight:800;
 }
   </style>
 </head>
@@ -451,6 +492,7 @@ p {
        <div class="menuItem" data-act="h"><span class="menuIcon">L</span><span class="menuHint">L특급</span> LEX</div>
        <div class="menuSep"></div>
        <div class="menuGroupTitle" data-act="h">합성 기호</div>
+       <div class="menuItem" data-act="h"><span class="menuIcon">𝑰</span><span class="menuHint">열차·역 번호</span> N{_}</div>
        <div class="menuItem" data-act="h"><span class="menuIcon">①</span><span class="menuHint">원</span> C{_}</div>
        <div class="menuItem" data-act="h"><span class="menuIcon">🄰</span><span class="menuHint">사각형</span> S{_}</div>
        <div class="menuItem" data-act="h"><span class="menuIcon">❶</span><span class="menuHint">검은 원</span> BC{_}</div>
@@ -1298,11 +1340,11 @@ function syncExportNote(){ const o=document.getElementById('csvOut'); if(o) o.va
 
 // Sample data
 const SAMPLE = ` h<100~50; bSPA행복 > 말랑 > 폭신SPA., ^3; r거리., !!;, !!;, 0..0, ^2; 5..0, !!;, 10..0, SPA, h<4; '비고'
-!!;, h; '열차번호', h#; '열차명', h; '발차', SPA, ^2; 弁, !!;, SPA, h; '행선', !!;
+!!;, h; '열차번호', h; '열차명', h; '시발', SPA, ^2; 弁, !!;, SPA, h; '행선', !!;
 !!;, !!;, !!;, !!;, '행복', ^2; b'말랑'., !!;, '폭신', !!;, !!;
 !!;, !!;, !!;, !!;, DEP, ARR, &; DEP, ARR, !!;, !!;
-!!;, 9999, XSL/S{急行}/r말랑., 행복, 100, 120, --, x, 말랑, 가나
-!!;, 1, C{快速}, 행복, 110, 140, 145, 215, 폭신, 다라 `;
+!!;, N{9999}, XSL/S{k急行.}/r말랑., 귀염/2250, 400, 420, --, x, 말랑/420, 가나/아야
+!!;, N{1}, C{快速}, 행복/510, 510, 540, 545, 615, 폭신/615, 다라/어여 `;
 
 document.getElementById('loadSample').addEventListener('click', ()=>{
   document.getElementById('csvIn').value = SAMPLE;
@@ -1334,39 +1376,67 @@ function escapeHTML(s){
 }
 
 function renderInlineMarkupsInText(text){
+  if(text==null) return '';
+  const reComp = /(BC|BS|C|S|N)\{([^}]*)\}/g;
+  const out = [];
+  let last = 0, m;
+
+  while((m = reComp.exec(text))){
+    const before = text.slice(last, m.index);
+    if (before) out.push(_renderDotMarkups(before));
+
+    const kind = m[1];
+    const inner = m[2];
+    // 중첩 허용: 괄호 안쪽도 다시 렌더 (k/g/b/r, 또 다른 합성기호 포함)
+    const innerHTML = renderInlineMarkupsInText(inner);
+    out.push(_wrapComposite(kind, innerHTML));
+
+    last = reComp.lastIndex;
+  }
+  if(last < text.length){
+    out.push(_renderDotMarkups(text.slice(last)));
+  }
+  return out.join('');
+}
+
+// k/g/b/r (마침표 끝나는 표기) 처리
+function _renderDotMarkups(src){
   const parts = [];
-  let rest = text ?? '';
   const re = /([kgrb])([^.]*)\./g;
-  let lastIndex = 0, m;
-  while ((m = re.exec(rest))){
-    const start = m.index;
-    const end = re.lastIndex;
-    // preceding plain text
-    if(start > lastIndex){
-      const chunk = rest.slice(lastIndex, start);
-      const safe = escapeHTML(chunk).replaceAll('/', '<br/>');
-      parts.push(mapSymbols(safe));
+  let i = 0, m;
+
+  while((m = re.exec(src))){
+    if(m.index > i){
+      const chunk = src.slice(i, m.index);
+      parts.push(mapSymbols(escapeHTML(chunk).replaceAll('/', '<br/>')));
     }
-    // the markup
     const t = m[1], v = m[2] || '';
-    const cls = t==='k' ? 'mk mk-k'
-            : t==='g' ? 'mk mk-g'
-            : t==='b' ? 'mk mk-b'
-            :            'mk mk-r';
+    const cls = t==='k' ? 'mk mk-k' : t==='g' ? 'mk mk-g' : t==='b' ? 'mk mk-b' : 'mk mk-r';
     const val = mapSymbols(escapeHTML(v).replaceAll('/', '<br/>'));
     if(t==='r'){
       parts.push(`<span class="${cls}">${val}<span class="rot">↻</span></span>`);
-    }else{
+    } else {
       parts.push(`<span class="${cls}">${val}</span>`);
     }
-    lastIndex = end;
+    i = re.lastIndex;
   }
-  // trailing plain text
-  if(lastIndex < rest.length){
-    const safeTail = escapeHTML(rest.slice(lastIndex)).replaceAll('/', '<br/>');
-    parts.push(mapSymbols(safeTail));
+  if(i < src.length){
+    const tail = src.slice(i);
+    parts.push(mapSymbols(escapeHTML(tail).replaceAll('/', '<br/>')));
   }
   return parts.join('');
+}
+
+// 합성기호 래퍼
+function _wrapComposite(kind, innerHTML){
+  switch(kind){
+    case 'N':  return `<span class="mk mk-n">${innerHTML}</span>`;
+    case 'C':  return `<span class="mk mk-c">${innerHTML}</span>`;
+    case 'S':  return `<span class="mk mk-s">${innerHTML}</span>`;
+    case 'BC': return `<span class="mk mk-bc">${innerHTML}</span>`;
+    case 'BS': return `<span class="mk mk-bs">${innerHTML}</span>`;
+    default:   return innerHTML;
+  }
 }
 
 // Render k/g/b/r that were parsed at the front *and*
@@ -1419,10 +1489,187 @@ function ensureInlineEditor(){
     <textarea class="ieText" rows="2" placeholder=""></textarea>
     <div class="ieHint"><span class="kbd">Enter</span>로 줄바꿈 · <span class="kbd">Esc</span>로 취소 · <span class="kbd">Ctrl/Cmd</span>+<span class="kbd">Enter</span>로 입력</div>
   `;
+  
   document.body.appendChild(host);
+  
+  // --- 합성기호 드롭다운 UI 추가 ---
+const leftBar = host.querySelector('.ieToolbar > div:first-child');
+const comp = document.createElement('span');
+comp.className = 'chipMenu';
+comp.innerHTML = `
+  <button class="ieBtn chipAddBtn" type="button">합성기호 ▾</button>
+  <div class="chipMenuList ieCompMenu">
+    <div class="menuGroupTitle">종류 선택</div>
+    <div class="menuItem" data-kind="N"><span class="menuIcon">𝑰</span> 열차·역 번호 <span class="menuHint">N{}</span></div>
+    <div class="menuItem" data-kind="C"><span class="menuIcon">①</span> 흰 원 <span class="menuHint">C{}</span></div>
+    <div class="menuItem" data-kind="S"><span class="menuIcon">🄰</span> 흰 사각형 <span class="menuHint">S{}</span></div>
+    <div class="menuItem" data-kind="BC"><span class="menuIcon">❶</span> 검은 원 <span class="menuHint">BC{}</span></div>
+    <div class="menuItem" data-kind="BS"><span class="menuIcon">🅰</span> 검은 사각형 <span class="menuHint">BS{}</span></div>
+    <div class="menuSep"></div>
+    <div class="menuItem">
+      <input type="text" class="compText" placeholder="내용 입력" style="width: 88px; flex:1;padding:6px;border:1px solid var(--line);border-radius:8px" />
+      <button class="menuOk" style="padding:6px 9px;border:1px solid var(--line);border-radius:999px;cursor:pointer">+</button>
+    </div>
+  </div>`;
+leftBar.appendChild(comp);
+
+let currentKind = 'C';
+const menu  = comp.querySelector('.ieCompMenu');
+const btn   = comp.querySelector('.chipAddBtn');
+const input = comp.querySelector('.compText');
+
+function closeComp(){ menu.classList.remove('open'); }
+btn.addEventListener('click', (e)=>{ e.stopPropagation(); menu.classList.toggle('open'); if(menu.classList.contains('open')) input?.focus(); });
+document.addEventListener('click', (e)=>{ if(!comp.contains(e.target)) closeComp(); });
+
+// 종류 선택: 선택 텍스트가 있으면 즉시 래핑, 없으면 입력칸 포커스
+menu.querySelectorAll('.menuItem[data-kind]').forEach(it=>{
+  it.addEventListener('click', ()=>{
+    currentKind = it.getAttribute('data-kind') || 'C';
+    const s = _ieTA.selectionStart ?? 0;
+    const e = _ieTA.selectionEnd ?? s;
+    if (s !== e){
+      const sel = _ieTA.value.slice(s, e);
+      _ieInsertComposite(currentKind, sel);
+      closeComp();
+    } else {
+      input?.focus();
+    }
+  });
+});
+
+menu.querySelector('.menuOk')?.addEventListener('click', ()=>{
+  const txt = input?.value || '';
+  if(!txt){ input?.focus(); return; }
+  _ieInsertComposite(currentKind, txt);
+  input.value = '';
+  closeComp();
+});
+
+// 삽입 로직
+function _ieInsertComposite(kind, content){
+  const ta = _ieTA; if(!ta) return;
+  const s = ta.selectionStart ?? 0;
+  const e = ta.selectionEnd ?? s;
+  const insertText = `${kind}{${content}}`;
+  ta.value = ta.value.slice(0,s) + insertText + ta.value.slice(e);
+  const pos = s + insertText.length;
+  ta.selectionStart = ta.selectionEnd = pos;
+  _ieAutosize();
+}
 
   _ieEl = host;
   _ieTA = host.querySelector('.ieText');
+
+    _ieEl = host;
+  _ieTA = host.querySelector('.ieText');
+
+/* ===== 합성기호: 입력창 오른쪽 아래 플로팅 버튼 ===== */
+(function attachCompositeAtTextareaBottomRight(){
+  const ta = _ieTA;
+  if(!ta) return;
+
+  // 한 번만 감싸도록
+  if(!ta.parentElement.classList.contains('ieInputWrap')){
+    const wrap = document.createElement('div');
+    wrap.className = 'ieInputWrap';
+    ta.parentElement.insertBefore(wrap, ta);
+    wrap.appendChild(ta);
+  }
+  const wrap = ta.parentElement;
+
+  // 기존 위쪽 툴바에 만든 합성기호 메뉴가 있다면 숨김(선택)
+  _ieEl.querySelector('.chipMenu')?.remove();
+
+  // 플로팅 컨트롤 만들기
+  let currentKind = 'C'; // 기본 C
+  const iconFor = (k)=> ({N:'𝑰', C:'①', S:'🄰', BC:'❶', BS:'🅰'})[k] || '◦';
+  const labelFor= (k)=> k;
+
+  const float = document.createElement('div');
+  float.className = 'compFloat';
+  float.innerHTML = `
+    <button type="button" class="compBtn">
+      <span class="menuIconSm">${iconFor(currentKind)}</span>
+      <span class="menuText">${labelFor(currentKind)}</span>
+    </button>
+    <div class="compMenuList">
+      <div class="menuGroupTitle">종류 선택</div>
+      <div class="menuItem" data-kind="N"><span class="menuIcon">𝑰</span> 열차·역 번호 <span class="menuHint">N{}</span></div>
+      <div class="menuItem" data-kind="C"><span class="menuIcon">①</span> 흰 원 <span class="menuHint">C{}</span></div>
+      <div class="menuItem" data-kind="S"><span class="menuIcon">🄰</span> 흰 사각형 <span class="menuHint">S{}</span></div>
+      <div class="menuItem" data-kind="BC"><span class="menuIcon">❶</span> 검은 원 <span class="menuHint">BC{}</span></div>
+      <div class="menuItem" data-kind="BS"><span class="menuIcon">🅰</span> 검은 사각형 <span class="menuHint">BS{}</span></div>
+      <div class="menuSep"></div>
+      <div class="menuItem">
+        <input type="text" class="compText" placeholder="내용 입력"
+               style="width: 88px; flex:1;padding:6px;border:1px solid var(--line);border-radius:8px" />
+        <button class="menuOk" style="padding:6px 9px;border:1px solid var(--line);border-radius:999px;cursor:pointer">삽입</button>
+      </div>
+    </div>
+  `;
+  // 중복 생성 방지
+  wrap.querySelector('.compFloat')?.remove();
+  wrap.appendChild(float);
+
+  const btn   = float.querySelector('.compBtn');
+  const menu  = float.querySelector('.compMenuList');
+  const input = float.querySelector('.compText');
+
+  const updateBtn = ()=>{
+    float.querySelector('.menuIconSm').textContent = iconFor(currentKind);
+    float.querySelector('.menuText').textContent    = labelFor(currentKind);
+    menu.querySelectorAll('.menuItem[data-kind]').forEach(it=>{
+      it.classList.toggle('active', it.getAttribute('data-kind')===currentKind);
+    });
+  };
+  updateBtn();
+
+  const toggleMenu = (e)=>{ e.stopPropagation(); menu.classList.toggle('open'); if(menu.classList.contains('open')) input?.focus(); };
+  const closeMenu  = ()=> menu.classList.remove('open');
+  btn.addEventListener('click', toggleMenu);
+  document.addEventListener('click', (e)=>{ if(!float.contains(e.target)) closeMenu(); });
+
+  // 선택 즉시 래핑(드래그 선택이 있는 경우)
+  menu.querySelectorAll('.menuItem[data-kind]').forEach(it=>{
+    it.addEventListener('click', ()=>{
+      currentKind = it.getAttribute('data-kind') || 'C';
+      updateBtn();
+      const s = _ieTA.selectionStart ?? 0;
+      const e = _ieTA.selectionEnd ?? s;
+      if (s !== e){
+        const sel = _ieTA.value.slice(s,e);
+        _ieInsertComposite(currentKind, sel);
+        closeMenu();
+      } else {
+        input?.focus();
+      }
+    });
+  });
+
+  // 입력칸 → 삽입
+  menu.querySelector('.menuOk')?.addEventListener('click', ()=>{
+    const txt = (input?.value || '').trim();
+    if(!txt){ input?.focus(); return; }
+    _ieInsertComposite(currentKind, txt);
+    input.value = '';
+    closeMenu();
+  });
+
+  // 합성기호 실제 삽입
+  function _ieInsertComposite(kind, content){
+    const ta = _ieTA; if(!ta) return;
+    const s = ta.selectionStart ?? 0;
+    const e = ta.selectionEnd ?? s;
+    const insertText = `${kind}{${content}}`;
+    ta.value = ta.value.slice(0,s) + insertText + ta.value.slice(e);
+    const pos = s + insertText.length;
+    ta.selectionStart = ta.selectionEnd = pos;
+    _ieAutosize();
+    ta.focus();
+  }
+})();
+
 
   // toolbar actions
   host.querySelectorAll('.ieBtn').forEach(btn=>{
