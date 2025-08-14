@@ -527,6 +527,36 @@ p {
     </section>
     </div>
 <script>
+function ensureCellVisible(r, c, opts = { behavior: 'smooth', padding: 8 }) {
+  const wrap = document.querySelector('.gridwrap');
+  const tbl  = document.getElementById('grid');
+  const cell = tbl?.rows?.[r]?.cells?.[c];
+  if (!(wrap && cell)) return;
+
+  const pad = opts.padding ?? 8;
+  const wrapRect = wrap.getBoundingClientRect();
+  const cellRect = cell.getBoundingClientRect();
+
+  let dx = 0, dy = 0;
+  if (cellRect.left < wrapRect.left + pad) {
+    dx = cellRect.left - (wrapRect.left + pad);
+  } else if (cellRect.right > wrapRect.right - pad) {
+    dx = cellRect.right - (wrapRect.right - pad);
+  }
+  if (cellRect.top < wrapRect.top + pad) {
+    dy = cellRect.top - (wrapRect.top + pad);
+  } else if (cellRect.bottom > wrapRect.bottom - pad) {
+    dy = cellRect.bottom - (wrapRect.bottom - pad);
+  }
+
+  if (dx || dy) {
+    wrap.scrollTo({
+      left: wrap.scrollLeft + dx,
+      top:  wrap.scrollTop  + dy,
+      behavior: opts.behavior || 'smooth'
+    });
+  }
+}
 
   // put this once (top-level)
 function withGridScrollRestored(work){
@@ -1151,6 +1181,7 @@ function selectCell(r,c){
   // NEW:
   buildCellTools(r,c);
   positionCellTools(r,c);
+  requestAnimationFrame(()=> ensureCellVisible(r,c));
 }
 
 
@@ -2013,7 +2044,7 @@ td.appendChild(chips);
     if(cur){ cur.style.outline='2px solid var(--accent)'; cur.style.outlineOffset='-2px'; }
     buildCellTools(r,c);
 positionCellTools(r,c);
-
+requestAnimationFrame(()=> ensureCellVisible(r,c));
   }
 
 function startInlineEditFast(td, r, c, seedKey){
