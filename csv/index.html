@@ -1502,7 +1502,7 @@ function ensureInlineEditor(){
       </div>
     </div>
     <textarea class="ieText" rows="2" placeholder=""></textarea>
-    <div class="ieHint"><span class="kbd">Enter</span>로 줄바꿈 · <span class="kbd">Esc</span>로 취소 · <span class="kbd">Ctrl/Cmd</span>+<span class="kbd">Enter</span>로 입력</div>
+    <div class="ieHint"><span class="kbd">Alt</span>+<span class="kbd">Enter</span>로 줄바꿈 · <span class="kbd">Esc</span>로 취소 · <span class="kbd">Enter</span>로 입력</div>
   `;
   
   document.body.appendChild(host);
@@ -1699,15 +1699,22 @@ function _ieInsertComposite(kind, content){
 
   // key handling
   _ieTA.addEventListener('keydown', (e)=>{
-    if(e.key==='Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey){
-      e.preventDefault();
-      _ieInsert('/');
-    } else if ((e.key==='Enter' && (e.ctrlKey || e.metaKey))){
-      e.preventDefault(); _ieSave();
-    } else if (e.key==='Escape'){
-      e.preventDefault(); _ieClose(false);
-    }
-  });
+  // Alt+Enter → line break
+  if (e.key === 'Enter' && e.altKey) {
+    e.preventDefault();
+    _ieInsert('/');
+  }
+  // Enter alone → save
+  else if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    _ieSave();
+  }
+  else if (e.key === 'Escape') {
+    e.preventDefault();
+    _ieClose(false);
+  }
+});
+
 
   // stop clicks from bubbling (don’t change selection)
   host.addEventListener('mousedown', e=> e.stopPropagation());
