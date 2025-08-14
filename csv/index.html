@@ -1811,16 +1811,24 @@ function _ieSave(){
   if(!_ieCell) return _ieClose(false);
   const {r,c} = _ieCell;
   const cell = state.rows[r][c];
+
+  // apply edits
   const parsed = parseCell('; ' + _ieTA.value);
   cell.markups = parsed.markups || [];
   cell.text    = parsed.text || '';
+
+  // close editor & refresh
   _ieClose(true);
-  // re-render + keep selection + show tools again
-    withGridScrollRestored(()=>{
-  renderGrid(); syncExportNote();
+  withGridScrollRestored(()=>{
+    renderGrid(); 
+    syncExportNote();
   });
-  selectCell(r,c);
+
+  // move selection DOWN (clamped at last row)
+  const nextR = Math.min(r + 1, state.rows.length - 1);
+  selectCell(nextR, c);
 }
+
 
 function _ieClose(_saved){
   if(_ieEl) _ieEl.classList.remove('show');
