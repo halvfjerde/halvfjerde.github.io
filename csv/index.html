@@ -63,7 +63,7 @@ font-size: 15px;
   padding: 9px 16px 8px;
   color: #334155;
 }
-.card .body{padding:12px;display:flex;flex-direction:column;gap:10px}
+.card .body{padding:12px;display:flex;flex-direction:column;gap:10px;max-height:900px;}
 #shortcuts{overflow-y: scroll; width: 180px; padding: 8px; height: 250px;}
 textarea{
   width:100%;
@@ -1881,22 +1881,33 @@ window.__openOverlayEditor = (r,c,seed) => _ieOpen(r,c,seed);
 <script>
 // Lightweight extras: type-to-edit + add/remove rows/cols (no MutationObserver)
 (function(){
-  // Type-to-edit & enter-to-open editor
+  let _lastOpenAt = 0;
+  let _isComposing = false;
+
+  window.addEventListener('compositionstart', ()=>{ _isComposing = true; }, {passive:true});
+  window.addEventListener('compositionend',   ()=>{ _isComposing = false; }, {passive:true});
+
   window.addEventListener('keydown', (e)=>{
+    // bail if already in an input/editor or no selection
     const active = document.activeElement;
-    if(active && ['INPUT','TEXTAREA'].includes(active.tagName)) return;
-    if(!state || state.sel.r==null) return;
+    if (active && ['INPUT','TEXTAREA'].includes(active.tagName)) return;
+    if (!state || state.sel.r == null) return;
 
-    const tbl = document.getElementById('grid');
-    const row = tbl?.rows[state.sel.r];
-    const cell = row?.cells[state.sel.c];
-    if(!cell) return;
+    // only printable single-char keys with no modifiers
+    if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.altKey) return;
 
-    if(e.key.length===1 && !e.metaKey && !e.ctrlKey && !e.altKey){
-      // start editing with initial char
-      if(typeof window.__openOverlayEditor === 'function') window.__openOverlayEditor(state.sel.r, state.sel.c, e.key);
-    } else if(e.key==='Enter'){
-      if(typeof window.__openOverlayEditor === 'function') window.__openOverlayEditor(state.sel.r, state.sel.c);
+    // ignore IME composition and auto-repeat
+    if (_isComposing || e.repeat) return;
+
+    // debounce/latch to prevent double-open from ultra-fast repeats
+    const now = Date.now();
+    if (now - _lastOpenAt < 120) return;
+    _lastOpenAt = now;
+
+    // take over and seed the editor with the typed char
+    e.preventDefault();
+    if (typeof window.__openOverlayEditor === 'function') {
+      window.__openOverlayEditor(state.sel.r, state.sel.c, e.key);
     }
   });
 
