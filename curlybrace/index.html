@@ -28,6 +28,13 @@
             font-display: swap;
         }
 
+        @font-face {
+            font-family: 'Pretendard';
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Bold.woff2') format('woff2');
+            font-weight: 700;
+            font-display: swap;
+        }
+
         :root {
             --bg-body: #f8f9fa;
             --bg-panel: #ffffff;
@@ -212,7 +219,7 @@
                 border-bottom: 1px solid var(--border-color); 
                 height: 50%; 
             }
-            .preview-container { height: 50%; padding: 1rem; }
+            .preview-container { height: 50%; padding: 1.5rem; }
 
             textarea.editor-input, .line-numbers {
                 font-size: 16px !important; 
@@ -227,6 +234,14 @@
                 height: 50px;
                 bottom: 20px;
                 right: 20px;
+            }
+
+            textarea.editor-input {
+                padding: 1.5rem 0.7rem 1.5rem 1.2rem;
+            }
+
+            .line-numbers {
+                padding: 1.5rem 0.5rem 1.5rem 0.5rem; 
             }
         }
     </style>
