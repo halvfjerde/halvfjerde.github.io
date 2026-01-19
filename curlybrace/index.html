@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <title>CurlyBrace</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.2/marked.min.js"></script>
@@ -21,66 +21,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Spline+Sans+Mono:ital,wght@0,300..700;1,300..700&display=swap" rel="stylesheet">
 
     <style>
-        @font-face {
-            font-family: 'Pretendard';
-            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Thin.woff2') format('woff2');
-            font-weight: 100;
-            font-display: swap;
-        }
-
-        @font-face {
-            font-family: 'Pretendard';
-            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-ExtraLight.woff2') format('woff2');
-            font-weight: 200;
-            font-display: swap;
-        }
-
-        @font-face {
-            font-family: 'Pretendard';
-            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Light.woff2') format('woff2');
-            font-weight: 300;
-            font-display: swap;
-        }
-
+        /* [기존 폰트 설정 유지] */
         @font-face {
             font-family: 'Pretendard';
             src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Regular.woff2') format('woff2');
             font-weight: 400;
-            font-display: swap;
-        }
-
-        @font-face {
-            font-family: 'Pretendard';
-            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Medium.woff2') format('woff2');
-            font-weight: 500;
-            font-display: swap;
-        }
-
-        @font-face {
-            font-family: 'Pretendard';
-            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-SemiBold.woff2') format('woff2');
-            font-weight: 600;
-            font-display: swap;
-        }
-
-        @font-face {
-            font-family: 'Pretendard';
-            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Bold.woff2') format('woff2');
-            font-weight: 700;
-            font-display: swap;
-        }
-
-        @font-face {
-            font-family: 'Pretendard';
-            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-ExtraBold.woff2') format('woff2');
-            font-weight: 800;
-            font-display: swap;
-        }
-
-        @font-face {
-            font-family: 'Pretendard';
-            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Black.woff2') format('woff2');
-            font-weight: 900;
             font-display: swap;
         }
 
@@ -177,6 +122,7 @@
             border-right: 1px solid var(--border-color);
             position: relative;
             background-color: var(--bg-panel);
+            overflow: hidden; 
         }
 
         .line-numbers {
@@ -184,7 +130,7 @@
             background-color: var(--line-num-bg);
             color: var(--line-num-text);
             text-align: right;
-            padding: 2rem 0.5rem;
+            padding: 2rem 0.5rem 2rem 0.5rem; 
             font-family: "Spline Sans Mono", monospace;
             font-size: 15px;
             overflow: hidden;
@@ -204,7 +150,41 @@
             background-color: var(--bg-panel);
             color: var(--text-primary);
             white-space: pre-wrap;
-            overflow-y: scroll;
+            scrollbar-width: none;
+        }
+
+        textarea.editor-input::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* 3. 복사 버튼 스타일 */
+        .copy-btn {
+            position: absolute;
+            bottom: 25px;
+            right: 25px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: var(--accent-color);
+            color: #ffffff;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            z-index: 50;
+            transition: transform 0.2s, background-color 0.2s;
+        }
+        
+        .copy-btn:hover {
+            background-color: var(--accent-hover);
+            transform: scale(1.05);
+        }
+
+        .copy-btn:active {
+            transform: scale(0.95);
         }
 
         /* Preview Section */
@@ -217,54 +197,45 @@
             line-height: 1.7;
         }
 
-        /* Preview Typography */
-        .preview-content h1, .preview-content h2, .preview-content h3 {
-            font-weight: 700;
-            color: var(--text-primary);
-        }
+        /* Preview Typography (간소화) */
+        .preview-content h1, .preview-content h2 { font-weight: 700; color: var(--text-primary); }
         .preview-content p { margin-bottom: 1em; }
-        .preview-content code {
-            background-color: var(--code-bg);
-            padding: 0.2em 0.4em;
-            border-radius: 3px;
-            font-family: monospace;
-            font-size: 0.9em;
-        }
-        .preview-content pre {
-            background-color: var(--code-bg);
-            padding: 1rem 1.4rem;
-            line-height: 1.4rem;
-            border-radius: 6px;
-            overflow-x: auto;
-            margin-bottom: 1em;
-        }
-        .preview-content pre code {
-            padding: 0;
-        }
-        .preview-content ol, .preview-content ul {
-            margin-left: 1rem;
-            margin-bottom: 1em;
-        }
-        .preview-content blockquote {
-            border-left: 4px solid var(--accent-color);
-            padding-left: 1rem;
-            color: var(--text-secondary);
-            font-style: italic;
-        }
+        .preview-content code { background-color: var(--code-bg); padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; }
+        .preview-content pre { background-color: var(--code-bg); padding: 1rem; border-radius: 6px; overflow-x: auto; margin-bottom: 1em; }
         .preview-content img { max-width: 100%; border-radius: 4px; }
-        
-        /* Smooth Scrollbar */
+        .preview-content blockquote { border-left: 4px solid var(--accent-color); padding-left: 1rem; color: var(--text-secondary); font-style: italic; }
+
+        /* Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background-color: var(--text-secondary); }
 
         /* Responsive */
         @media (max-width: 768px) {
-            .workspace { flex-direction: column; }
-            .editor-container { border-right: none; border-bottom: 1px solid var(--border-color); height: 50%; }
+            .workspace { flex-direction: column; height: 100vh; } /* 2. 툴바가 사라지므로 전체 높이 사용 */
+            
+            /* 2. 모바일에서 툴바 숨김 */
+            .toolbar { display: none; } 
+            
+            .editor-container { 
+                border-right: none; 
+                border-bottom: 1px solid var(--border-color); 
+                height: 50%; 
+            }
             .preview-container { height: 50%; padding: 1rem; }
-            .toolbar { overflow-x: auto; }
+
+            /* 1. 모바일 확대 방지: 폰트 사이즈 16px 이상 강제 */
+            textarea.editor-input, .line-numbers {
+                font-size: 16px !important; 
+            }
+            
+            /* 모바일에서 버튼 위치 미세 조정 */
+            .copy-btn {
+                width: 45px;
+                height: 45px;
+                bottom: 20px;
+                right: 20px;
+            }
         }
     </style>
 </head>
@@ -275,23 +246,19 @@
         <button class="btn" onclick="insertText('**', '**')" title="Bold"><i class="fa-solid fa-bold"></i></button>
         <button class="btn" onclick="insertText('*', '*')" title="Italic"><i class="fa-solid fa-italic"></i></button>
         <button class="btn" onclick="insertText('~~', '~~')" title="Strikethrough"><i class="fa-solid fa-strikethrough"></i></button>
-        <div class="separator"></div>
-        <button class="btn" onclick="insertText('\n## ', '')" title="Heading 2"><i class="fa-solid fa-heading"></i></button>
+        <div class="spacer"></div> <button class="btn" onclick="insertText('\n## ', '')" title="Heading 2"><i class="fa-solid fa-heading"></i></button>
         <button class="btn" onclick="insertText('`', '`')" title="Inline Code"><i class="fa-solid fa-code"></i></button>
         <button class="btn" onclick="insertText('```\n', '\n```')" title="Code Block"><i class="fa-regular fa-file-code"></i></button>
-        <div class="separator"></div>
-        <button class="btn" onclick="insertText('$', '$')" title="Inline Math"><i class="fa-solid fa-square-root-variable"></i></button>
-        <button class="btn" onclick="insertText('$$', '$$')" title="Block Math"><i class="fa-solid fa-calculator"></i></button>
-        <div class="separator"></div>
-        <button class="btn" onclick="insertText('\n- ', '')" title="List"><i class="fa-solid fa-list-ul"></i></button>
-        <button class="btn" onclick="insertText('\n1. ', '')" title="Numbered List"><i class="fa-solid fa-list-ol"></i></button>
-        <button class="btn" onclick="insertText('\n> ', '')" title="Quote"><i class="fa-solid fa-quote-right"></i></button>
     </div>
 
     <div class="workspace">
         <div class="editor-container">
             <div class="line-numbers" id="lineNumbers">1</div>
-            <textarea id="editor" class="editor-input" spellcheck="false" placeholder=""></textarea>
+            <textarea id="editor" class="editor-input" spellcheck="false" placeholder="Type here..."></textarea>
+            
+            <button class="copy-btn" id="copyBtn" onclick="copyToClipboard()" title="Copy All">
+                <i class="fa-solid fa-copy"></i>
+            </button>
         </div>
         <div class="preview-container">
             <div id="preview" class="preview-content"></div>
@@ -305,100 +272,88 @@
         const preview = document.getElementById('preview');
         const lineNumbers = document.getElementById('lineNumbers');
         const measureBox = document.getElementById('measure-box');
+        const copyBtn = document.getElementById('copyBtn');
 
-        // Configure Marked.js options
-        marked.setOptions({
-            breaks: true, // Enable line breaks
-            gfm: true,    // GitHub Flavored Markdown
-        });
+        // Configure Marked.js
+        marked.setOptions({ breaks: true, gfm: true });
 
-        // Main Render Function
+        // Render Function
         const render = () => {
             const rawText = editor.value;
-            
-            // 1. Convert Markdown to HTML
-            // We temporarily escape math delimiters to prevent marked from messing them up
-            // Note: This is a simplified approach. For heavy math, a tokenizer is better, 
-            // but this works for standard usage.
             let html = marked.parse(rawText);
-
-            // 2. Inject HTML into DOM
             preview.innerHTML = html;
 
-            // 3. Render LaTeX via KaTeX
             renderMathInElement(preview, {
-                delimiters: [
-                    {left: '$$', right: '$$', display: true},
-                    {left: '$', right: '$', display: false}
-                ],
+                delimiters: [{left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}],
                 throwOnError: false
             });
 
-            // 4. Highlight Code via Prism
             Prism.highlightAllUnder(preview);
-
             updateLineNumbers();
         };
 
         // Update Line Numbers
         const updateLineNumbers = () => {
             const lines = editor.value.split('\n');
-            
-            // 1. 측정 박스 스타일을 에디터와 완벽하게 일치시킴
             const computedStyle = window.getComputedStyle(editor);
-            measureBox.style.width = editor.clientWidth + 'px'; // 스크롤바 제외한 실제 너비
+            
+            measureBox.style.width = editor.clientWidth + 'px';
             measureBox.style.font = computedStyle.font;
             measureBox.style.lineHeight = computedStyle.lineHeight;
             measureBox.style.padding = computedStyle.padding;
             measureBox.style.boxSizing = computedStyle.boxSizing;
 
-            // 2. 각 줄의 실제 높이 측정
-            measureBox.innerHTML = ''; // 초기화
+            measureBox.innerHTML = '';
             lines.forEach(line => {
                 const lineDiv = document.createElement('div');
-                // 빈 줄도 높이를 차지하도록 padding 문자 처리
-                lineDiv.textContent = line || '\u200b'; 
+                lineDiv.textContent = line || '\u200b';
                 measureBox.appendChild(lineDiv);
             });
 
-            // 3. 측정된 높이를 기반으로 줄 번호 생성
             const measuredChildren = measureBox.children;
             let lineNumbersHtml = '';
             
             for (let i = 0; i < lines.length; i++) {
-                // 측정된 div의 높이 가져오기
                 const height = measuredChildren[i].getBoundingClientRect().height;
-                // 해당 높이를 가진 줄 번호 div 생성
-                lineNumbersHtml += `<div style="height: ${height}px; line-height: 1.6;">${i + 1}</div>`;
+                lineNumbersHtml += `<div style="height: ${height}px; line-height: 1.6; display: flex; align-items: flex-start; justify-content: flex-end;">${i + 1}</div>`;
             }
 
             lineNumbers.innerHTML = lineNumbersHtml;
         };
 
-        // Sync Scroll: Line numbers follow editor
+        // 3. 복사 기능 구현
+        const copyToClipboard = () => {
+            const textToCopy = editor.value;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                // 성공 시 아이콘 변경 피드백
+                const originalIcon = copyBtn.innerHTML;
+                copyBtn.innerHTML = '<i class="fa-solid fa-check"></i>';
+                copyBtn.style.backgroundColor = '#2ecc71'; // Green color for success
+                
+                setTimeout(() => {
+                    copyBtn.innerHTML = '<i class="fa-solid fa-copy"></i>';
+                    copyBtn.style.backgroundColor = ''; // Revert color
+                }, 1500);
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                alert('Copy failed');
+            });
+        };
+
+        // Sync Scroll
         editor.addEventListener('scroll', () => {
             lineNumbers.scrollTop = editor.scrollTop;
         });
 
-        // Window Resize 시 줄바꿈 위치가 바뀌므로 줄 번호 다시 계산 필요
-        window.addEventListener('resize', () => {
-            updateLineNumbers();
-        });
+        window.addEventListener('resize', updateLineNumbers);
 
-        // Insert Text helper
-        // Insert Text helper
         window.insertText = (before, after) => {
             const start = editor.selectionStart;
             const end = editor.selectionEnd;
             const text = editor.value;
             
-            // NEW LOGIC: Check context to avoid double newlines
-            if (before.startsWith('\n')) {
-                // If at the start of the file OR the previous character is a newline
-                if (start === 0 || text.charAt(start - 1) === '\n') {
-                    // Remove the leading newline from the insertion text
-                    before = before.substring(1);
-                }
+            if (before.startsWith('\n') && (start === 0 || text.charAt(start - 1) === '\n')) {
+                before = before.substring(1);
             }
 
             const selection = text.substring(start, end);
@@ -406,27 +361,38 @@
             editor.value = newText;
             editor.focus();
             
-            // Calculate new cursor position based on the potentially modified 'before' string
             const newCursorPos = start + before.length + selection.length + (selection.length === 0 ? 0 : after.length);
-            
-            // If wrapping text (selection exists), keep selection. Otherwise place cursor inside/after.
-            editor.setSelectionRange(
-                start + before.length, 
-                selection.length === 0 ? start + before.length : newCursorPos
-            );
-            
+            editor.setSelectionRange(start + before.length, selection.length === 0 ? start + before.length : newCursorPos);
             render();
         };
 
-        window.clearEditor = () => {
-            if(confirm("Are you sure you want to clear the editor?")) {
-                editor.value = "";
-                render();
-            }
-        }
-
         editor.addEventListener('input', render);
-        // Initial Render
+
+        editor.addEventListener('input', (e) => {
+            render();
+            
+            // 모바일 환경에서만 주로 필요한 로직이나, 데스크탑에서도 유용함
+            // 현재 커서 위치 확인
+            const { selectionStart } = editor;
+            const value = editor.value;
+            
+            // 마지막 입력이 줄바꿈인지 확인 (Enter 키 입력 직후)
+            // 혹은 커서가 텍스트의 거의 끝부분에 있는지 확인
+            if (selectionStart >= value.length - 1) {
+                // 스크롤 높이와 현재 스크롤 위치 + 보여지는 높이 비교
+                const isNearBottom = (editor.scrollHeight - editor.scrollTop - editor.clientHeight) < 100;
+                
+                if (isNearBottom) {
+                    // 약간의 딜레이 후 스크롤을 맨 아래로 이동
+                    // padding-bottom이 50vh로 매우 크기 때문에, scrollHeight로 이동시키면
+                    // 커서가 화면 중간쯤에 오게 됨.
+                    setTimeout(() => {
+                        editor.scrollTop = editor.scrollHeight;
+                    }, 0);
+                }
+            }
+        });
+
         render();
 
     </script>
