@@ -243,19 +243,30 @@
             .line-numbers {
                 padding: 1.5rem 0.5rem 1.5rem 0.5rem; 
             }
+
+            .separator { width: 1px; height: 20px; background-color: var(--border-color); margin: 0 0.5rem; }
         }
     </style>
 </head>
 <body>
 
     <div class="toolbar">
-        <img src="../images/services/curlybrace.png" width="180px" style="margin-left: 0.5rem; margin-right: 1rem;"/>
+
+    <img src="../images/services/curlybrace.png" width="180px" style="margin-left: 0.5rem; margin-right: 1rem;"/>
         <button class="btn" onclick="insertText('**', '**')" title="Bold"><i class="fa-solid fa-bold"></i></button>
         <button class="btn" onclick="insertText('*', '*')" title="Italic"><i class="fa-solid fa-italic"></i></button>
         <button class="btn" onclick="insertText('~~', '~~')" title="Strikethrough"><i class="fa-solid fa-strikethrough"></i></button>
-        <div class="spacer"></div> <button class="btn" onclick="insertText('\n## ', '')" title="Heading 2"><i class="fa-solid fa-heading"></i></button>
+        <div class="separator"></div>
+        <button class="btn" onclick="insertText('\n## ', '')" title="Heading 2"><i class="fa-solid fa-heading"></i></button>
         <button class="btn" onclick="insertText('`', '`')" title="Inline Code"><i class="fa-solid fa-code"></i></button>
         <button class="btn" onclick="insertText('```\n', '\n```')" title="Code Block"><i class="fa-regular fa-file-code"></i></button>
+        <div class="separator"></div>
+        <button class="btn" onclick="insertText('$', '$')" title="Inline Math"><i class="fa-solid fa-square-root-variable"></i></button>
+        <button class="btn" onclick="insertText('$$', '$$')" title="Block Math"><i class="fa-solid fa-calculator"></i></button>
+        <div class="separator"></div>
+        <button class="btn" onclick="insertText('\n- ', '')" title="List"><i class="fa-solid fa-list-ul"></i></button>
+        <button class="btn" onclick="insertText('\n1. ', '')" title="Numbered List"><i class="fa-solid fa-list-ol"></i></button>
+        <button class="btn" onclick="insertText('\n> ', '')" title="Quote"><i class="fa-solid fa-quote-right"></i></button>
     </div>
 
     <div class="workspace">
