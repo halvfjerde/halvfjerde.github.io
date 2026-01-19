@@ -21,7 +21,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Spline+Sans+Mono:ital,wght@0,300..700;1,300..700&display=swap" rel="stylesheet">
 
     <style>
-        /* [기존 폰트 설정 유지] */
         @font-face {
             font-family: 'Pretendard';
             src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Regular.woff2') format('woff2');
@@ -74,7 +73,6 @@
             transition: background-color 0.3s, color 0.3s;
         }
 
-        /* Toolbar */
         .toolbar {
             height: 50px;
             background-color: var(--toolbar-bg);
@@ -107,7 +105,6 @@
 
         .spacer { flex-grow: 1; }
 
-        /* Main Workspace */
         .workspace {
             display: flex;
             flex: 1;
@@ -115,7 +112,6 @@
             position: relative;
         }
 
-        /* Editor Section */
         .editor-container {
             flex: 1;
             display: flex;
@@ -157,7 +153,6 @@
             display: none;
         }
 
-        /* 3. 복사 버튼 스타일 */
         .copy-btn {
             position: absolute;
             bottom: 25px;
@@ -168,7 +163,7 @@
             background-color: var(--accent-color);
             color: #ffffff;
             border: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            box-shadow: var(--shadow);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -187,7 +182,6 @@
             transform: scale(0.95);
         }
 
-        /* Preview Section */
         .preview-container {
             flex: 1;
             padding: 2rem 1.5rem;
@@ -197,7 +191,6 @@
             line-height: 1.7;
         }
 
-        /* Preview Typography (간소화) */
         .preview-content h1, .preview-content h2 { font-weight: 700; color: var(--text-primary); }
         .preview-content p { margin-bottom: 1em; }
         .preview-content code { background-color: var(--code-bg); padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; }
@@ -205,16 +198,13 @@
         .preview-content img { max-width: 100%; border-radius: 4px; }
         .preview-content blockquote { border-left: 4px solid var(--accent-color); padding-left: 1rem; color: var(--text-secondary); font-style: italic; }
 
-        /* Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 4px; }
 
-        /* Responsive */
         @media (max-width: 768px) {
-            .workspace { flex-direction: column; height: 100vh; } /* 2. 툴바가 사라지므로 전체 높이 사용 */
+            .workspace { flex-direction: column; height: 100vh; } 
             
-            /* 2. 모바일에서 툴바 숨김 */
             .toolbar { display: none; } 
             
             .editor-container { 
@@ -224,12 +214,10 @@
             }
             .preview-container { height: 50%; padding: 1rem; }
 
-            /* 1. 모바일 확대 방지: 폰트 사이즈 16px 이상 강제 */
             textarea.editor-input, .line-numbers {
                 font-size: 16px !important; 
             }
             
-            /* 모바일에서 버튼 위치 미세 조정 */
             .copy-btn {
                 width: 45px;
                 height: 45px;
@@ -274,10 +262,8 @@
         const measureBox = document.getElementById('measure-box');
         const copyBtn = document.getElementById('copyBtn');
 
-        // Configure Marked.js
         marked.setOptions({ breaks: true, gfm: true });
 
-        // Render Function
         const render = () => {
             const rawText = editor.value;
             let html = marked.parse(rawText);
@@ -292,7 +278,6 @@
             updateLineNumbers();
         };
 
-        // Update Line Numbers
         const updateLineNumbers = () => {
             const lines = editor.value.split('\n');
             const computedStyle = window.getComputedStyle(editor);
@@ -321,18 +306,17 @@
             lineNumbers.innerHTML = lineNumbersHtml;
         };
 
-        // 3. 복사 기능 구현
         const copyToClipboard = () => {
             const textToCopy = editor.value;
             navigator.clipboard.writeText(textToCopy).then(() => {
-                // 성공 시 아이콘 변경 피드백
+
                 const originalIcon = copyBtn.innerHTML;
                 copyBtn.innerHTML = '<i class="fa-solid fa-check"></i>';
-                copyBtn.style.backgroundColor = '#2ecc71'; // Green color for success
+                copyBtn.style.backgroundColor = '#2ecc71'; 
                 
                 setTimeout(() => {
                     copyBtn.innerHTML = '<i class="fa-solid fa-copy"></i>';
-                    copyBtn.style.backgroundColor = ''; // Revert color
+                    copyBtn.style.backgroundColor = ''; 
                 }, 1500);
             }).catch(err => {
                 console.error('Failed to copy: ', err);
@@ -340,7 +324,6 @@
             });
         };
 
-        // Sync Scroll
         editor.addEventListener('scroll', () => {
             lineNumbers.scrollTop = editor.scrollTop;
         });
@@ -371,21 +354,13 @@
         editor.addEventListener('input', (e) => {
             render();
             
-            // 모바일 환경에서만 주로 필요한 로직이나, 데스크탑에서도 유용함
-            // 현재 커서 위치 확인
             const { selectionStart } = editor;
             const value = editor.value;
             
-            // 마지막 입력이 줄바꿈인지 확인 (Enter 키 입력 직후)
-            // 혹은 커서가 텍스트의 거의 끝부분에 있는지 확인
             if (selectionStart >= value.length - 1) {
-                // 스크롤 높이와 현재 스크롤 위치 + 보여지는 높이 비교
                 const isNearBottom = (editor.scrollHeight - editor.scrollTop - editor.clientHeight) < 100;
                 
                 if (isNearBottom) {
-                    // 약간의 딜레이 후 스크롤을 맨 아래로 이동
-                    // padding-bottom이 50vh로 매우 크기 때문에, scrollHeight로 이동시키면
-                    // 커서가 화면 중간쯤에 오게 됨.
                     setTimeout(() => {
                         editor.scrollTop = editor.scrollHeight;
                     }, 0);
