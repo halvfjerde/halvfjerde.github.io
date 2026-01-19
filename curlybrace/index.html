@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CurlyBrace</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.2/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" media="(prefers-color-scheme: dark)">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Spline+Sans+Mono:ital,wght@0,300..700;1,300..700&display=swap" rel="stylesheet">
+
+    <style>
+        @font-face {
+            font-family: 'Pretendard';
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Thin.woff2') format('woff2');
+            font-weight: 100;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Pretendard';
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-ExtraLight.woff2') format('woff2');
+            font-weight: 200;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Pretendard';
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Light.woff2') format('woff2');
+            font-weight: 300;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Pretendard';
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Regular.woff2') format('woff2');
+            font-weight: 400;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Pretendard';
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Medium.woff2') format('woff2');
+            font-weight: 500;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Pretendard';
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-SemiBold.woff2') format('woff2');
+            font-weight: 600;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Pretendard';
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Bold.woff2') format('woff2');
+            font-weight: 700;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Pretendard';
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-ExtraBold.woff2') format('woff2');
+            font-weight: 800;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Pretendard';
+            src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/pretendard@1.0/Pretendard-Black.woff2') format('woff2');
+            font-weight: 900;
+            font-display: swap;
+        }
+
+        :root {
+            --bg-body: #f8f9fa;
+            --bg-panel: #ffffff;
+            --text-primary: #2d3436;
+            --text-secondary: #636e72;
+            --border-color: #dfe6e9;
+            --accent-color: #ef4136;
+            --accent-hover: #f07952;
+            --toolbar-bg: #ffffff;
+            --line-num-bg: #f1f2f6;
+            --line-num-text: #b2bec3;
+            --code-bg: #f5f6fa;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-body: #1e1e1e;
+                --bg-panel: #252526;
+                --text-primary: #d4d4d4;
+                --text-secondary: #a0a0a0;
+                --border-color: #3e3e42;
+                --accent-color: #f07952;
+                --accent-hover: #ef4136;
+                --toolbar-bg: #2d2d2d;
+                --line-num-bg: #1e1e1e;
+                --line-num-text: #6e7681;
+                --code-bg: #1e1e1e;
+                --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: "Pretendard", monospace;
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Toolbar */
+        .toolbar {
+            height: 50px;
+            background-color: var(--toolbar-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 1rem;
+            gap: 0.5rem;
+            box-shadow: var(--shadow);
+            z-index: 10;
+        }
+
+        .btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-secondary);
+            padding: 0.4rem 0.6rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background-color: var(--bg-body);
+            color: var(--accent-color);
+            border-color: var(--border-color);
+        }
+
+        .spacer { flex-grow: 1; }
+
+        /* Main Workspace */
+        .workspace {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 50px);
+            position: relative;
+        }
+
+        /* Editor Section */
+        .editor-container {
+            flex: 1;
+            display: flex;
+            border-right: 1px solid var(--border-color);
+            position: relative;
+            background-color: var(--bg-panel);
+        }
+
+        .line-numbers {
+            width: 45px;
+            background-color: var(--line-num-bg);
+            color: var(--line-num-text);
+            text-align: right;
+            padding: 2rem 0.5rem;
+            font-family: "Spline Sans Mono", monospace;
+            font-size: 15px;
+            overflow: hidden;
+            border-right: 1px solid var(--border-color);
+            user-select: none;
+        }
+
+        textarea.editor-input {
+            flex: 1;
+            border: none;
+            resize: none;
+            outline: none;
+            padding: 2rem 0.7rem 2rem 1.2rem;
+            font-family: "Spline Sans Mono", monospace;
+            font-size: 15px;
+            line-height: 1.6;
+            background-color: var(--bg-panel);
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            overflow-y: scroll;
+        }
+
+        /* Preview Section */
+        .preview-container {
+            flex: 1;
+            padding: 2rem 1.5rem;
+            overflow-y: auto;
+            background-color: var(--bg-panel);
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        /* Preview Typography */
+        .preview-content h1, .preview-content h2, .preview-content h3 {
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .preview-content p { margin-bottom: 1em; }
+        .preview-content code {
+            background-color: var(--code-bg);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        .preview-content pre {
+            background-color: var(--code-bg);
+            padding: 1rem 1.4rem;
+            line-height: 1.4rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin-bottom: 1em;
+        }
+        .preview-content pre code {
+            padding: 0;
+        }
+        .preview-content ol, .preview-content ul {
+            margin-left: 1rem;
+            margin-bottom: 1em;
+        }
+        .preview-content blockquote {
+            border-left: 4px solid var(--accent-color);
+            padding-left: 1rem;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+        .preview-content img { max-width: 100%; border-radius: 4px; }
+        
+        /* Smooth Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background-color: var(--text-secondary); }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .workspace { flex-direction: column; }
+            .editor-container { border-right: none; border-bottom: 1px solid var(--border-color); height: 50%; }
+            .preview-container { height: 50%; padding: 1rem; }
+            .toolbar { overflow-x: auto; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="toolbar">
+        <img src="../images/services/curlybrace.png" width="180px" style="margin-left: 0.5rem; margin-right: 1rem;"/>
+        <button class="btn" onclick="insertText('**', '**')" title="Bold"><i class="fa-solid fa-bold"></i></button>
+        <button class="btn" onclick="insertText('*', '*')" title="Italic"><i class="fa-solid fa-italic"></i></button>
+        <button class="btn" onclick="insertText('~~', '~~')" title="Strikethrough"><i class="fa-solid fa-strikethrough"></i></button>
+        <div class="separator"></div>
+        <button class="btn" onclick="insertText('\n## ', '')" title="Heading 2"><i class="fa-solid fa-heading"></i></button>
+        <button class="btn" onclick="insertText('`', '`')" title="Inline Code"><i class="fa-solid fa-code"></i></button>
+        <button class="btn" onclick="insertText('```\n', '\n```')" title="Code Block"><i class="fa-regular fa-file-code"></i></button>
+        <div class="separator"></div>
+        <button class="btn" onclick="insertText('$', '$')" title="Inline Math"><i class="fa-solid fa-square-root-variable"></i></button>
+        <button class="btn" onclick="insertText('$$', '$$')" title="Block Math"><i class="fa-solid fa-calculator"></i></button>
+        <div class="separator"></div>
+        <button class="btn" onclick="insertText('\n- ', '')" title="List"><i class="fa-solid fa-list-ul"></i></button>
+        <button class="btn" onclick="insertText('\n1. ', '')" title="Numbered List"><i class="fa-solid fa-list-ol"></i></button>
+        <button class="btn" onclick="insertText('\n> ', '')" title="Quote"><i class="fa-solid fa-quote-right"></i></button>
+    </div>
+
+    <div class="workspace">
+        <div class="editor-container">
+            <div class="line-numbers" id="lineNumbers">1</div>
+            <textarea id="editor" class="editor-input" spellcheck="false" placeholder=""></textarea>
+        </div>
+        <div class="preview-container">
+            <div id="preview" class="preview-content"></div>
+        </div>
+    </div>
+    
+    <div id="measure-box" style="visibility: hidden; position: absolute; top: 0; left: 0; z-index: -100; pointer-events: none; white-space: pre-wrap; word-break: break-word;"></div>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const preview = document.getElementById('preview');
+        const lineNumbers = document.getElementById('lineNumbers');
+        const measureBox = document.getElementById('measure-box');
+
+        // Configure Marked.js options
+        marked.setOptions({
+            breaks: true, // Enable line breaks
+            gfm: true,    // GitHub Flavored Markdown
+        });
+
+        // Main Render Function
+        const render = () => {
+            const rawText = editor.value;
+            
+            // 1. Convert Markdown to HTML
+            // We temporarily escape math delimiters to prevent marked from messing them up
+            // Note: This is a simplified approach. For heavy math, a tokenizer is better, 
+            // but this works for standard usage.
+            let html = marked.parse(rawText);
+
+            // 2. Inject HTML into DOM
+            preview.innerHTML = html;
+
+            // 3. Render LaTeX via KaTeX
+            renderMathInElement(preview, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false}
+                ],
+                throwOnError: false
+            });
+
+            // 4. Highlight Code via Prism
+            Prism.highlightAllUnder(preview);
+
+            updateLineNumbers();
+        };
+
+        // Update Line Numbers
+        const updateLineNumbers = () => {
+            const lines = editor.value.split('\n');
+            
+            // 1. 측정 박스 스타일을 에디터와 완벽하게 일치시킴
+            const computedStyle = window.getComputedStyle(editor);
+            measureBox.style.width = editor.clientWidth + 'px'; // 스크롤바 제외한 실제 너비
+            measureBox.style.font = computedStyle.font;
+            measureBox.style.lineHeight = computedStyle.lineHeight;
+            measureBox.style.padding = computedStyle.padding;
+            measureBox.style.boxSizing = computedStyle.boxSizing;
+
+            // 2. 각 줄의 실제 높이 측정
+            measureBox.innerHTML = ''; // 초기화
+            lines.forEach(line => {
+                const lineDiv = document.createElement('div');
+                // 빈 줄도 높이를 차지하도록 padding 문자 처리
+                lineDiv.textContent = line || '\u200b'; 
+                measureBox.appendChild(lineDiv);
+            });
+
+            // 3. 측정된 높이를 기반으로 줄 번호 생성
+            const measuredChildren = measureBox.children;
+            let lineNumbersHtml = '';
+            
+            for (let i = 0; i < lines.length; i++) {
+                // 측정된 div의 높이 가져오기
+                const height = measuredChildren[i].getBoundingClientRect().height;
+                // 해당 높이를 가진 줄 번호 div 생성
+                lineNumbersHtml += `<div style="height: ${height}px; line-height: 1.6;">${i + 1}</div>`;
+            }
+
+            lineNumbers.innerHTML = lineNumbersHtml;
+        };
+
+        // Sync Scroll: Line numbers follow editor
+        editor.addEventListener('scroll', () => {
+            lineNumbers.scrollTop = editor.scrollTop;
+        });
+
+        // Window Resize 시 줄바꿈 위치가 바뀌므로 줄 번호 다시 계산 필요
+        window.addEventListener('resize', () => {
+            updateLineNumbers();
+        });
+
+        // Insert Text helper
+        // Insert Text helper
+        window.insertText = (before, after) => {
+            const start = editor.selectionStart;
+            const end = editor.selectionEnd;
+            const text = editor.value;
+            
+            // NEW LOGIC: Check context to avoid double newlines
+            if (before.startsWith('\n')) {
+                // If at the start of the file OR the previous character is a newline
+                if (start === 0 || text.charAt(start - 1) === '\n') {
+                    // Remove the leading newline from the insertion text
+                    before = before.substring(1);
+                }
+            }
+
+            const selection = text.substring(start, end);
+            const newText = text.substring(0, start) + before + selection + after + text.substring(end);
+            editor.value = newText;
+            editor.focus();
+            
+            // Calculate new cursor position based on the potentially modified 'before' string
+            const newCursorPos = start + before.length + selection.length + (selection.length === 0 ? 0 : after.length);
+            
+            // If wrapping text (selection exists), keep selection. Otherwise place cursor inside/after.
+            editor.setSelectionRange(
+                start + before.length, 
+                selection.length === 0 ? start + before.length : newCursorPos
+            );
+            
+            render();
+        };
+
+        window.clearEditor = () => {
+            if(confirm("Are you sure you want to clear the editor?")) {
+                editor.value = "";
+                render();
+            }
+        }
+
+        editor.addEventListener('input', render);
+        // Initial Render
+        render();
+
+    </script>
+</body>
+</html>
