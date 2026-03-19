@@ -251,6 +251,24 @@
             }
 
             .separator { width: 1px; height: 20px; background-color: var(--border-color); margin: 0 0.5rem; }
+
+            .note-mode .preview-container {
+                display: none;
+            }
+            
+            .note-mode .editor-container {
+                flex: 1 1 100%;
+                border-right: none;
+            }
+            
+            .note-mode textarea.editor-input {
+                font-size: 30px;
+                line-height: 1.8;
+            }
+            
+            .note-mode .line-numbers {
+                font-size: 30px;
+            }
         }
     </style>
 </head>
@@ -273,6 +291,7 @@
         <button class="btn" onclick="insertText('\n- ', '')" title="List"><i class="fa-solid fa-list-ul"></i></button>
         <button class="btn" onclick="insertText('\n1. ', '')" title="Numbered List"><i class="fa-solid fa-list-ol"></i></button>
         <button class="btn" onclick="insertText('\n> ', '')" title="Quote"><i class="fa-solid fa-quote-right"></i></button>
+        <button class="btn" onclick="toggleNoteMode()" title="Note Mode"><i class="fa-solid fa-note-sticky"></i></button>
     </div>
 
     <div class="workspace">
@@ -404,8 +423,23 @@
             }
         });
 
-        render();
+        let isNoteMode = false;
 
+        window.toggleNoteMode = () => {
+            isNoteMode = !isNoteMode;
+            document.body.classList.toggle('note-mode', isNoteMode);
+            
+            setTimeout(updateLineNumbers, 0);
+        };
+
+        window.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'n') {
+                e.preventDefault();
+                toggleNoteMode();
+            }
+        });
+
+        render();
     </script>
 </body>
 </html>
