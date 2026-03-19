@@ -215,6 +215,26 @@
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 4px; }
 
+        .note-mode .preview-container {
+            display: none;
+        }
+            
+        .note-mode .editor-container {
+            flex: 1 1 100%;
+            border-right: none;
+        }
+            
+        .note-mode textarea.editor-input {
+            font-size: 30px;
+            line-height: 1.8;
+        }
+            
+        .note-mode .line-numbers {
+            width: 90px;
+            font-size: 30px;
+            padding: 2.3rem 1rem 2rem 1rem;
+        }
+
         @media (max-width: 768px) {
             .workspace { flex-direction: column; height: 100vh; } 
             
@@ -252,27 +272,9 @@
 
             .separator { width: 1px; height: 20px; background-color: var(--border-color); margin: 0 0.5rem; }
 
-            .note-mode .line-numbers { width: 45px; }
+            .note-mode .line-numbers { width: 45px; padding: 1.5rem 0.5rem 1.5rem 0.5rem; font-size: 15px; }
         }
         
-        .note-mode .preview-container {
-            display: none;
-        }
-            
-        .note-mode .editor-container {
-            flex: 1 1 100%;
-            border-right: none;
-        }
-            
-        .note-mode textarea.editor-input {
-            font-size: 30px;
-            line-height: 1.8;
-        }
-            
-        .note-mode .line-numbers {
-            width: 90px;
-            font-size: 30px;
-        }
     </style>
 </head>
 <body>
