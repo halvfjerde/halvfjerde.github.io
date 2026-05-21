@@ -1246,7 +1246,7 @@ function buildKbd() {
       el.className = 'key';
       el.id = 'key-' + qkey;
       el.innerHTML = `<span class="key-radical">${radical}</span><span class="key-letter">${displayKey.toUpperCase()}</span>`;
-      el.onclick = () => typeKey(displayKey);
+      el.onclick = () => typeKeyItself(displayKey);
       rowEl.appendChild(el);
     });
     container.appendChild(rowEl);
@@ -1492,6 +1492,33 @@ function typeKey(k) {
     
     // Highlight the key
     const keyEl = document.getElementById('key-'+qk);
+    if(keyEl) {
+      keyEl.style.background = 'var(--accent-light)';
+      keyEl.style.borderColor = 'var(--accent)';
+      setTimeout(()=>{
+        if(keyEl && !hintVisible) {
+          keyEl.style.background = '';
+          keyEl.style.borderColor = '';
+        }
+      }, 300);
+    }
+    
+    // Auto-check
+    const qwertyVal = toQwerty(_hiddenQwertyInput);
+    if(qwertyVal.length === currentCode.length && currentCode.length <= 2) {
+      setTimeout(checkAnswer, 100);
+    }
+  }
+  document.getElementById('cangjieInput').focus();
+}
+
+function typeKeyItself(k) {
+  if(_hiddenQwertyInput.length < 5) {
+    _hiddenQwertyInput += k;
+    updateRadicalDisplay();
+    
+    // Highlight the key
+    const keyEl = document.getElementById('key-'+k);
     if(keyEl) {
       keyEl.style.background = 'var(--accent-light)';
       keyEl.style.borderColor = 'var(--accent)';
