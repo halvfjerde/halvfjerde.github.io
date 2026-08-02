@@ -258,6 +258,111 @@
     padding-right: 6px;
 }
 
+/* ===== Quick side navigation ===== */
+.side-nav {
+  position: fixed;
+  right: clamp(14px, 4vw, 40px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.side-nav-item {
+  appearance: none;
+  background: none;
+  border: none;
+  margin: 0;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.side-nav-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(6px);
+  transition: opacity 0.3s ease, transform 0.3s ease, color 0.3s ease;
+}
+
+.side-nav-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.35;
+  transform: scale(1);
+  transition: opacity 0.3s ease, background 0.3s ease, transform 0.3s cubic-bezier(0.4,0,0.2,1), box-shadow 0.3s ease;
+  flex-shrink: 0;
+}
+
+.side-nav-item:hover .side-nav-label {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.side-nav-item:hover .side-nav-dot {
+  background: var(--halv);
+  opacity: 0.8;
+}
+
+.side-nav-item.active .side-nav-label {
+  opacity: 1;
+  transform: translateX(0);
+  color: var(--fg);
+}
+
+.side-nav-item.active .side-nav-dot {
+  background: var(--halv);
+  opacity: 1;
+  transform: scale(1.4);
+  box-shadow: 0 0 0 4px #81b11f22;
+}
+
+.side-nav-item:focus-visible .side-nav-dot {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .side-nav {
+    right: 8px;
+    gap: 12px;
+  }
+
+  .side-nav-label {
+    display: none;
+  }
+
+  .side-nav-item {
+    padding: 5px;
+  }
+
+  .side-nav-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .side-nav-item.active .side-nav-dot {
+    transform: scale(1.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-nav-dot,
+  .side-nav-label {
+    transition: none;
+  }
+}
+
 @media (max-width: 600px) {
   .project-grid {
     grid-template-columns: 1fr;
@@ -285,6 +390,8 @@
 </head>
 
 <body>
+
+  <nav class="side-nav" id="sideNav" aria-label="섹션 바로가기"></nav>
 
   <div class="scroll-container">
     <div class="sticky-wrapper">
@@ -443,18 +550,60 @@
     const container = document.querySelector('.scroll-container');
     const steps = document.querySelectorAll('.content-layer');
 
+    const navLabels = {
+      'step-1': '인사',
+      'step-2': '소개',
+      'step-3': '관심사',
+      'step-4': '프로젝트',
+      'step-5': '창작',
+      'step-6': '활동',
+      'step-8': '연락처'
+    };
+
+    const sideNav = document.getElementById('sideNav');
+    const totalSteps = steps.length;
+
+    steps.forEach((step, index) => {
+      const label = navLabels[step.id] || `섹션 ${index + 1}`;
+
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'side-nav-item';
+      item.setAttribute('aria-label', label);
+
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'side-nav-label';
+      labelSpan.textContent = label;
+
+      const dot = document.createElement('span');
+      dot.className = 'side-nav-dot';
+
+      item.appendChild(labelSpan);
+      item.appendChild(dot);
+
+      item.addEventListener('click', () => {
+        const height = container.offsetHeight - window.innerHeight;
+        const targetProgress = (index + 0.5) / totalSteps;
+        window.scrollTo({ top: targetProgress * height, behavior: 'smooth' });
+      });
+
+      sideNav.appendChild(item);
+    });
+
+    const navItems = document.querySelectorAll('.side-nav-item');
+
     function updateScroll() {
       const scrollY = window.scrollY;
       const height = container.offsetHeight - window.innerHeight;
       const progress = height > 0 ? scrollY / height : 0;
 
-      const totalSteps = steps.length;
-
       steps.forEach((step, index) => {
         const start = index / totalSteps;
         const end = (index + 1) / totalSteps;
+        const isLast = index === totalSteps - 1;
+        const isActive = progress >= start && (progress < end || (isLast && progress <= 1));
 
-        if (progress >= start && progress < end) {
+        if (isActive) {
           step.classList.add('active');
           step.classList.remove('exit');
         } else if (progress >= end) {
@@ -463,6 +612,8 @@
         } else {
           step.classList.remove('active', 'exit');
         }
+
+        navItems[index].classList.toggle('active', isActive);
       });
     }
 
