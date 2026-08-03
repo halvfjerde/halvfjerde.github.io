@@ -173,7 +173,6 @@
     filter: drop-shadow(0 3px 5px rgba(60,30,20,0.3));
   }
 
-  /* ===== 콘텐츠 패널 (데스크톱: 우측 고정 / 모바일: 전체화면 오버레이) ===== */
   .content-panel {
     flex: 0 0 42%;
     max-width: 480px;
@@ -306,7 +305,6 @@
   .shortcut-title { font-weight: 700; color: var(--fg); font-size: 0.98rem; }
   .shortcut-desc { font-size: 0.82rem; color: var(--muted); }
 
-  /* ---- 프로필 ---- */
   .info-grid {
     display: flex;
     flex-direction: column;
@@ -342,7 +340,6 @@
     vertical-align: middle;
   }
 
-  /* ---- 레퍼런스 시트 (시그니처 요소) ---- */
   .ref-sheet {
     border: 2px solid var(--main);
     border-radius: 22px;
@@ -472,7 +469,6 @@
     width: 100%;
   }
 
-  /* ---- 미디어 아이템 (클릭 확대 가능한 이미지 카드) ---- */
   .media-item {
     position: relative;
     aspect-ratio: 1;
@@ -563,7 +559,6 @@
     text-overflow: ellipsis;
   }
 
-  /* ---- 라이트박스 (클릭 시 확대/상세보기) ---- */
   #lightbox {
     position: fixed;
     inset: 0;
@@ -699,7 +694,6 @@
     vertical-align: middle;
   }
 
-  /* ---- 커미션 ---- */
   .status-badge {
     display: inline-flex;
     align-items: center;
@@ -751,25 +745,7 @@
     color: var(--muted-2);
     font-style: italic;
   }
-
-  /* ---- 크레딧 ---- */
-  .credit-list {
-    display: flex;
-    flex-direction: column;
-    margin-top: 8px;
-  }
-
-  .credit-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 12px 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .credit-role { font-weight: 700; color: var(--fg); font-size: 0.92rem; }
-  .credit-name { color: var(--muted); font-size: 0.9rem; }
-
-  /* ---- 연락처 ---- */
+  
   .social-links {
     display: flex;
     gap: 18px;
@@ -818,7 +794,6 @@
 
   .wiki-note a:hover { text-decoration: underline; }
 
-  /* ---- 프로필 대표 이미지 (클릭 확대) ---- */
   .profile-portrait {
     position: relative;
     border-radius: 16px;
@@ -844,7 +819,6 @@
     align-items: flex-start;
   }
 
-  /* ===== 반응형: 모바일은 책상 전체화면 + 콘텐츠는 풀스크린 오버레이 ===== */
   @media (max-width: 880px) {
     .prop svg { width: 32px; height: 32px; }
     .prop-label { font-size: 0.6rem; }
@@ -882,7 +856,6 @@
 
   <div class="app-shell">
 
-    <!-- 책상 -->
     <div class="desk-scene">
       <div class="desk-mat">
 
@@ -917,15 +890,14 @@
             <span class="prop-label">연락처</span>
           </button>
         </div>
+
+        <span style="color: white;"><b>JUN：純</b>　@jvnnja<br>© 2026 삼쩌모</span>
       </div>
     </div>
 
-    <!-- 콘텐츠 패널 -->
     <div class="content-panel" id="contentPanel">
       <button class="panel-back" id="panelBack">← 책상으로</button>
 
-
-    <!-- 홈 -->
     <section class="page active" id="home">
       <p class="eyebrow">Welcome</p>
       <h1>어서오세요!<br><span class="main-text">놀러</span> 오셨군요 🥹</h1>
@@ -933,7 +905,6 @@
       <p>반가워요! 시라타마 고양이<br><b>JUN</b>(純, 준)이라고 해요. <br></p>
     </section>
 
-    <!-- 프로필 -->
     <section class="page" id="profile">
       <p class="eyebrow">Profile</p>
       <h1>소개</h1>
