@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>JUN：純</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/MonadABXY/mona-font/web/mona.css">
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-jp.min.css" />
+<style>
+  :root {
+    --bg: #fffaf8;
+    --fg: #1d1d1f;
+    --muted: #8a7d81;
+    --muted-2: #c9b8bd;
+    --halv: #81B11F;
+    --main: #a62a50;
+    --main-soft: #d9a4b4;
+    --main-pale: #fbeff2;
+    --card-bg: #f7eef1;
+    --border: #f0e2e6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Mona12'; }
+  html, body { height: 100%; }
+
+  body {
+    font-family: 'Pretendard JP', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  a {
+    color: var(--main);
+    text-decoration: none;
+  }
+
+  a:hover {
+    font-weight: 700;
+  }
+
+  .app-shell {
+    display: flex;
+    height: 100vh;
+  }
+
+  .desk-scene {
+    flex: 1 1 58%;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 40px 32px 60px;
+    background-color: rgb(141,92,65);
+    background-image:
+      radial-gradient(rgba(255,255,255,0.12) 1.4px, transparent 1.4px),
+      repeating-linear-gradient(97deg, rgba(0,0,0,0.045) 0px, rgba(0,0,0,0.045) 2px, transparent 2px, transparent 11px);
+    background-size: 24px 24px, auto;
+  }
+
+  .desk-mat {
+    max-width: 620px;
+    border-radius: 28px;
+    margin: auto auto;
+  }
+
+  .desk-plaque {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 22px;
+  }
+
+  .desk-plaque-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--main), var(--main-soft));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 3px 10px rgba(166,42,80,0.3);
+  }
+
+  .desk-plaque-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25em;
+  }
+
+  .desk-plaque-name { font-weight: 700; font-size: 1.15rem; }
+  .desk-plaque-sub { font-size: 0.8rem; color: var(--muted); }
+
+  .desk-hint {
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .prop-field {
+    position: relative;
+    width: 100%;
+    margin-top: 16px;
+    height: calc(-130px + 100vh);
+  }
+
+  .prop {
+    --rot: 0deg;
+    position: absolute;
+    background: none;
+    border: none;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    transform: translate(-50%, -50%) rotate(var(--rot)) scale(1.7);
+    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    font-family: inherit;
+  }
+
+  .prop:hover {
+    transform: translate(-50%, -50%) scale(1.9) rotate(0deg);
+    z-index: 5;
+  }
+
+  .prop.selected {
+    transform: translate(-50%, -50%) scale(1.8) rotate(0deg);
+    z-index: 5;
+  }
+
+  .prop svg {
+    width: 42px;
+    height: 42px;
+    filter: drop-shadow(0 4px 6px rgba(60,30,20,0.35));
+    transition: filter 0.22s ease;
+  }
+
+  .prop:hover svg {
+    filter: drop-shadow(0 6px 10px rgba(60,30,20,0.4)) drop-shadow(0 0 9px rgba(166,42,80,0.5));
+  }
+
+  .prop.selected svg {
+    filter: drop-shadow(0 6px 10px rgba(60,30,20,0.4)) drop-shadow(0 0 10px rgba(166,42,80,0.85));
+  }
+
+  .prop-label {
+    font-size: 0.55rem;
+    padding-top: 4px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5), 0 0 6px rgba(0,0,0,0.25);
+  }
+
+  .desk-decor {
+    position: absolute;
+    opacity: 0.85;
+    pointer-events: none;
+    font-size: 1.4rem;
+    transform: translate(-50%, -50%);
+    filter: drop-shadow(0 3px 5px rgba(60,30,20,0.3));
+  }
+
+  /* ===== 콘텐츠 패널 (데스크톱: 우측 고정 / 모바일: 전체화면 오버레이) ===== */
+  .content-panel {
+    flex: 0 0 42%;
+    max-width: 480px;
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--bg);
+    border-left: 1px solid var(--border);
+    padding: 36px 32px 60px;
+  }
+
+  .panel-back {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 18px;
+    font-family: inherit;
+  }
+
+  .content-panel.has-selection .panel-back {
+    display: inline-flex;
+  }
+
+  .panel-back:hover { color: var(--main); }
+
+
+  .page {
+    display: none;
+    animation: fadeIn 0.3s ease;
+  }
+
+  .page.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .eyebrow {
+    color: var(--main);
+    font-weight: 700;
+    font-size: 0.82rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15em;
+    margin-bottom: 10px;
+  }
+
+  h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 28px 0 12px;
+  }
+
+  p {
+    font-size: 1rem;
+    color: var(--muted);
+    font-weight: 500;
+    line-height: 1.55em;
+    margin: 0 0 10px;
+    word-break: keep-all;
+  }
+
+  .accent-text {
+    color: var(--fg);
+    font-weight: 700;
+  }
+
+  .main-text {
+    color: var(--main);
+  }
+
+  .lede {
+    font-size: 1rem;
+    color: var(--muted);
+    margin-bottom: 28px;
+    word-break: keep-all;
+  }
+
+  .shortcut-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin-top: 8px;
+  }
+
+  .shortcut-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--card-bg);
+    border-radius: 20px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border: none;
+    text-align: left;
+    width: 100%;
+    font-family: inherit;
+  }
+
+  .shortcut-card:hover { transform: scale(1.03) rotate(-0.5deg); }
+
+  .shortcut-icon {
+    font-size: 1.5rem;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    border-radius: 14px;
+    flex-shrink: 0;
+  }
+
+  .shortcut-title { font-weight: 700; color: var(--fg); font-size: 0.98rem; }
+  .shortcut-desc { font-size: 0.82rem; color: var(--muted); }
+
+  /* ---- 프로필 ---- */
+  .info-grid {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--border);
+    margin-top: 16px;
+  }
+
+  .info-row {
+    display: flex;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 20px;
+  }
+
+  .info-label {
+    width: 84px;
+    flex-shrink: 0;
+    font-weight: 700;
+    color: var(--fg);
+  }
+
+  .info-value {
+    color: var(--muted);
+  }
+
+  .swatch-dot {
+    display: inline-block;
+    width: 0.85em;
+    height: 0.85em;
+    border-radius: 50%;
+    background: var(--main);
+    margin-right: 0.4em;
+    vertical-align: middle;
+  }
+
+  /* ---- 레퍼런스 시트 (시그니처 요소) ---- */
+  .ref-sheet {
+    border: 2px solid var(--main);
+    border-radius: 22px;
+    padding: 24px;
+    margin-top: 14px;
+    position: relative;
+    background: #fffdfd;
+  }
+
+  .ref-sheet::before {
+    content: "REF SHEET";
+    position: absolute;
+    top: -13px;
+    left: 20px;
+    background: var(--main);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 4px 12px;
+    border-radius: 20px;
+  }
+
+  .ref-sheet-version {
+    position: absolute;
+    top: 22px;
+    right: 24px;
+    font-size: 0.72rem;
+    color: var(--main-soft);
+    font-weight: 700;
+  }
+
+  .ref-art-frame {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border: 1.5px dashed var(--muted-2);
+    border-radius: 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--muted-2);
+    margin-bottom: 20px;
+  }
+
+  .ref-art-frame .ref-art-emoji { font-size: 2.2rem; }
+  .ref-art-frame span.label { font-size: 0.85rem; font-weight: 600; }
+
+  .ref-specs {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px 20px;
+    margin-bottom: 20px;
+  }
+
+  .ref-spec-item {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px dotted var(--border);
+    padding-bottom: 6px;
+    font-size: 0.88rem;
+  }
+
+  .ref-spec-item .k { color: var(--muted); }
+  .ref-spec-item .v { font-weight: 700; color: var(--fg); }
+
+  .palette-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .palette-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 8px;
+    background: var(--card-bg);
+    border-radius: 18px;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .palette-card:hover { transform: scale(1.05); }
+
+  .palette-swatch {
+    width: 38px;
+    height: 38px;
+    border-radius: 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+
+  .palette-name { font-size: 0.85rem; font-weight: 700; }
+  .palette-hex { font-size: 0.72rem; color: var(--muted); }
+
+  .empty-state {
+    border: 1.5px dashed var(--border);
+    border-radius: 16px;
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+
+  .empty-state .empty-emoji { font-size: 2rem; margin-bottom: 10px; display:block; }
+  .empty-state .empty-title { font-size: 1.1rem; font-weight: 700; color: var(--fg); margin-bottom: 4px; }
+  .empty-state .empty-desc { font-size: 0.88rem; }
+
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .gallery-slot {
+    aspect-ratio: 1;
+    border-radius: 16px;
+    background: var(--card-bg);
+    border: 1.5px dashed var(--muted-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    color: var(--muted-2);
+    width: 100%;
+  }
+
+  /* ---- 미디어 아이템 (클릭 확대 가능한 이미지 카드) ---- */
+  .media-item {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 16px;
+    overflow: hidden;
+    cursor: zoom-in;
+    background: var(--card-bg);
+    border: none;
+    padding: 0;
+    width: 100%;
+    display: block;
+    font-family: inherit;
+  }
+
+  .media-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .media-item:hover img { transform: scale(1.06); }
+
+  .media-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(20,10,12,0.65) 0%, rgba(20,10,12,0.05) 45%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    padding: 8px;
+  }
+
+  .media-item:hover .media-overlay,
+  .media-item:focus-visible .media-overlay { opacity: 1; }
+
+  .media-zoom-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.92);
+    color: var(--main);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    transform: translateY(-6px);
+    transition: transform 0.25s ease;
+  }
+
+  .media-item:hover .media-zoom-icon { transform: translateY(0); }
+
+  .media-caption {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 8px 10px 15px;
+    color: #fff;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: all 0.25s ease;
+  }
+
+  .media-item:hover .media-caption,
+  .media-item:focus-visible .media-caption { opacity: 1; transform: translateY(0); }
+
+  .media-caption-title {
+    font-size: 0.9rem;
+    padding-bottom: 3px;
+    font-weight: 700;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    display: block;
+  }
+
+  .media-caption-desc {
+    font-size: 0.74rem;
+    color: rgba(255,255,255,0.85);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    display: block;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ---- 라이트박스 (클릭 시 확대/상세보기) ---- */
+  #lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(20,10,12,0.82);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+
+  #lightbox.open { opacity: 1; pointer-events: auto; }
+
+  .lightbox-card {
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+    max-height: 88vh;
+    overflow-y: auto;
+    background: #fffdfd;
+    border-radius: 26px;
+    padding: 22px 22px 15px 22px;
+    transform: scale(0.92) translateY(8px);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  #lightbox.open .lightbox-card { transform: scale(1) translateY(0); }
+
+  .lightbox-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: var(--card-bg);
+    color: var(--fg);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+  }
+
+  .lightbox-close:hover { background: var(--main); color: #fff; }
+
+  .lightbox-img-wrap {
+    width: 100%;
+    border-radius: 18px;
+    overflow: hidden;
+    background: var(--card-bg);
+    margin-bottom: 16px;
+  }
+
+  .lightbox-img-wrap img {
+    width: 100%;
+    display: block;
+  }
+
+  .lightbox-eyebrow {
+    color: var(--main);
+    font-weight: 700;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .lightbox-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--fg);
+    margin-bottom: 6px;
+  }
+
+  .lightbox-desc {
+    font-size: 0.9rem;
+    color: var(--muted);
+    line-height: 1.55em;
+  }
+
+  /* ---- 일정 타임라인 ---- */
+  .timeline {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .timeline-item {
+    display: flex;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .timeline-item.is-example { opacity: 0.55; }
+
+  .timeline-date {
+    width: 60px;
+    flex-shrink: 0;
+    font-weight: 700;
+    color: var(--main);
+  }
+
+  .timeline-body .timeline-title {
+    font-weight: 700;
+    color: var(--fg);
+    font-size: 1.2rem;
+    margin-bottom: 2px;
+  }
+
+  .timeline-body .timeline-desc {
+    font-size: 0.95rem;
+    color: var(--muted);
+  }
+
+  .example-tag {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #fff;
+    background: var(--muted-2);
+    padding: 1px 7px;
+    border-radius: 20px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  /* ---- 커미션 ---- */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 0.82rem;
+    padding: 6px 14px;
+    border-radius: 20px;
+    margin-bottom: 18px;
+  }
+
+  .status-badge.closed {
+    background: #f1eef0;
+    color: var(--muted);
+  }
+
+  .status-badge.closed .dot { background: var(--muted-2); }
+
+  .status-badge .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--main);
+  }
+
+  .tos-list {
+    margin-top: 6px;
+    padding-left: 0;
+    list-style: none;
+  }
+
+  .tos-list li {
+    padding: 8px 0 8px 22px;
+    position: relative;
+    color: var(--muted);
+    font-size: 0.92rem;
+    border-bottom: 1px dotted var(--border);
+  }
+
+  .tos-list li::before {
+    content: "—";
+    position: absolute;
+    left: 0;
+    color: var(--main);
+    font-weight: 700;
+  }
+
+  .fill-placeholder {
+    color: var(--muted-2);
+    font-style: italic;
+  }
+
+  /* ---- 크레딧 ---- */
+  .credit-list {
+    display: flex;
+    flex-direction: column;
+    margin-top: 8px;
+  }
+
+  .credit-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .credit-role { font-weight: 700; color: var(--fg); font-size: 0.92rem; }
+  .credit-name { color: var(--muted); font-size: 0.9rem; }
+
+  /* ---- 연락처 ---- */
+  .social-links {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    font-size: 1.1rem;
+  }
+
+  .social-items {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.4rem;
+  }
+
+  .social-links-service {
+    text-decoration: none;
+    font-weight: 700;
+    color: var(--fg);
+    transition: color 0.2s ease;
+  }
+
+  .social-links-id {
+    text-decoration: none;
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
+
+  .social-links-id:hover {
+    font-weight: 400;
+  }
+
+  .link-twitter:hover { color: #1DA1F2; }
+  .link-discord:hover { color: #5865F2; }
+
+  .wiki-note {
+    margin-top: 30px;
+    font-size: 0.88rem;
+    color: var(--muted);
+  }
+
+  .wiki-note a {
+    color: var(--halv);
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .wiki-note a:hover { text-decoration: underline; }
+
+  /* ---- 프로필 대표 이미지 (클릭 확대) ---- */
+  .profile-portrait {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    cursor: zoom-in;
+    border: none;
+    padding: 0;
+    width: 100%;
+    display: block;
+    background: var(--card-bg);
+  }
+
+  .profile-portrait img {
+    width: 100%;
+    display: block;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .profile-portrait:hover img { transform: scale(1.03); }
+
+  .profile-portrait .media-overlay {
+    justify-content: flex-end;
+    align-items: flex-start;
+  }
+
+  /* ===== 반응형: 모바일은 책상 전체화면 + 콘텐츠는 풀스크린 오버레이 ===== */
+  @media (max-width: 880px) {
+    body { overflow: visible; }
+
+    .app-shell {
+      display: block;
+      height: auto;
+    }
+
+    .desk-scene {
+      width: 100%;
+      height: 100vh;
+      padding: 32px 20px 50px;
+    }
+
+    .desk-mat { padding: 22px 18px 26px; }
+
+    .prop svg { width: 32px; height: 32px; }
+    .prop-label { font-size: 0.6rem; }
+    .desk-decor { font-size: 1.1rem; }
+
+    .content-panel {
+      position: fixed;
+      inset: 0;
+      max-width: none;
+      height: 100vh;
+      border-left: none;
+      transform: translateX(100%);
+      transition: transform 0.32s ease;
+      z-index: 50;
+    }
+
+    .content-panel.open {
+      transform: translateX(0);
+    }
+
+    .shortcut-grid { grid-template-columns: 1fr; }
+    .ref-specs { grid-template-columns: 1fr; }
+    .gallery-grid { grid-template-columns: repeat(2, 1fr); }
+
+    .media-overlay,
+    .media-caption { opacity: 1; transform: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .page, .prop, .content-panel, .media-item img, .lightbox-card { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="app-shell">
+
+    <!-- 책상 -->
+    <div class="desk-scene">
+      <div class="desk-mat">
+
+        <div class="prop-field">
+          <button class="prop" style="top:18%; left:22%; --rot:-7deg;" data-page="profile" aria-label="프로필">
+            <img src="./id.png">
+            <span class="prop-label">프로필</span>
+          </button>
+
+          <button class="prop" style="top:60%; left:13%; --rot:-6deg;" data-page="gallery" aria-label="사진첩">
+            <img src="./camera.png">
+            <span class="prop-label">사진첩</span>
+          </button>
+
+          <button class="prop" style="top:68%; left:84%; --rot:6deg;" data-page="events" aria-label="일정·행사">
+            <img src="./calendar.png">
+            <span class="prop-label">일정·행사</span>
+          </button>
+
+          <button class="prop" style="top:88%; left:55%; --rot:-4deg;" data-page="illustration" aria-label="일러스트">
+            <img src="./coffee.png">
+            <span class="prop-label">일러스트</span>
+          </button>
+
+          <button class="prop" style="top:42%; left:85%; --rot:-5deg;" data-page="real" aria-label="삼쩌모">
+            <img src="./tile.png">
+            <span class="prop-label">삼쩌모</span>
+          </button>
+
+          <button class="prop" style="top:38%; left:44%; --rot:4deg;" data-page="contact" aria-label="연락처">
+            <img src="./mail.png">
+            <span class="prop-label">연락처</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 콘텐츠 패널 -->
+    <div class="content-panel" id="contentPanel">
+      <button class="panel-back" id="panelBack">← 책상으로</button>
+
+
+    <!-- 홈 -->
+    <section class="page active" id="home">
+      <p class="eyebrow">Welcome</p>
+      <h1>어서오세요!<br><span class="main-text">놀러</span> 오셨군요 🥹</h1>
+      <br>
+      <p>반가워요! 시라타마 고양이<br><b>JUN</b>(純, 준)이라고 해요. <br></p>
+    </section>
+
+    <!-- 프로필 -->
+    <section class="page" id="profile">
+      <p class="eyebrow">Profile</p>
+      <h1>소개</h1>
+      <p class="lede">저에 대해서 알려드릴게요</p>
+
+      <img class="gallery-slot" src="https://w.halv.kr/images/e/eb/純.png" />
+
+      <h2>정보</h2>
+      <div class="info-grid">
+        <div class="info-row"><span class="info-label">종족</span><span class="info-value">🐱 고양이</span></div>
+        <div class="info-row"><span class="info-label">성별</span><span class="info-value">수컷</span></div>
+        <div class="info-row"><span class="info-label">생일</span><span class="info-value">7월 29일</span></div>
+        <div class="info-row"><span class="info-label">MBTI</span><span class="info-value">ISTJ</span></div>
+        <div class="info-row"><span class="info-label">신체</span><span class="info-value">173cm ・ 50kg</span></div>
+        <div class="info-row"><span class="info-label">상징색</span><span class="info-value"><span class="swatch-dot"></span>자주색 (#A62A50)</span></div>
+      </div>
+
+      <h2>성격</h2>
+      <p>순수하고 담백한 성격의 소유자. 말수가 적고 표정 변화도 크지 않지만 주변을 은근히 잘 챙깁니다. 낯을 잘 가리지만 의외로 금방 친해지고 친한 이에게는 능청스럽다고 해요. </p>
+    </section>
+
+    <section class="page" id="illustration">
+      <p class="eyebrow">Illustrations</p>
+      <h1>일러스트</h1>
+      <p class="lede">받은 커미션이나 그림을 모아두는 공간이에요</p>
+
+      <div class="gallery-grid">
+        <button class="media-item" type="button"
+          data-src="https://w.halv.kr/images/e/eb/純.png"
+          data-title="콘셉트 아트"
+          data-desc="캐릭터 디자인 컨셉">
+          <img src="https://w.halv.kr/images/e/eb/純.png" alt="콘셉트 아트" />
+          <span class="media-overlay">
+            <span class="media-zoom-icon">🔍</span>
+          </span>
+          <span class="media-caption">
+            <span class="media-caption-title">콘셉트 아트</span>
+            <span class="media-caption-desc">캐릭터 디자인 컨셉</span>
+          </span>
+        </button>
+        <div class="gallery-slot">＋</div>
+        <div class="gallery-slot">＋</div>
+      </div>
+    </section>
+
+    <section class="page" id="gallery">
+      <p class="eyebrow">Gallery</p>
+      <h1>사진첩</h1>
+      <p class="lede">함께 찍은 사진을 모아두는 공간이에요</p>
+
+      <div class="empty-state">
+        <span class="empty-emoji">🖼️</span>
+        <div class="empty-title">아직 등록된 사진이 없어요</div>
+        <div class="empty-desc">힝 🥺</div>
+      </div>
+
+      <div class="gallery-grid">
+        <div class="gallery-slot">＋</div>
+        <div class="gallery-slot">＋</div>
+        <div class="gallery-slot">＋</div>
+      </div>
+    </section>
+
+    <section class="page" id="events">
+      <p class="eyebrow">Events</p>
+      <h1>일정</h1>
+      <p class="lede">참여 예정인 행사를 정리했어요</p>
+
+      <div class="empty-state">
+        <span class="empty-emoji">📅</span>
+        <div class="empty-title">예정된 일정이 아직 없어요</div>
+        <div class="empty-desc">새 소식이 생기면<br>하나씩 추가될 예정이에요.</div>
+      </div>
+
+      <div class="timeline">
+        <div class="timeline-item is-example">
+          <div class="timeline-date">2099.07</div>
+          <div class="timeline-body">
+            <div class="timeline-title">예시</div>
+            <div class="timeline-desc">예시</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="contact">
+      <p class="eyebrow">Contact</p>
+      <h1>연락처</h1>
+      <p class="lede">이쪽으로 연락하실 수 있어요</p>
+
+      <div class="social-links">
+        <div class="social-items">
+          <a href="https://twitter.com/jvnnja" class="social-links-service link-twitter">트위터</a>
+          <a href="https://twitter.com/jvnnja" class="social-links-id">jvnnja</a>
+        </div>
+        <div class="social-items">
+          <a href="https://discord.com/users/1000439810101620819" class="social-links-service link-discord">디스코드</a>
+          <a href="https://discord.com/users/1000439810101620819" class="social-links-id">jvnnja</a>
+        </div>
+      </div>
+
+      <br><p>+ <a href="https://w.halv.kr/JUN" target="_blank">쩌모위키</a>에도 등재되어 있어요!</p>
+    </section>
+
+    <section class="page" id="real">
+      <p class="eyebrow">Halvfjerde</p>
+      <h1>삼쩌모</h1>
+      <p class="lede">삼쩌모에 대해서 알려드릴게요</p>
+
+      <p>삼쩌모는 제 인간계(?)에서의 삶입니다.<br>그쪽에서도 이쪽과는 다르지만<br>위키 운영, 디자인 등...<br>여러 분야에서 활동하고 있어요!<br>한번 둘러보셔도 좋습니다.</p>
+      <div class="social-links">
+        <div class="social-items">
+          <a href="https://halv.kr" class="social-links-service link-github">웹사이트</a>
+          <a href="https://halv.kr" class="social-links-id">halv.kr</a>
+        </div>
+        <div class="social-items">
+          <a href="https://twitter.com/halvfjerde" class="social-links-service link-twitter">트위터</a>
+          <a href="https://twitter.com/halvfjerde" class="social-links-id">halvfjerde</a>
+        </div>
+        <div class="social-items">
+          <a href="https://discord.com/users/1185926173956505664" class="social-links-service link-discord">디스코드</a>
+          <a href="https://discord.com/users/1185926173956505664" class="social-links-id">h.8.e</a>
+        </div>
+      </div>
+    </section>
+
+    </div>
+
+  </div>
+
+  <div id="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightboxTitle">
+    <div class="lightbox-card">
+      <button class="lightbox-close" id="lightboxClose" aria-label="닫기">✕</button>
+      <div class="lightbox-img-wrap">
+        <img id="lightboxImg" src="" alt="" />
+      </div>
+      <p class="lightbox-eyebrow">Detail</p>
+      <div class="lightbox-title" id="lightboxTitle"></div>
+      <p class="lightbox-desc" id="lightboxDesc"></p>
+    </div>
+  </div>
+
+  <script>
+    const props = document.querySelectorAll('.prop');
+    const pages = document.querySelectorAll('.page');
+    const panel = document.getElementById('contentPanel');
+    const panelBack = document.getElementById('panelBack');
+
+    function showPage(id, updateHash = true) {
+      pages.forEach(p => p.classList.toggle('active', p.id === id));
+      props.forEach(p => p.classList.toggle('selected', p.dataset.page === id));
+
+      if (id === 'home') {
+        panel.classList.remove('open', 'has-selection');
+        if (updateHash) history.replaceState(null, '', location.pathname + location.search);
+      } else {
+        panel.classList.add('open', 'has-selection');
+        if (updateHash) location.hash = id;
+      }
+
+      panel.scrollTo(0, 0);
+    }
+
+    props.forEach(prop => {
+      prop.addEventListener('click', () => showPage(prop.dataset.page));
+    });
+
+    document.querySelectorAll('[data-goto]').forEach(btn => {
+      btn.addEventListener('click', () => showPage(btn.dataset.goto));
+    });
+
+    panelBack.addEventListener('click', () => showPage('home'));
+
+    function syncFromHash() {
+      const hash = location.hash.replace('#', '');
+      const validIds = Array.from(pages).map(p => p.id).filter(id => id !== 'home');
+      if (hash && validIds.includes(hash)) {
+        showPage(hash, false);
+      } else {
+        showPage('home', false);
+      }
+    }
+
+    window.addEventListener('load', syncFromHash);
+    window.addEventListener('hashchange', syncFromHash);
+
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightboxImg');
+    const lightboxTitle = document.getElementById('lightboxTitle');
+    const lightboxDesc = document.getElementById('lightboxDesc');
+    const lightboxClose = document.getElementById('lightboxClose');
+    let lastFocused = null;
+
+    function openLightbox(trigger) {
+      const src = trigger.dataset.src;
+      const title = trigger.dataset.title || '';
+      const desc = trigger.dataset.desc || '';
+
+      lightboxImg.src = src;
+      lightboxImg.alt = title;
+      lightboxTitle.textContent = title;
+      lightboxDesc.textContent = desc;
+      lightboxDesc.style.display = desc ? 'block' : 'none';
+
+      lastFocused = document.activeElement;
+      lightbox.classList.add('open');
+      document.body.style.overflow = 'hidden';
+      lightboxClose.focus();
+    }
+
+    function closeLightbox() {
+      lightbox.classList.remove('open');
+      document.body.style.overflow = '';
+      if (lastFocused) lastFocused.focus();
+    }
+
+    document.querySelectorAll('.media-item[data-src]').forEach(item => {
+      item.addEventListener('click', () => openLightbox(item));
+    });
+
+    lightboxClose.addEventListener('click', closeLightbox);
+    lightbox.addEventListener('click', (e) => {
+      if (e.target === lightbox) closeLightbox();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && lightbox.classList.contains('open')) closeLightbox();
+    });
+  </script>
+
+</body>
+</html>
