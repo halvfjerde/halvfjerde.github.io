@@ -134,7 +134,7 @@
 <header>
   <div class="brand">
     <h1>MD → MediaWiki 변환기</h1>
-    <p>마크다운을 MediaWiki 위키텍스트로 변환합니다</p>
+    <p>by @halvfjerde</p>
   </div>
   <div class="title-chip">
     <span class="dot"></span>
@@ -147,7 +147,7 @@
   <div class="settings">
     <label class="opt">
       <span class="switch"><input type="checkbox" id="optShiftH1" checked><span class="track"></span><span class="knob"></span></span>
-      <span class="desc">H1을 문서 제목으로 간주</span>
+      <span class="desc">H1을 문서 제목으로 간주(본문에서 제거)</span>
     </label>
     <label class="opt">
       <span class="switch"><input type="checkbox" id="optCheckbox" checked><span class="track"></span><span class="knob"></span></span>
@@ -298,13 +298,16 @@ function convert(src, opts){
   stats.wikilink = (text.match(/\[\[[^\]]+\]\]/g) || []).length;
 
   text = text.replace(/^(#{1,6})\s+(.*)$/gm, (m, hashes, t) => {
+    const level = hashes.length;
+    if (opts.shiftH1 && level === 1) {
+      return '';
+    }
     stats.heading++;
-    let level = hashes.length + (opts.shiftH1 ? 1 : 0);
-    if (level > 6) level = 6;
-    if (level < 1) level = 1;
-    const eq = '='.repeat(level);
+    const eq = '='.repeat(Math.min(level, 6));
     return `${eq} ${t.trim()} ${eq}`;
   });
+
+  text = text.replace(/\n{3,}/g, '\n\n');
 
   text = text.replace(/\*\*\*([^*]+)\*\*\*/g, (m,t)=>{stats.bold++;stats.italic++;return `'''''${t}'''''`;});
   text = text.replace(/___([^_]+)___/g, (m,t)=>{stats.bold++;stats.italic++;return `'''''${t}'''''`;});
