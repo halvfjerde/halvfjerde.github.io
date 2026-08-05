@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>MD → MediaWiki 변환기</title>
+<style>
+  :root{
+    --bg:#f5f5f7;
+    --card:#ffffff;
+    --border:rgba(0,0,0,.07);
+    --border-strong:rgba(0,0,0,.12);
+    --text:#1d1d1f;
+    --text-dim:#86868b;
+    --accent:#0071e3;
+    --accent-dim:rgba(0,113,227,.08);
+    --good:#34c759;
+    --mono:'SF Mono','JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'SF Pro Text','Inter','Helvetica Neue',Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--sans); -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  header{
+    max-width:1180px; margin:0 auto; padding:48px 28px 28px;
+    display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap;
+  }
+  .brand h1{
+    font-size:28px; font-weight:600; margin:0 0 6px; letter-spacing:-.015em;
+  }
+  .brand p{margin:0; color:var(--text-dim); font-size:14.5px; font-weight:400;}
+  .title-chip{
+    display:flex; align-items:center; gap:9px; background:var(--card);
+    border:1px solid var(--border); border-radius:980px; padding:8px 16px 8px 14px;
+    font-size:13px; box-shadow:0 1px 2px rgba(0,0,0,.03);
+  }
+  .title-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--good);flex:none;}
+  .title-chip b{font-weight:600; color:var(--text);}
+  .title-chip span.lbl{color:var(--text-dim);}
+
+  main{max-width:1180px; margin:0 auto; padding:8px 28px 60px;}
+
+  .settings{
+    display:flex; gap:28px; flex-wrap:wrap; align-items:center;
+    background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:16px 22px; margin-bottom:20px; box-shadow:0 1px 2px rgba(0,0,0,.03);
+  }
+  .opt{ display:flex; align-items:center; gap:10px; font-size:13.5px; color:var(--text); }
+  .opt .desc{ color:var(--text-dim); }
+  .opt input[type=text]{
+    background:var(--bg); border:1px solid var(--border); color:var(--text);
+    font-family:var(--mono); font-size:12.5px; padding:6px 10px; border-radius:8px; width:78px;
+  }
+
+  .switch{ position:relative; width:38px; height:22px; flex:none; }
+  .switch input{ position:absolute; inset:0; opacity:0; margin:0; cursor:pointer; z-index:2; }
+  .track{ position:absolute; inset:0; background:#e5e5ea; border-radius:999px; transition:background .18s ease; }
+  .knob{
+    position:absolute; top:2px; left:2px; width:18px; height:18px; background:#fff;
+    border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .18s ease;
+  }
+  .switch input:checked ~ .track{ background:var(--good); }
+  .switch input:checked ~ .knob{ transform:translateX(16px); }
+
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:18px;}
+  @media (max-width:900px){ .grid{grid-template-columns:1fr;} }
+
+  .pane{
+    background:var(--card); border:1px solid var(--border); border-radius:16px;
+    overflow:hidden; display:flex; flex-direction:column;
+    box-shadow:0 1px 2px rgba(0,0,0,.03);
+  }
+  .pane-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 18px; border-bottom:1px solid var(--border);
+  }
+  .pane-head .name{ font-size:13px; color:var(--text); font-weight:600; }
+  .pane-head .btns{display:flex; gap:6px;}
+  button.mini{
+    background:transparent; border:none; color:var(--accent);
+    font-size:13px; padding:6px 10px; border-radius:8px; cursor:pointer; font-family:var(--sans);
+    font-weight:500; transition:background .15s ease;
+  }
+  button.mini:hover{ background:var(--accent-dim); }
+  textarea{
+    flex:1; resize:none; border:none; outline:none; background:transparent;
+    color:var(--text); font-family:var(--mono); font-size:13px; line-height:1.65;
+    padding:18px; min-height:480px;
+  }
+  textarea::placeholder{color:#c7c7cc;}
+
+  .status-strip{
+    display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 0;
+  }
+  .badge{
+    display:flex; align-items:center; gap:6px; background:var(--card);
+    border:1px solid var(--border); border-radius:980px; padding:6px 13px;
+    font-size:12.5px; color:var(--text-dim); transition:.15s;
+  }
+  .badge b{color:var(--text-dim); font-weight:600;}
+  .badge.active{ border-color:var(--border-strong); color:var(--text); background:var(--accent-dim); }
+  .badge.active b{ color:var(--accent); }
+
+  details.legend{
+    margin-top:20px; background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:2px 22px; box-shadow:0 1px 2px rgba(0,0,0,.03);
+  }
+  details.legend summary{
+    cursor:pointer; padding:16px 0; font-size:14px; color:var(--text); font-weight:600;
+    list-style:none;
+  }
+  details.legend summary::-webkit-details-marker{display:none;}
+  details.legend summary:before{content:"⌄  "; color:var(--text-dim); display:inline-block; transition:.15s;}
+  details.legend[open] summary:before{ transform:rotate(180deg); }
+  .legend-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:11px 26px;
+    padding:2px 0 20px; font-size:12.5px; color:var(--text-dim);
+  }
+  .legend-grid code{
+    background:var(--bg); border:1px solid var(--border); padding:1.5px 6px; border-radius:5px;
+    color:var(--text); font-family:var(--mono); font-size:12px;
+  }
+  .legend-grid .arrow{color:var(--text-dim); margin:0 5px;}
+
+  footer{
+    text-align:center; color:var(--text-dim); font-size:12.5px; padding:8px 20px 30px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>MD → MediaWiki 변환기</h1>
+    <p>마크다운을 MediaWiki 위키텍스트로 변환합니다</p>
+  </div>
+  <div class="title-chip">
+    <span class="dot"></span>
+    <span class="lbl">문서 제목</span>
+    <b id="detectedTitle">—</b>
+  </div>
+</header>
+
+<main>
+  <div class="settings">
+    <label class="opt">
+      <span class="switch"><input type="checkbox" id="optShiftH1" checked><span class="track"></span><span class="knob"></span></span>
+      <span class="desc">H1을 문서 제목으로 간주</span>
+    </label>
+    <label class="opt">
+      <span class="switch"><input type="checkbox" id="optCheckbox" checked><span class="track"></span><span class="knob"></span></span>
+      <span class="desc">체크박스 기호(☐/☑) 사용</span>
+    </label>
+    <label class="opt">
+      <span class="desc">파일 네임스페이스</span>
+      <input type="text" id="optNamespace" value="파일:">
+    </label>
+  </div>
+
+  <div class="grid">
+    <div class="pane">
+      <div class="pane-head">
+        <span class="name">Markdown</span>
+        <div class="btns">
+          <button class="mini" id="btnSample">예시</button>
+          <button class="mini" id="btnClear">지우기</button>
+        </div>
+      </div>
+      <textarea id="mdInput" placeholder="마크다운을 입력하세요"></textarea>
+    </div>
+    <div class="pane">
+      <div class="pane-head">
+        <span class="name">MediaWiki</span>
+        <div class="btns">
+          <button class="mini" id="btnCopy">복사</button>
+          <button class="mini" id="btnDownload">다운로드</button>
+        </div>
+      </div>
+      <textarea id="wikiOutput" placeholder="변환 결과" spellcheck="false"></textarea>
+    </div>
+  </div>
+
+  <div class="status-strip" id="statusStrip"></div>
+
+  <footer>모든 변환은 브라우저 내에서만 처리되며, 어디로도 전송되지 않습니다.</footer>
+</main>
+
+<script>
+const els = {
+  input: document.getElementById('mdInput'),
+  output: document.getElementById('wikiOutput'),
+  strip: document.getElementById('statusStrip'),
+  title: document.getElementById('detectedTitle'),
+  optShiftH1: document.getElementById('optShiftH1'),
+  optCheckbox: document.getElementById('optCheckbox'),
+  optNamespace: document.getElementById('optNamespace'),
+};
+
+const SAMPLE = `# 프로젝트 노트
+
+**중요**: 이 문서는 *예시*이며 ***꼭*** 참고하세요. ~~구버전~~ 최신본입니다.
+
+## 이미지
+![[diagram.png|500]]
+
+## 링크
+[공식 문서](https://example.com/docs) 그리고 [[다른 문서]] 도 참고.
+로컬 문서 링크: [설치 가이드](install.md)
+
+## 코드
+인라인 \`npm install\` 명령과 아래 블록:
+
+\`\`\`bash
+npm install
+npm run build
+\`\`\`
+
+## 목록
+- 첫째
+  - 둘째 (들여쓰기)
+- [ ] 할 일
+- [x] 완료된 일
+
+1. 순서 항목 1
+2. 순서 항목 2
+
+## 인용
+> 이것은 인용문입니다.
+
+---
+
+## 표
+| 항목 | 가격 | 비고 |
+|:---|---:|:---:|
+| 사과 | 1000 | 신선 |
+| 바나나 | 800 | 세일 |
+`;
+
+function escId(n){ return '\u0000' + n + '\u0000'; }
+
+function convert(src, opts){
+  let codeBlocks = [];
+  let inlineCodes = [];
+  let stats = {heading:0,bold:0,italic:0,strike:0,image:0,link:0,wikilink:0,codeblock:0,inlinecode:0,list:0,quote:0,hr:0,table:0};
+
+  let text = src.replace(/\r\n/g,'\n');
+
+  // 1. fenced code blocks
+  text = text.replace(/```([a-zA-Z0-9_+-]*)\n([\s\S]*?)```/g, (m, lang, code) => {
+    stats.codeblock++;
+    const idx = codeBlocks.length;
+    const body = code.replace(/\n$/,'');
+    const rendered = lang
+      ? `<syntaxhighlight lang="${lang}">\n${body}\n</syntaxhighlight>`
+      : `<pre>\n${body}\n</pre>`;
+    codeBlocks.push(rendered);
+    return escId('CODEBLOCK'+idx);
+  });
+  
+  text = text.replace(/`([^`\n]+)`/g, (m, code) => {
+    stats.inlinecode++;
+    const idx = inlineCodes.length;
+    inlineCodes.push(`<code>${code}</code>`);
+    return escId('INLINECODE'+idx);
+  });
+
+  text = text.replace(/!\[\[([^\]|]+)((?:\|[^\]]+)?)\]\]/g, (m, file, optsPart) => {
+    stats.image++;
+    file = file.trim();
+    let out = `[[${opts.namespace}${file}`;
+    if (optsPart) {
+      const parts = optsPart.slice(1).split('|').map(s=>s.trim()).filter(Boolean);
+      parts.forEach(p => {
+        out += '|' + (/^\d+$/.test(p) ? p + 'px' : p);
+      });
+    }
+    out += ']]';
+    return out;
+  });
+
+  text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, alt, src) => {
+    stats.image++;
+    const file = src.split('/').pop();
+    return `[[${opts.namespace}${file}${alt ? '|'+alt : ''}]]`;
+  });
+
+  text = text.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, label, url) => {
+    if (/^https?:\/\//i.test(url)) {
+      stats.link++;
+      return `[${url} ${label}]`;
+    }
+    stats.link++;
+    const page = decodeURIComponent(url.replace(/\.md$/i,''));
+    return page === label ? `[[${page}]]` : `[[${page}|${label}]]`;
+  });
+  stats.wikilink = (text.match(/\[\[[^\]]+\]\]/g) || []).length;
+
+  text = text.replace(/^(#{1,6})\s+(.*)$/gm, (m, hashes, t) => {
+    stats.heading++;
+    let level = hashes.length + (opts.shiftH1 ? 1 : 0);
+    if (level > 6) level = 6;
+    if (level < 1) level = 1;
+    const eq = '='.repeat(level);
+    return `${eq} ${t.trim()} ${eq}`;
+  });
+
+  text = text.replace(/\*\*\*([^*]+)\*\*\*/g, (m,t)=>{stats.bold++;stats.italic++;return `'''''${t}'''''`;});
+  text = text.replace(/___([^_]+)___/g, (m,t)=>{stats.bold++;stats.italic++;return `'''''${t}'''''`;});
+  text = text.replace(/\*\*([^*]+)\*\*/g, (m,t)=>{stats.bold++;return `'''${t}'''`;});
+  text = text.replace(/__([^_]+)__/g, (m,t)=>{stats.bold++;return `'''${t}'''`;});
+  text = text.replace(/\*([^*\n]+)\*/g, (m,t)=>{stats.italic++;return `''${t}''`;});
+  text = text.replace(/(?<![A-Za-z0-9_])_([^_\n]+)_(?![A-Za-z0-9_])/g, (m,t)=>{stats.italic++;return `''${t}''`;});
+  text = text.replace(/~~([^~]+)~~/g, (m,t)=>{stats.strike++;return `<s>${t}</s>`;});
+
+  text = text.replace(/(^>.*(?:\n>.*)*)/gm, block => {
+    stats.quote++;
+    const inner = block.split('\n').map(l => l.replace(/^>\s?/, '')).join('<br>\n');
+    return `<blockquote>\n${inner}\n</blockquote>`;
+  });
+
+  text = text.replace(/^([*_-]){3,}\s*$/gm, () => { stats.hr++; return '----'; });
+
+  text = convertTables(text, stats);
+
+  const lines = text.split('\n');
+  for (let i=0;i<lines.length;i++){
+    let m = lines[i].match(/^(\s*)([-*+])\s+\[( |x|X)\]\s+(.*)$/);
+    if (m && opts.checkbox){
+      stats.list++;
+      const indent = Math.floor(m[1].replace(/\t/g,'  ').length/2);
+      const mark = '*'.repeat(indent+1);
+      const box = /x/i.test(m[3]) ? '☑' : '☐';
+      lines[i] = `${mark} ${box} ${m[4]}`;
+      continue;
+    }
+    m = lines[i].match(/^(\s*)([-*+])\s+(.*)$/);
+    if (m){
+      stats.list++;
+      const indent = Math.floor(m[1].replace(/\t/g,'  ').length/2);
+      lines[i] = `${'*'.repeat(indent+1)} ${m[3]}`;
+      continue;
+    }
+    m = lines[i].match(/^(\s*)(\d+)\.\s+(.*)$/);
+    if (m){
+      stats.list++;
+      const indent = Math.floor(m[1].replace(/\t/g,'  ').length/2);
+      lines[i] = `${'#'.repeat(indent+1)} ${m[3]}`;
+    }
+  }
+  text = lines.join('\n');
+
+  text = text.replace(/\u0000INLINECODE(\d+)\u0000/g, (m,i)=> inlineCodes[+i]);
+  text = text.replace(/\u0000CODEBLOCK(\d+)\u0000/g, (m,i)=> codeBlocks[+i]);
+
+  return { text, stats };
+}
+
+function convertTables(text, stats){
+  const lines = text.split('\n');
+  const out = [];
+  let i = 0;
+  const isRow = l => /^\s*\|?.+\|.+\|?\s*$/.test(l) && l.trim().length>0;
+  const isSep = l => /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/.test(l);
+
+  const splitCells = l => {
+    let s = l.trim();
+    if (s.startsWith('|')) s = s.slice(1);
+    if (s.endsWith('|')) s = s.slice(0,-1);
+    return s.split('|').map(c=>c.trim());
+  };
+
+  while (i < lines.length){
+    if (isRow(lines[i]) && lines[i+1]!==undefined && isSep(lines[i+1])){
+      stats.table++;
+      const header = splitCells(lines[i]);
+      const aligns = splitCells(lines[i+1]).map(c=>{
+        const left = c.startsWith(':'), right = c.endsWith(':');
+        if (left && right) return 'center';
+        if (right) return 'right';
+        return null; // default/left -> no style
+      });
+      let j = i+2;
+      const rows = [];
+      while (j < lines.length && isRow(lines[j]) && !isSep(lines[j])){
+        rows.push(splitCells(lines[j]));
+        j++;
+      }
+      const wiki = [];
+      wiki.push('{| class="wikitable"');
+      wiki.push('! ' + header.map((h,ci)=> (aligns[ci] ? `style="text-align:${aligns[ci]}"| ` : '') + h).join(' !! '));
+      rows.forEach(r => {
+        wiki.push('|-');
+        wiki.push('| ' + r.map((c,ci)=> (aligns[ci] ? `style="text-align:${aligns[ci]}"| ` : '') + c).join(' || '));
+      });
+      wiki.push('|}');
+      out.push(wiki.join('\n'));
+      i = j;
+    } else {
+      out.push(lines[i]);
+      i++;
+    }
+  }
+  return out.join('\n');
+}
+
+function detectTitle(src){
+  const m = src.match(/^#\s+(.+)$/m);
+  return m ? m[1].trim() : null;
+}
+
+function renderStats(stats){
+  const labels = {
+    heading:'헤딩', bold:'굵게', italic:'기울임', strike:'취소선',
+    image:'이미지', link:'링크', wikilink:'위키링크',
+    codeblock:'코드블록', inlinecode:'인라인 코드', list:'리스트 항목',
+    quote:'인용 블록', hr:'구분선', table:'표'
+  };
+  els.strip.innerHTML = Object.entries(labels).map(([k,label])=>{
+    const v = stats[k]||0;
+    return `<div class="badge${v?' active':''}"><b>${v}</b>${label}</div>`;
+  }).join('');
+}
+
+function run(){
+  const opts = {
+    shiftH1: els.optShiftH1.checked,
+    checkbox: els.optCheckbox.checked,
+    namespace: els.optNamespace.value || '파일:',
+  };
+  const src = els.input.value;
+  const title = detectTitle(src);
+  els.title.textContent = title || '(H1 없음)';
+  const { text, stats } = convert(src, opts);
+  els.output.value = text;
+  renderStats(stats);
+}
+
+els.input.addEventListener('input', run);
+els.optShiftH1.addEventListener('change', run);
+els.optCheckbox.addEventListener('change', run);
+els.optNamespace.addEventListener('input', run);
+
+document.getElementById('btnSample').addEventListener('click', () => {
+  els.input.value = SAMPLE;
+  run();
+});
+document.getElementById('btnClear').addEventListener('click', () => {
+  els.input.value = '';
+  run();
+});
+document.getElementById('btnCopy').addEventListener('click', () => {
+  els.output.select();
+  document.execCommand('copy');
+});
+document.getElementById('btnDownload').addEventListener('click', () => {
+  const title = detectTitle(els.input.value) || 'converted';
+  const blob = new Blob([els.output.value], {type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = title.replace(/[\\/:*?"<>|]/g,'_') + '.wiki';
+  a.click();
+});
+
+run();
+</script>
+</body>
+</html>
