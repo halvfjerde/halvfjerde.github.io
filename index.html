@@ -173,7 +173,6 @@
     .menu a::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--rule); background: currentColor; transform: scaleX(0); transform-origin: 0 50%; transition: transform .4s var(--ease); }
     .menu a:hover, .menu a.on { opacity: 1; }
     .menu a.on::after, .menu a:hover::after { transform: scaleX(1); }
-    /* 점은 본문이 아니라 여백 한가운데에 */
     .dots { position: fixed; right: max(0px, calc(var(--g) / 2 - 15px)); top: 50%; transform: translateY(-50%); z-index: 100; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; color: var(--hud, var(--ink)); transition: color .45s; }
     .dots button { display: flex; align-items: center; gap: 10px; padding: 5px 10px; }
     .dots .l { font-size: var(--fs-xs); font-weight: 600; letter-spacing: var(--tr-label); opacity: 0; transform: translateX(6px); transition: opacity .3s, transform .4s var(--ease); }
@@ -186,11 +185,12 @@
 
     .s-open { --bg: var(--green); --fg: var(--ink); }
     .s-open .fx { -webkit-mask-image: radial-gradient(64% 58% at 24% 44%, transparent 16%, #000 72%); mask-image: radial-gradient(64% 58% at 24% 44%, transparent 16%, #000 72%); }
-    .hero { max-width: 58%; transform: translateY(calc(var(--p, 0) * -10vh)); opacity: calc(1 - var(--p, 0) * 1.5); }
-    .hero h1 { --lh: 1.16; font-size: clamp(2.25rem, 5.4vw, 5.25rem); font-weight: 800; letter-spacing: var(--tr-display); line-height: var(--lh); text-wrap: initial; }
+    .hero { max-width: 62%; transform: translateY(calc(var(--p, 0) * -10vh)); opacity: calc(1 - var(--p, 0) * 1.5); }
+    .hero h1 { --lh: 1.2; font-size: clamp(2.25rem, 5vw, 4.75rem); font-weight: 800; letter-spacing: var(--tr-display); line-height: var(--lh); text-wrap: initial; }
     .roller { display: inline-block; vertical-align: bottom; height: calc(var(--lh) * 1em); overflow: hidden; transition: width .8s var(--ease); }
     .roller-track { display: flex; flex-direction: column; transition: transform .8s var(--ease); }
     .roller-track > span { display: block; width: max-content; height: calc(var(--lh) * 1em); line-height: var(--lh); white-space: nowrap; color: #2c5210; padding-right: .02em; transition: opacity .6s, filter .6s; }
+    .roller-track > span.lat { font-stretch: 78%; font-weight: 760; letter-spacing: -.035em; }
     .roller-track > span:not(.cur) { opacity: 0; filter: blur(8px); }
     .motto { margin-top: 24px; font-size: clamp(var(--fs-lg), 1.6vw, 1.3125rem); font-weight: 600; letter-spacing: -.02em; line-height: 1.4; opacity: .82; }
     .avatar { position: absolute; z-index: 3; right: var(--g); bottom: 0; height: min(64svh, 92vw); width: auto; transform: translateY(calc(var(--p, 0) * 10vh)); transform-origin: 50% 100%; filter: drop-shadow(0 26px 40px rgba(30, 60, 0, .3)); }
@@ -213,7 +213,7 @@
 
     .s-names { --bg: var(--ink); --fg: var(--cream); }
     .s-names .fx { -webkit-mask-image: radial-gradient(60% 60% at 34% 50%, transparent 20%, #000 80%); mask-image: radial-gradient(60% 60% at 34% 50%, transparent 20%, #000 80%); }
-    .names-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: space-between; gap: 24px; position: relative; }
+    .names-stage { flex: 1; min-height: 0; display: flex; align-items: center; gap: clamp(20px, 3vw, 44px); position: relative; }
     .nm-wrap { position: relative; flex: 1; min-width: 0; height: 100%; }
     .nm { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-46%) scale(.97); opacity: 0; filter: blur(12px); transition: opacity .55s, filter .6s, transform .9s var(--ease); pointer-events: none; }
     .nm.on { opacity: 1; filter: none; transform: translateY(-50%); }
@@ -225,9 +225,9 @@
     .nm .v ruby { ruby-position: over; }
     .nm .v rt { font-size: .17em; font-weight: 600; letter-spacing: .24em; color: var(--cream); opacity: .55; }
     .nm .r { display: block; margin-top: 16px; max-width: 34em; font-size: clamp(var(--fs-md), 1.3vw, var(--fs-lg)); font-weight: 500; line-height: 1.55; opacity: var(--dim); }
-    .nm-ticks { display: flex; flex-direction: column; gap: 4px; flex: none; }
-    .nm-ticks button { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 4px 0; font-size: var(--fs-xs); font-weight: 600; letter-spacing: var(--tr-label); }
-    .nm-ticks button span { opacity: 0; transform: translateX(6px); transition: all .4s var(--ease); }
+    .nm-ticks { display: flex; flex-direction: column; gap: 4px; flex: none; min-width: 5.5em; }
+    .nm-ticks button { display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 4px 0; font-size: var(--fs-xs); font-weight: 600; letter-spacing: var(--tr-label); }
+    .nm-ticks button span { white-space: nowrap; opacity: 0; transform: translateX(-6px); transition: all .4s var(--ease); }
     .nm-ticks button:hover span, .nm-ticks button.on span { opacity: .8; transform: none; }
     .nm-ticks i { width: 3px; height: 14px; border-radius: 2px; background: var(--cream); opacity: .22; transition: all .5s var(--ease); }
     .nm-ticks button.on i { opacity: 1; height: 30px; background: var(--green-bright); }
@@ -235,6 +235,7 @@
     @media (max-width: 760px) {
       .nm .v { font-size: clamp(2.5rem, 12.5vw, 3.75rem); }
       .nm .r { margin-top: 10px; font-size: var(--fs-sm); white-space: normal; }
+      .nm-ticks { min-width: 0; }
       .nm-ticks button span { display: none; }
     }
 
@@ -283,12 +284,10 @@
     .row .w:hover, .row .w.o:hover { color: var(--ink); -webkit-text-stroke-color: transparent; }
     .row .w.dim { font-weight: 400; opacity: .55; }
     .row .sep { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--ink); opacity: .9; }
-    .s-int .foot { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
-    .s-int .foot b { display: block; margin-bottom: 4px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: var(--tr-label); opacity: .85; }
+    .s-int .foot { display: block; max-width: 48em; }
     @media (max-width: 760px) {
       .int-head { grid-template-columns: 1fr; gap: 10px; }
       .row .w.o { -webkit-text-stroke-width: 1.5px; }
-      .s-int .foot { grid-template-columns: 1fr; gap: 8px; }
     }
 
     .s-works { --bg: var(--paper); --fg: var(--ink); }
@@ -368,8 +367,6 @@
     .wf-dict .df b { width: 4px; height: 4px; border-radius: 50%; background: var(--acc); }
     .card-bot { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 0 4px 0 6px; }
     .card-bot > div { flex: 1; min-width: 0; }
-    /* 제목 줄은 한 줄 높이로 고정. 읽는 법(small)이 들어갈 자리가 없으면
-       둘째 줄로 넘어가 통째로 가려지고, 제목은 잘리지 않음 */
     .card-bot h3 { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; height: 1.3em; overflow: hidden; min-width: 0; font-size: 1.25rem; font-weight: 780; letter-spacing: var(--tr-head); line-height: 1.3; }
     .card-bot h3 .t { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .card-bot h3 .t.lat { font-weight: 720; letter-spacing: -.018em; }
@@ -476,7 +473,7 @@
           <div class="chap"><b>00</b><span>Hello</span></div>
           <div class="body">
             <div class="hero">
-              <h1>안녕하세요! 👋<br />저는 <span class="roller" id="roller"><span class="roller-track" id="rollerTrack"><span class="cur">삼쩌모</span><span>송지후</span><span>halvfjerde</span></span></span>입니다!</h1>
+              <h1>안녕하세요! 👋<br />저는 <span class="roller" id="roller"><span class="roller-track" id="rollerTrack"><span class="cur">삼쩌모</span><span>송지후</span><span class="lat" lang="en">halvfjerde</span></span></span>입니다!</h1>
               <p class="motto">넓고 깊게를 추구하다.</p>
             </div>
           </div>
@@ -491,19 +488,19 @@
         <div class="frame">
           <div class="chap"><b>01</b><span>About</span></div>
           <div class="names-stage">
+            <div class="nm-ticks" id="nmTicks">
+              <button type="button" aria-label="본명"><i></i><span>본명</span></button>
+              <button type="button" aria-label="영어 이름"><i></i><span>영어</span></button>
+              <button type="button" aria-label="일본어 이름"><i></i><span>일본어</span></button>
+              <button type="button" aria-label="호"><i></i><span>호</span></button>
+              <button type="button" aria-label="니크네임"><i></i><span>니크네임</span></button>
+            </div>
             <div class="nm-wrap" aria-live="polite">
               <div class="nm on" style="--c:var(--cream)"><small>본명</small><span class="v">송지후</span><span class="r">宋 智厚, 지혜가 두텁다는 뜻</span></div>
               <div class="nm" style="--c:#9fd3ff"><small>영어</small><span class="v lat" lang="en">Owen Song</span><span class="r">오우인(오웬) 송, 유럽어에서는 '에우게니우스'의 변형을 주로 사용함</span></div>
               <div class="nm" style="--c:#ff8fb1"><small>일본어</small><span class="v" lang="ja">和泉流希</span><span class="r">いずみ るき, 이즈미 루키</span></div>
               <div class="nm" style="--c:#ffd54a"><small>호</small><span class="v">流泉</span><span class="r">유천, 흐르는 샘물다이</span></div>
               <div class="nm" style="--c:var(--green-bright)"><small>니크네임</small><span class="v">삼쩌모</span><span class="r">영어로 halvfjerde, 흔히 '쩌모'로 줄여서 부르곤 함</span></div>
-            </div>
-            <div class="nm-ticks" id="nmTicks">
-              <button type="button" aria-label="본명"><span>본명</span><i></i></button>
-              <button type="button" aria-label="영어 이름"><span>영어</span><i></i></button>
-              <button type="button" aria-label="일본어 이름"><span>일본어</span><i></i></button>
-              <button type="button" aria-label="호"><span>호</span><i></i></button>
-              <button type="button" aria-label="니크네임"><span>니크네임</span><i></i></button>
             </div>
           </div>
           <p class="foot"><span>창작과 언어, 개발 등 여러 분야에 관심을 두고 활동하고 있습니다.</span><span>불러 주실 때는 <b>‘쩌모’</b> 또는 <b>‘삼쩌모’</b></span></p>
@@ -548,10 +545,7 @@
             <div class="row" id="rowA"><span class="tag">학문<span class="lat" lang="en">Academia</span></span><span class="w">언어학</span><span class="sep"></span><span class="w o">도시학</span><span class="sep"></span><span class="w">사회학</span><span class="sep"></span><span class="w o">수학</span><span class="sep"></span><span class="w">지구과학</span><span class="sep"></span><span class="w dim">…</span></div>
             <div class="row" id="rowB"><span class="tag">취미<span class="lat" lang="en">Pastimes</span></span><span class="w o">창작</span><span class="sep"></span><span class="w">개발</span><span class="sep"></span><span class="w o">디자인</span><span class="sep"></span><span class="w">사진</span><span class="sep"></span><span class="w o">그림</span><span class="sep"></span><span class="w">만년필</span><span class="sep"></span><span class="w o">마작</span><span class="sep"></span><span class="w dim">…</span></div>
           </div>
-          <div class="foot">
-            <p><b>학문</b>문리과, 사회, 공학에 걸쳐 여러 분야에 관심이 있습니다만 아직은 아주 많은 지식을 가지고 있는 것은 아닙니다.</p>
-            <p><b>취미</b>오래 갈 취미는 아주 오래 가고, 금방 사라질 취미는 며칠도 안 가는 편이라 꽤 오래 가고 있는 취미만 적어 두었습니다.</p>
-          </div>
+          <p class="foot">학문 쪽으로는 문리과, 사회, 공학에 걸쳐 여러 분야에 관심이 있습니다만 아직은 아주 많은 지식을 가지고 있는 것은 아닙니다. 취미는 오래 갈 것은 아주 오래 가고 금방 사라질 것은 며칠도 안 가는 편이라, 꽤 오래 가고 있는 것만 적어 두었습니다.</p>
         </div>
       </div>
     </section>
@@ -571,7 +565,6 @@
       </div>
     </section>
 
-    <!-- 05 ─────────────────────────── 창작 -->
     <section class="scene s-cre" id="creations" style="--len:250" data-name="창작" data-hud="#f7f2e9" data-fn="creations">
       <div class="pin">
         <canvas class="fx" id="fxStars" aria-hidden="true"></canvas>
@@ -642,12 +635,10 @@
     $('#yr').textContent = new Date().getFullYear();
     $('#sigImg').src = $('.avatar').src;
 
-    /* ── pointer ── */
     var M = { x: -9999, y: -9999, on: false };
     addEventListener('pointermove', function (e) { M.x = e.clientX; M.y = e.clientY; M.on = true; }, { passive: true });
     document.addEventListener('pointerleave', function () { M.on = false; });
 
-    /* ── works ── */
     var WF = {
       wiki: function () { return '<div class="wf wf-wiki"><div class="bar"><span class="sq"></span><span class="pill"></span><span class="pill"></span><span class="pill"></span><span class="sp"></span><span class="pill" style="width:18px"></span></div><div class="body-w"><div class="ttl"><i class="h"></i><div class="tabs"><i></i><i></i><i></i></div></div><i style="width:80%"></i><div class="grid"><div><i style="width:80%"></i><i style="width:55%"></i></div><div><i style="width:70%"></i><i style="width:50%"></i></div><div><i style="width:76%"></i><i style="width:60%"></i></div><div><i style="width:66%"></i><i style="width:48%"></i></div><div><i style="width:82%"></i><i style="width:52%"></i></div><div><i style="width:72%"></i><i style="width:58%"></i></div></div><div class="tbl"><div><i class="a" style="width:70%"></i><i style="width:90%"></i></div><div><i style="width:60%"></i><i style="width:76%"></i></div><div><i style="width:66%"></i><i style="width:84%"></i></div></div></div></div>'; },
       skin: function () {
@@ -669,7 +660,6 @@
     $('#wAll').textContent = pad2(WORKS.length);
     var cardws = $$('.cardw', strip), cards = $$('.card', strip);
 
-    /* ── creations ── */
     var groups = $('#groups'), langs = CREATIONS.conlangs.slice().sort(function (a, b) { return a.no - b.no; });
     var tile = function (o) {
       var nc = fontCls(o.t), sub = o.ko || o.sub, sc = fontCls(sub);
@@ -685,7 +675,6 @@
     var nCre = CREATIONS.worlds.length + langs.length + 1;
     $('#creCnt').innerHTML = '<b>' + pad2(nCre) + '</b><small>세계 ' + CREATIONS.worlds.length + ' · 인공어 ' + langs.length + ' · 부캐 1</small>';
 
-    /* ── scenes ── */
     var scenes = $$('.scene').map(function (el, i) { return { el: el, pin: $('.pin', el), i: i, fn: el.dataset.fn, name: el.dataset.name, hud: el.dataset.hud, vis: false, cache: {} }; });
     var N = scenes.length, H = innerHeight;
     var dots = $('#dots');
@@ -704,7 +693,6 @@
     function jump(i) { scrollTo({ top: scenes[i].top, behavior: reduce ? 'auto' : 'smooth' }); }
     $$('[data-jump]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); jump(+a.dataset.jump); }); });
 
-    /* ── strips ── */
     var rowA = $('#rowA'), rowB = $('#rowB'), rowAW = 0, rowBW = 0, stripW = 0, groupsW = 0;
     function measureFns() { rowAW = rowA.scrollWidth; rowBW = rowB.scrollWidth; stripW = strip.scrollWidth; groupsW = groups.scrollWidth; }
     function scrub(el, list, width, p) {
@@ -723,7 +711,6 @@
       creations: function (p) { var vw = innerWidth, max = Math.max(0, groupsW - vw); groups.style.transform = 'translateX(' + (-max * ease(p)).toFixed(1) + 'px)'; }
     };
 
-    /* ── frame loop (scroll) ── */
     var cur = -1, hud = document.documentElement;
     function frame() {
       var y = scrollY, active = 0;
@@ -749,21 +736,18 @@
     addEventListener('scroll', function () { if (!raf) raf = requestAnimationFrame(function () { raf = 0; frame(); }); }, { passive: true });
     addEventListener('resize', function () { measure(); sizeRoller(); frame(); });
 
-    /* ── 00 roller ── */
     var roller = $('#roller'), rt = $('#rollerTrack'), ri = 0, items = Array.prototype.slice.call(rt.children);
     function sizeRoller() { roller.style.width = items[ri].getBoundingClientRect().width + 'px'; }
     function roll() { items[ri].classList.remove('cur'); ri = (ri + 1) % items.length; items[ri].classList.add('cur'); rt.style.transform = 'translateY(' + (-100 * ri / items.length) + '%)'; sizeRoller(); }
     sizeRoller();
     if (!reduce) setInterval(function () { if (scenes[0].vis) roll(); }, 2600);
 
-    /* ── 01 names ── */
     var nms = $$('.nm'), nTicks = $$('#nmTicks button'), ni = 0, nPaused = 0;
     function showName(i) { nms.forEach(function (el, k) { el.classList.toggle('out', k === ni && k !== i); el.classList.toggle('on', k === i); }); nTicks.forEach(function (b, k) { b.classList.toggle('on', k === i); }); ni = i; }
     nTicks.forEach(function (b, k) { b.addEventListener('click', function () { nPaused = Date.now(); showName(k); }); });
     showName(0);
     if (!reduce) setInterval(function () { if (scenes[1].vis && Date.now() - nPaused > 6000) showName((ni + 1) % nms.length); }, 2300);
 
-    /* ── 02 live figures ── */
     var greets = $$('#greet span'), langEls = $$('#langs span'), gi = 0;
     if (!reduce) setInterval(function () { if (!scenes[2].vis) return; gi = (gi + 1) % greets.length; greets.forEach(function (g, k) { g.classList.toggle('on', k === gi); }); langEls.forEach(function (l, k) { l.classList.toggle('on', k === gi); }); }, 1900);
     var clockFmt = new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
@@ -787,7 +771,6 @@
       });
     }
 
-    /* ── 04 cursor tag + tilt ── */
     var tag = $('#cursorTag'), tagOn = false, tx = 0, ty = 0;
     if (fine) {
       strip.addEventListener('pointerover', function (e) { if (e.target.closest('.card')) { tagOn = true; tag.classList.add('on'); } });
@@ -821,7 +804,6 @@
       return { resize: resize, draw: draw, scene: scene };
     }
 
-    /* 01 · 점 격자 */
     function fxDots(cv, scene) {
       var c, W, Hh, pts = [], gap = 26;
       function resize() { var f = fit(cv); c = f.c; W = f.w; Hh = f.h; gap = W < 640 ? 22 : 26; pts = []; for (var y = gap / 2; y < Hh; y += gap) for (var x = gap / 2; x < W; x += gap) pts.push({ x: x, y: y }); draw(0); }
