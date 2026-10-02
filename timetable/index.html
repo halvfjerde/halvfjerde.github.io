@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>시각표 편집기</title>
 <style>body{margin:0}</style>
 </head>
@@ -116,7 +116,11 @@ input[type=color] { width: 28px; height: 22px; padding: 0; border: 1px solid var
 .main.nopreview .preview { display: none; }
 .pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); }
 .pane.preview { border-left: 1px solid var(--rule); }
-.tabs { display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+.tabbar { display: flex; align-items: center; gap: 8px; padding-right: 10px; border-bottom: 1px solid var(--rule); }
+.tabs { display: flex; gap: 2px; padding: 0 10px; flex-wrap: wrap; margin-bottom: -1px; }
+.viewctl { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.viewctl .seg { height: var(--hs); } .viewctl .seg button { padding: 0 8px; font-size: var(--t-2); }
+.viewctl .btn { height: var(--hs); font-size: var(--t-2); }
 .tab { border: 0; background: none; padding: 9px 8px 7px; cursor: pointer; color: var(--muted); font-size: var(--t-3);
   border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tab:hover { color: var(--ink); }
@@ -385,8 +389,42 @@ textarea.code.big { flex: 1; min-height: 0; resize: none; }
 :root[data-theme="dark"] .pv-body { --text: #1f1e1b; --background: #f7f6f3; --bg: #f7f6f3; }
 :root[data-theme="dark"] .pv-body > * { background: #f7f6f3; color: #1f1e1b; padding: 12px; border-radius: 4px; }
 
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* ══ 터치 화면 ══════════════════════════════════════════════
+   글자 크기 12/13/14/15, 조작부 높이 32(--h)·목록 안 28(--hs). 키보드 안내는 감춘다.
+   입력란을 눌렀을 때 화면이 저절로 확대되는 것은 viewport 의 maximum-scale 로 막는다(스크립트에서 설정) */
+@media (pointer: coarse) {
+  :root { --t-1: 12px; --t-2: 13px; --t-3: 14px; --t-4: 15px; --h: 32px; --hs: 28px; }
+  .hint, .keyhint { display: none; }
+}
+
 @media (max-width: 900px) {
   .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(460px, 1fr) minmax(320px, auto); }
+  /* 위 막대: 한 줄. 제목 · ↶↷ · 가져오기 · 새 문서 · 복사 */
+  .bar { flex-wrap: nowrap; gap: 4px; padding: 6px 10px; }
+  .brand h1 { font-size: var(--t-3); }
+  .bar .btn { padding: 0 8px; }
+  .bar .lg { display: none; }
+  /* 도구 띠: 한 줄로, 넘치면 옆으로 밀어 본다 */
+  .tools { flex-wrap: nowrap; overflow-x: auto; gap: 4px 12px; scrollbar-width: none; }
+  .tools::-webkit-scrollbar { display: none; }
+  .toolset { flex: none; }
+  /* 입력란은 한 줄 전체, 패널 고르기는 그 아래 한 줄 */
+  .fx { flex-wrap: wrap; }
+  .fx .where { display: none; }
+  .fx input { flex: 1 1 100%; }
+  .fx .panelsw, .fx .panelsw .seg { flex: 1 1 100%; display: flex; }
+  .fx .panelsw .seg button { flex: 1; }
+  /* 패널은 아래에서 올라오는 시트 */
+  .panel { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-height: 62vh; border-top: 1px solid var(--rule);
+    border-bottom: 0; border-radius: 12px 12px 0 0; box-shadow: var(--pop); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  /* ⋯ 메뉴도 아래에서 올라오는 목록으로. 뒤를 누르면 닫힌다 */
+  details.menu[open] > summary::before { content: ""; position: fixed; inset: 0; background: rgba(15, 15, 15, .3); z-index: 45; cursor: default; }
+  details.menu .pop, .toolset:last-child details.menu .pop { position: fixed; left: 8px; right: 8px; top: auto; bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    min-width: 0; max-height: 70vh; overflow: auto; z-index: 46; border-radius: 12px; }
+  details.menu .pop .btn { height: 44px; }
+  .viewctl .btn { padding: 0 8px; }
   .pane.preview { border-left: 0; border-top: 1px solid var(--rule); }
   .app { height: auto; min-height: 100%; }
   .brand .sub, .divider { display: none; }
@@ -801,20 +839,22 @@ table.jtt {
       <button class="btn ico" id="btnUndo" type="button" title="되돌리기 (Ctrl+Z)" aria-label="되돌리기">↶</button>
       <button class="btn ico" id="btnRedo" type="button" title="다시 하기 (Ctrl+Y)" aria-label="다시 하기">↷</button>
     </div>
-    <div class="seg" id="segDir" role="group" aria-label="방향"><button type="button" data-v="down" aria-pressed="true">하행</button><button type="button" data-v="up" aria-pressed="false">상행</button></div>
-    <span class="divider" aria-hidden="true"></span>
-    <div class="grp">
-      <button class="btn" id="btnPv" type="button" aria-pressed="true" title="오른쪽 미리보기를 켜고 끕니다">미리보기</button>
-      <button class="btn primary" id="btnCopy" type="button" title="위키 문서에 붙여 넣을 문법을 복사합니다">위키 문법 복사</button>
-    </div>
+    <button class="btn primary" id="btnCopy" type="button" title="위키 문서에 붙여 넣을 문법을 복사합니다"><span class="lg">위키 문법 </span>복사</button>
   </header>
 
   <div class="main" id="main">
     <section class="pane editor">
-      <div class="tabs" role="tablist">
-        <button class="tab" role="tab" aria-selected="true" data-tab="grid" id="tab-grid">표</button>
-        <button class="tab" role="tab" aria-selected="false" data-tab="setup" id="tab-setup">구성</button>
-        <button class="tab" role="tab" aria-selected="false" data-tab="src" id="tab-src">원문</button>
+      <div class="tabbar">
+        <div class="tabs" role="tablist">
+          <button class="tab" role="tab" aria-selected="true" data-tab="grid" id="tab-grid">표</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="setup" id="tab-setup">구성</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="src" id="tab-src">원문</button>
+        </div>
+        <!-- 보기 조절: 편집하는 방향, 미리보기 칸 -->
+        <div class="viewctl">
+          <div class="seg" id="segDir" role="group" aria-label="편집하는 방향"><button type="button" data-v="down" aria-pressed="true">하행</button><button type="button" data-v="up" aria-pressed="false">상행</button></div>
+          <button class="btn" id="btnPv" type="button" aria-pressed="true" title="미리보기를 켜고 끕니다">미리보기</button>
+        </div>
       </div>
 
       <!-- ── 표 ── -->
@@ -827,7 +867,7 @@ table.jtt {
             <details class="menu"><summary class="btn ico" title="역 — 더 보기" aria-label="역 더 보기">⋯</summary>
               <div class="pop">
                 <button class="btn" data-act="stAbove" type="button">위에 역 추가</button>
-                <button class="btn" data-act="stBelow" type="button">아래에 역 추가 <small>Ctrl+Enter</small></button>
+                <button class="btn" data-act="stBelow" type="button">아래에 역 추가 <small class="keyhint">Ctrl+Enter</small></button>
                 <button class="btn" data-act="stFree" type="button">아래에 주석 행 추가 <small>역이 아닌 행</small></button>
                 <hr>
                 <button class="btn" data-act="stLine" type="button">위에 가로선 <small>켜기·끄기</small></button>
@@ -2933,7 +2973,14 @@ function renderTopCmp() {
 /* ---------- 머리·꼬리 행의 ‘값 모양’(fmt) ---------- */
 const FMTS = [['', '그대로'], ['N{*}', '열차번호'], ["'*'", '균등 배분'], ['k*.', '굵게'], ['r*.', '세로쓰기'], ['S{k*.}', '네모'], ['BS{k*.}', '검은 네모']];
 
+// 입력란에 포커스가 갈 때 iOS가 화면을 멋대로 확대하지 않게 한다(손가락으로 벌려 확대하는 것은 그대로 된다)
+function lockAutoZoom() {
+  let m = document.querySelector('meta[name="viewport"]');
+  if (!m) { m = document.createElement('meta'); m.name = 'viewport'; document.head.appendChild(m); }
+  m.content = 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover';
+}
 function init() {
+  lockAutoZoom();
   try { LUA = C.createLua(window.fengari, LUA_SRC); }
   catch (err) { $('#pvBody').innerHTML = `<div class="pv-err">모듈을 불러오지 못했어요. 인터넷 연결(cdn.jsdelivr.net)을 확인하세요.\n${esc(err.message)}</div>`; }
 
