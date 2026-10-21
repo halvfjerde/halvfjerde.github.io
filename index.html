@@ -9,8 +9,8 @@
 <meta property="og:description" content="삼쩌모 소개">
 <meta property="og:url" content="https://halv.kr/">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#fdfcf9" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#16161a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#639c59" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#3f5f39" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%238bc34a'/%3E%3Ctext x='32' y='43' font-size='30' text-anchor='middle' fill='%23131312' font-family='sans-serif' font-weight='800'%3E%EC%A9%8C%3C/text%3E%3C/svg%3E">
 
 <!-- 글꼴: 블로그·사전과 같은 짜임. 라틴은 Newsreader, 한글 本文은 은바탕, 작은 글씨는 은돋움, 漢字·가나는 明朝 -->
@@ -20,8 +20,14 @@
 <link rel="stylesheet" href="fonts/fonts.css">
 <!-- 寫硏 書體 (TypeSquare). 登錄된 도메인에서만 나오고, 안 나오면 위의 글꼴로 떨어진다 -->
 <script src="//typesquare.com/accessor/ko/script/typesquare.js?ee85a1e0da0743cc9ca6031dd3b19c5d" charset="utf-8"></script>
+<script>if (!matchMedia('(prefers-reduced-motion: reduce)').matches) document.documentElement.classList.add('motion');</script>
 
 <style>
+  /*
+   * 冊 한 卷을 넘기듯 내려 읽는 첫 쪽.
+   * 앞뒤는 草綠 見返し, 사이는 종이 쪽. 쪽은 내리면 다음 쪽이 위에 덮이고(앞 쪽은 조금 어두워지며 물러남),
+   * 오른쪽 가장자리에 사전 같은 爪(索引)를 둔다. 움직임을 줄이는 설정이면 그냥 한 장으로 이어진다.
+   */
   :root {
     --bg: #fdfcf9;
     --bg-alt: #f3f0e8;
@@ -33,18 +39,22 @@
     --muted: #625e56;
     --muted-2: #736e65;
     --muted-3: #a19b90;
+    --green: #639c59;
+    --on-green: #fbfaf5;
+    --type-ink: 24, 52, 18;
+    --desk: #cfc8b8;
 
     --serif: "Newsreader", "UnBatang", "IshiiMincho Old R", "Zen Old Mincho", "Shippori Mincho B1", "Apple SD Gothic Neo", "Malgun Gothic", serif;
+    --batang: "UnBatang", "IshiiMincho Old R", "Zen Old Mincho", "Shippori Mincho B1", "Newsreader", serif;
     --gothic: "IshiiGothic R", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-    --gothic-b: "IshiiGothic B", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 
     --fs-caption: 0.8125rem;
     --fs-ui: 0.82rem;
     --fs-body: 0.97rem;
-    --fs-h2: 1.06rem;
 
     --max: 640px;
     --gutter: 1.5rem;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -57,18 +67,21 @@
       --muted: #b7b5b0;
       --muted-2: #9a9994;
       --muted-3: #706e69;
+      --green: #3f5f39;
+      --on-green: #e9e8e2;
+      --type-ink: 8, 18, 6;
+      --desk: #09090b;
     }
   }
 
   *, *::before, *::after { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; background: var(--desk); }
   body {
     margin: 0;
-    background: var(--bg);
+    background: var(--desk);
     color: var(--text);
     font-family: var(--serif);
     font-size: var(--fs-body);
-    font-weight: 400;
     line-height: 1.8;
     word-break: keep-all;
     overflow-wrap: break-word;
@@ -77,219 +90,443 @@
   }
   a { color: inherit; text-decoration: none; }
   a:hover { color: var(--accent); }
-  :focus-visible { outline: 1.5px solid var(--accent); outline-offset: 3px; }
+  :focus-visible { outline: 1.5px solid currentColor; outline-offset: 3px; }
   ::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+  p { margin: 0; }
   [lang="ja"], [lang="zh"] { font-family: "Newsreader", "IshiiMincho Old R", "Zen Old Mincho", "Shippori Mincho B1", serif; }
   .num { font-variant-numeric: oldstyle-nums tabular-nums; }
 
-  .page { max-width: calc(var(--max) + var(--gutter) * 2); margin: 0 auto; padding: 0 var(--gutter); }
+  /* ---------- 쪽 ---------- */
+  .pg {
+    position: relative;
+    min-height: 100svh;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: clip;
+  }
+  .motion .pg {
+    position: sticky;
+    transform: scale(calc(1 - var(--x, 0) * 0.035));
+    transform-origin: 50% var(--oy, 40svh);
+  }
+  .motion .pg::after {
+    content: ""; position: absolute; inset: 0; z-index: 20; pointer-events: none;
+    background: #000; opacity: calc(var(--x, 0) * 0.3);
+  }
+  .pg + .pg { box-shadow: 0 -10px 28px -16px rgba(0, 0, 0, 0.22); }
 
-  /* 題字 */
-  .masthead { padding-top: 3.25rem; text-align: center; }
-  .masthead .latin { margin: 0; font-family: "Newsreader", serif; font-style: italic; font-size: 1.05rem; line-height: 1; color: var(--muted-2); letter-spacing: 0.01em; }
-  .masthead h1 { margin: 0.55rem 0 0; font-family: "UnBatang", var(--serif); font-size: 2.7rem; font-weight: 400; line-height: 1; letter-spacing: 0.06em; }
-  .masthead .motto { margin: 1.1rem 0 0; color: var(--muted); }
-  .masthead .motto em { font-style: normal; color: var(--text); }
+  .paper { display: flex; flex-direction: column; padding: 0 var(--gutter); }
+  .run, .folio, .body { width: 100%; max-width: var(--max); margin: 0 auto; }
+  .run {
+    display: flex; justify-content: space-between; gap: 1rem;
+    padding: 1.4rem 0 0.55rem; border-bottom: 1px solid var(--border);
+    font-family: var(--gothic); font-size: var(--fs-caption); line-height: 1.4; color: var(--muted-2);
+  }
+  .folio { padding: 0.6rem 0 1.4rem; font-family: "Newsreader", serif; font-size: 0.95rem; line-height: 1; color: var(--muted-2); text-align: right; }
+  .folio.even { text-align: left; }
+  .body { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 2.75rem 0; }
 
-  /* 目次 + 子持ち罫 */
-  .toc { position: relative; display: flex; flex-wrap: wrap; justify-content: center; gap: 0.2rem 1.4rem; margin-top: 1.6rem; padding-bottom: 1.3rem; font-family: var(--gothic); font-size: var(--fs-ui); color: var(--muted); }
-  .toc a:hover { color: var(--accent); }
-  .toc::after { content: ""; position: absolute; inset: auto 0 0; height: 2px; border-top: 2.5px solid var(--ink-rule); border-bottom: 1px solid var(--ink-rule); }
+  h2 { margin: 0; font-family: var(--batang); font-size: clamp(1.9rem, 6vw, 2.5rem); font-weight: 400; line-height: 1.2; letter-spacing: 0.04em; }
+  .h-rule { display: block; width: 2.5rem; margin: 1.1rem 0 1.9rem; border-top: 1px solid var(--ink-rule); transform-origin: 0 50%; }
 
-  main { padding-top: 2.4rem; }
-  section { scroll-margin-top: 1.5rem; }
-  section + section { margin-top: 2.6rem; }
-  h2 { margin: 0 0 0.8rem; font-family: var(--gothic-b); font-size: var(--fs-h2); font-weight: 700; font-synthesis: none; line-height: 1.4; }
-  p { margin: 0; }
+  /* ---------- 앞 見返し (草綠) ---------- */
+  .cover { background: var(--green); color: var(--on-green); }
+  .cover a:hover { color: inherit; text-decoration: underline; text-underline-offset: 0.25em; }
+  .type {
+    position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;
+    -webkit-mask-image: radial-gradient(62% 52% at 30% 40%, transparent 12%, #000 74%);
+    mask-image: radial-gradient(62% 52% at 30% 40%, transparent 12%, #000 74%);
+  }
+  .cover-in { position: relative; z-index: 2; max-width: 1120px; margin: 0 auto; padding: 24svh 7vw 0; }
+  .names { position: relative; height: 1.4em; font-size: 1.1rem; line-height: 1.4; }
+  .names span { position: absolute; left: 0; top: 0; white-space: nowrap; opacity: 0; transition: opacity 0.9s ease; }
+  .names span.on { opacity: 0.85; }
+  .names [lang="en"] { font-family: "Newsreader", serif; font-style: italic; }
+  .cover h1 { margin: 0.5rem 0 0; font-family: var(--batang); font-size: clamp(3.6rem, 12vw, 7.5rem); font-weight: 400; line-height: 1; letter-spacing: 0.05em; }
+  .motto { max-width: 22em; margin-top: 1.5rem; font-size: clamp(1rem, 1.8vw, 1.2rem); line-height: 1.7; opacity: 0.92; }
+  .motto em { font-style: normal; border-bottom: 1px solid currentColor; }
+  .avatar {
+    position: absolute; z-index: 2; right: 7vw; bottom: 0;
+    height: min(64svh, 90vw); width: auto;
+    transform: translateY(calc(var(--x, 0) * 7svh));
+    filter: drop-shadow(0 22px 34px rgba(10, 30, 5, 0.28));
+  }
+  .cue { position: absolute; z-index: 3; left: 7vw; bottom: 2rem; display: flex; align-items: center; gap: 0.7rem; font-family: var(--gothic); font-size: var(--fs-caption); opacity: 0.8; }
+  .cue i { display: block; width: 1px; height: 2.4rem; background: currentColor; transform-origin: 50% 0; }
+  .motion .cue i { animation: cue 2s var(--ease) infinite; }
+  @keyframes cue { 0% { transform: scaleY(0); } 55% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(1); opacity: 0; } }
+  @media (orientation: portrait) {
+    .type { -webkit-mask-image: radial-gradient(80% 36% at 40% 30%, transparent 14%, #000 76%); mask-image: radial-gradient(80% 36% at 40% 30%, transparent 14%, #000 76%); }
+    .cover-in { padding-top: 15svh; }
+    .avatar { right: -6vw; height: min(50svh, 108vw); }
+    .cue { display: none; }
+  }
 
-  /* 머리말 */
-  .preface { display: flow-root; }
-  .preface p { text-indent: 1em; }
-  .portrait { float: right; width: 7.5rem; height: 8.25rem; margin: 0.35rem 0 0.6rem 1.25rem; overflow: hidden; background: var(--bg-alt); border: 1px solid var(--border); }
-  .portrait img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 100%; }
+  /* ---------- 머리말 ---------- */
+  .preface .body p { font-size: 1.06rem; line-height: 2.05; text-indent: 1em; }
 
-  /* 표 같은 줄: 왼쪽 이름표, 오른쪽 값 */
+  /* ---------- 이름표 줄 ---------- */
   .rows { display: grid; grid-template-columns: 5.25em minmax(0, 1fr); gap: 0.5rem 1rem; margin: 0; }
-  .rows dt { font-family: var(--gothic); font-size: var(--fs-ui); line-height: 1.8rem; color: var(--muted-2); padding-top: 0.05rem; }
+  .rows dt { padding-top: 0.05rem; font-family: var(--gothic); font-size: var(--fs-ui); line-height: 1.8rem; color: var(--muted-2); }
   .rows dd { margin: 0; line-height: 1.8rem; }
   .rows .note { display: block; font-size: var(--fs-caption); line-height: 1.6; color: var(--muted); }
-  .rows .sep { margin: 0 0.4em; color: var(--muted-3); }
   .rows .ruby { padding-top: 0.45rem; }
+  .sep { margin: 0 0.4em; color: var(--muted-3); }
   ruby rt { font-size: 0.5em; color: var(--muted-2); letter-spacing: 0.05em; }
   .pan { display: inline-block; width: 1.8em; height: 0.28em; margin-left: 0.55em; vertical-align: 0.2em; background: linear-gradient(90deg, #ff218c 0 33.3%, #ffd800 33.3% 66.6%, #21b1ff 66.6%); }
 
-  .remark { margin-top: 0.9rem; font-size: var(--fs-caption); line-height: 1.75; color: var(--muted); text-indent: 1em; }
+  /* ---------- 관심: 흘러가는 큰 글자 ---------- */
+  .drifts { width: 100vw; margin: 0 0 0 calc(50% - 50vw); }
+  .drift { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 1.4rem; padding: 0 var(--gutter); }
+  .motion .drift { flex-wrap: nowrap; white-space: nowrap; padding-left: max(var(--gutter), calc(50vw - var(--max) / 2)); will-change: transform; }
+  .drift + .drift { margin-top: 0.5rem; }
+  .drift .tag { flex: none; padding: 0.15rem 0.5rem; border: 1px solid var(--rule); font-family: var(--gothic); font-size: var(--fs-caption); line-height: 1.4; color: var(--muted-2); }
+  .drift .w { font-family: var(--batang); font-size: min(clamp(2.4rem, 10vw, 5.4rem), 11svh); line-height: 1.3; transition: color 0.3s; }
+  .drift .w.f { color: var(--muted-3); }
+  .drift .w:hover { color: var(--accent); }
+  .drift .dot { flex: none; width: 0.4rem; height: 0.4rem; border-radius: 50%; background: var(--muted-3); }
+  .remark { margin-top: 1.6rem; font-size: var(--fs-caption); line-height: 1.8; color: var(--muted); text-indent: 1em; }
 
-  /* 點線으로 잇는 목록 (블로그 目錄과 같은 모양) */
+  /* ---------- 點線 목록 ---------- */
   .list { list-style: none; margin: 0; padding: 0; }
   .list li + li { margin-top: 0.65rem; }
   .line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.6rem; }
   .line > .grow { flex: 0 0 auto; max-width: 100%; }
-  .line::after { content: ""; order: 1; flex: 1 1 1.5rem; min-width: 1.5rem; border-bottom: 1.5px dotted var(--rule); transform: translateY(-0.3em); }
+  .line::after { content: ""; order: 1; flex: 1 1 1.5rem; min-width: 1.5rem; border-bottom: 1.5px dotted var(--rule); transform: translateY(-0.3em); transform-origin: 0 50%; }
   .line > .end { order: 2; flex: none; margin-left: auto; font-family: "Newsreader", serif; color: var(--muted-2); }
   .line small { margin-left: 0.4em; font-size: var(--fs-caption); color: var(--muted-2); }
 
   .works .title { display: flex; align-items: center; gap: 0.55rem; }
-  .works .title b { font-weight: 400; }
   .works .title small { font-size: var(--fs-caption); color: var(--muted-2); }
-  .works .title a:hover b { color: var(--accent); }
   .ico { flex: none; width: 1.15rem; height: 1.15rem; border-radius: 3px; object-fit: cover; }
   span.ico { display: inline-grid; place-items: center; border: 1px solid var(--rule); font-size: 0.7rem; line-height: 1; color: var(--muted); }
   .works .line { margin-left: 1.7rem; font-size: var(--fs-caption); color: var(--muted); }
 
-  .jun-fig { float: right; width: 4.6rem; margin: -0.4rem 0 0 0.75rem; }
-  .jun-fig img { display: block; width: 100%; height: auto; }
   .cre dd { display: flow-root; }
-  .cre .no { font-family: "Newsreader", serif; font-size: var(--fs-caption); color: var(--muted-2); margin-right: 0.45em; }
+  .cre .no { margin-right: 0.45em; font-family: "Newsreader", serif; font-size: var(--fs-caption); color: var(--muted-2); }
+  .jun-fig { float: right; width: 4.8rem; margin: -0.5rem 0 0 0.75rem; }
+  .jun-fig img { display: block; width: 100%; height: auto; transition: transform 0.6s var(--ease); }
+  .jun-fig:hover img { transform: rotate(-4deg) translateY(-4px); }
 
-  /* 奧付 */
-  footer { margin: 3.5rem 0 0; padding-bottom: 3rem; text-align: center; font-family: var(--gothic); font-size: var(--fs-caption); color: var(--muted-2); }
-  footer::before { content: ""; display: block; width: 2.5rem; margin: 0 auto 1rem; border-top: 1px solid var(--ink-rule); }
+  /* ---------- 뒤 見返し: 연락·奧付 ---------- */
+  .back { display: flex; flex-direction: column; padding: 0 var(--gutter); }
+  .back .body { padding-top: 4rem; }
+  .back .h-rule { border-top-color: currentColor; opacity: 0.6; }
+  .back .line::after { border-bottom-color: color-mix(in srgb, var(--on-green) 45%, transparent); }
+  .back .line > .end { color: inherit; opacity: 0.85; }
+  .back .list li + li { margin-top: 0.85rem; }
+  .back .list a { font-size: 1.05rem; }
+  .colophon { width: 100%; max-width: var(--max); margin: 0 auto; padding: 0 0 2rem; display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font-family: var(--gothic); font-size: var(--fs-caption); opacity: 0.85; }
+
+  /* ---------- 爪 (索引) ---------- */
+  .thumbs { position: fixed; right: 0; top: 50%; z-index: 50; display: flex; flex-direction: column; gap: 3px; transform: translate(100%, -50%); transition: transform 0.5s var(--ease); }
+  .thumbs.show { transform: translate(0, -50%); }
+  .thumbs a {
+    position: relative; display: block; padding: 0.75rem 0.4rem;
+    writing-mode: vertical-rl; font-family: var(--gothic); font-size: 0.72rem; line-height: 1; letter-spacing: 0.1em;
+    background: var(--bg-alt); color: var(--muted); border: 1px solid var(--border); border-right: 0; border-radius: 3px 0 0 3px;
+    transition: background-color 0.3s, color 0.3s, padding 0.3s var(--ease);
+  }
+  .thumbs a:hover { color: var(--text); }
+  .thumbs a.on { padding-right: 0.6rem; background: var(--green); color: var(--on-green); border-color: var(--green); }
+  .thumbs.on-green a.on { background: var(--on-green); color: var(--green); border-color: var(--on-green); }
+  @media (max-width: 760px) {
+    .thumbs a { width: 6px; height: 2.2rem; padding: 0; font-size: 0; }
+    .thumbs a::before { content: ""; position: absolute; inset: 0 0 0 -16px; }
+    .thumbs a.on { width: 10px; padding: 0; }
+  }
+
+  /* ---------- 나타나기 ---------- */
+  .motion .r { opacity: 0; transform: translateY(0.7rem); transition: opacity 0.8s ease, transform 1s var(--ease); transition-delay: calc(var(--i, 0) * 70ms); }
+  .motion .in .r { opacity: 1; transform: none; }
+  .motion .h-rule { transform: scaleX(0); transition: transform 1.1s var(--ease) 0.2s; }
+  .motion .in .h-rule { transform: scaleX(1); }
+  .motion .pg:not(.cover) .line::after { transform: translateY(-0.3em) scaleX(0); transition: transform 1.2s var(--ease); transition-delay: calc(var(--i, 0) * 70ms + 0.25s); }
+  .motion .in .line::after { transform: translateY(-0.3em) scaleX(1); }
 
   @media (max-width: 560px) {
-    .masthead { padding-top: 2.5rem; }
-    .masthead h1 { font-size: 2.35rem; }
-    .toc { gap: 0.2rem 1.05rem; margin-top: 1.3rem; }
-    main { padding-top: 2rem; }
-    .portrait { width: 6.5rem; height: 7.25rem; margin-left: 1rem; }
     .rows { grid-template-columns: 4.5em minmax(0, 1fr); gap: 0.45rem 0.8rem; }
+    .body { padding: 2.25rem 0; }
   }
 </style>
 </head>
 <body>
-<div class="page">
 
-  <header class="masthead">
-    <p class="latin" lang="en">halvfjerde</p>
-    <h1>삼쩌모</h1>
-    <p class="motto">넓고 얕게도, 좁고 깊게도 아닌 <em>넓고 깊게</em>를 추구하다.</p>
-    <nav class="toc" aria-label="차례">
-      <a href="#about">이름</a><a href="#profile">프로우파일</a><a href="#interests">관심</a><a href="#works">제작</a><a href="#creations">창작</a><a href="#contact">연락</a>
-    </nav>
-  </header>
+<nav class="thumbs" id="thumbs" aria-label="차례">
+  <a href="#about">이름</a><a href="#profile">프로우파일</a><a href="#interests">관심</a><a href="#works">제작</a><a href="#creations">창작</a><a href="#contact">연락</a>
+</nav>
 
-  <main>
-    <section class="preface" aria-label="머리말">
-      <figure class="portrait"><img src="images/profile/avatar.webp" alt="삼쩌모의 캐르크터: 분홍 단발에 궤도 모양 헤일로를 두른 모습" width="895" height="987"></figure>
-      <p>경기도의 한 외국어고등학교에 다니는 학생입니다. 창작과 언어, 개발 등 여러 분야에 관심을 두고 있는데, 신경 쓸 게 워낙 많아서 늘 시간에 쪼들리며 삽니다.</p>
-      <p>부르실 때는 ‘쩌모’나 ‘삼쩌모’, 내지는 호인 ‘유천’으로 불러 주세요.</p>
-    </section>
+<main>
 
-    <section id="about">
-      <h2>이름</h2>
+  <!-- 앞 見返し -->
+  <section class="pg cover" id="top">
+    <canvas class="type" id="type" aria-hidden="true"></canvas>
+    <div class="cover-in">
+      <p class="names" id="names"><span class="on" lang="en">halvfjerde</span><span lang="zh">宋智厚</span><span lang="ja">和泉流希</span><span lang="en">Owen Song</span><span lang="zh">流泉</span></p>
+      <h1>삼쩌모</h1>
+      <p class="motto">넓고 얕게도, 좁고 깊게도 아닌 <em>넓고 깊게</em>를 추구하다.</p>
+    </div>
+    <img class="avatar" src="images/profile/avatar.webp" alt="삼쩌모의 캐르크터: 분홍 단발에 궤도 모양 헤일로를 두른 모습" width="895" height="987">
+    <div class="cue" aria-hidden="true"><i></i>넘기기</div>
+  </section>
+
+  <!-- 머리말 -->
+  <section class="pg paper preface" aria-label="머리말">
+    <header class="run r"><span>삼쩌모</span><span>머리말</span></header>
+    <div class="body">
+      <p class="r">경기도의 한 외국어고등학교에 다니는 학생입니다. 창작과 언어, 개발 등 여러 분야에 관심을 두고 있는데, 신경 쓸 게 워낙 많아서 늘 시간에 쪼들리며 삽니다.</p>
+      <p class="r">부르실 때는 ‘쩌모’나 ‘삼쩌모’, 내지는 호인 ‘유천’으로 불러 주세요.</p>
+    </div>
+    <footer class="folio r">i</footer>
+  </section>
+
+  <section class="pg paper" id="about">
+    <header class="run r"><span>삼쩌모</span><span>이름</span></header>
+    <div class="body">
+      <h2 class="r">이름</h2><span class="h-rule"></span>
       <dl class="rows">
-        <dt>본명</dt>
-        <dd>송지후<span class="sep">·</span><span lang="zh">宋智厚</span><span class="note">지혜가 두텁다는 뜻</span></dd>
-        <dt>영어</dt>
-        <dd lang="en">Owen Song<span class="note" lang="ko">오우인(오웬) 송. 유럽어에서는 ‘에우게니우스’의 변형을 주로 사용함</span></dd>
-        <dt class="ruby">일본어</dt>
-        <dd class="ruby"><ruby lang="ja">和泉<rt>いずみ</rt> 流希<rt>るき</rt></ruby><span class="note">이즈미 루키</span></dd>
-        <dt>호</dt>
-        <dd><span lang="zh">流泉</span><span class="note">유천, 흐르는 샘물</span></dd>
-        <dt>니크네임</dt>
-        <dd>삼쩌모<span class="sep">·</span><span lang="en">halvfjerde</span><span class="note">흔히 ‘쩌모’로 줄여서 부르곤 함</span></dd>
+        <dt class="r">본명</dt>
+        <dd class="r">송지후<span class="sep">·</span><span lang="zh">宋智厚</span><span class="note">지혜가 두텁다는 뜻</span></dd>
+        <dt class="r">영어</dt>
+        <dd class="r" lang="en">Owen Song<span class="note" lang="ko">오우인(오웬) 송. 유럽어에서는 ‘에우게니우스’의 변형을 주로 사용함</span></dd>
+        <dt class="r ruby">일본어</dt>
+        <dd class="r ruby"><ruby lang="ja">和泉<rt>いずみ</rt> 流希<rt>るき</rt></ruby><span class="note">이즈미 루키</span></dd>
+        <dt class="r">호</dt>
+        <dd class="r"><span lang="zh">流泉</span><span class="note">유천, 흐르는 샘물</span></dd>
+        <dt class="r">니크네임</dt>
+        <dd class="r">삼쩌모<span class="sep">·</span><span lang="en">halvfjerde</span><span class="note">흔히 ‘쩌모’로 줄여서 부르곤 함</span></dd>
       </dl>
-    </section>
+    </div>
+    <footer class="folio r">1</footer>
+  </section>
 
-    <section id="profile">
-      <h2>프로우파일</h2>
+  <section class="pg paper" id="profile">
+    <header class="run r"><span>삼쩌모</span><span>프로우파일</span></header>
+    <div class="body">
+      <h2 class="r">프로우파일</h2><span class="h-rule"></span>
       <dl class="rows">
-        <dt>출생</dt>
-        <dd><span class="num">2010. 4. 3.</span><span id="age"></span></dd>
-        <dt>국적</dt>
-        <dd>대한민국<span class="sep">·</span>경기도</dd>
-        <dt>학력</dt>
-        <dd>고교 재학<span class="sep">·</span>○○외국어고등학교</dd>
-        <dt>언어</dt>
-        <dd>한국어<span class="sep">·</span>영어<span class="sep">·</span>일본어<span class="sep">·</span>관화</dd>
-        <dt>신체</dt>
-        <dd><span class="num">171</span> cm<span class="sep">·</span><span class="num">45</span> kg</dd>
-        <dt>성별·지향</dt>
-        <dd>남성<span class="sep">·</span>범성애자<span class="pan" role="img" aria-label="범성애 깃발"></span></dd>
+        <dt class="r">출생</dt>
+        <dd class="r"><span class="num">2010. 4. 3.</span><span id="age"></span></dd>
+        <dt class="r">국적</dt>
+        <dd class="r">대한민국<span class="sep">·</span>경기도</dd>
+        <dt class="r">학력</dt>
+        <dd class="r">고교 재학<span class="sep">·</span>○○외국어고등학교</dd>
+        <dt class="r">언어</dt>
+        <dd class="r">한국어<span class="sep">·</span>영어<span class="sep">·</span>일본어<span class="sep">·</span>관화</dd>
+        <dt class="r">신체</dt>
+        <dd class="r"><span class="num">171</span> cm<span class="sep">·</span><span class="num">45</span> kg</dd>
+        <dt class="r">성별·지향</dt>
+        <dd class="r">남성<span class="sep">·</span>범성애자<span class="pan" role="img" aria-label="범성애 깃발"></span></dd>
       </dl>
-    </section>
+    </div>
+    <footer class="folio even r">2</footer>
+  </section>
 
-    <section id="interests">
-      <h2>관심</h2>
-      <dl class="rows">
-        <dt>학문</dt>
-        <dd>언어학<span class="sep">·</span>도시학<span class="sep">·</span>사회학<span class="sep">·</span>수학<span class="sep">·</span>지구과학 …</dd>
-        <dt>취미</dt>
-        <dd>창작<span class="sep">·</span>개발<span class="sep">·</span>디자인<span class="sep">·</span>사진<span class="sep">·</span>그림<span class="sep">·</span>만년필<span class="sep">·</span>마작 …</dd>
-      </dl>
-      <p class="remark">학문 쪽으로는 문리과, 사회, 공학에 걸쳐 여러 분야에 관심이 있습니다만 아직은 아주 많은 지식을 가지고 있는 것은 아닙니다. 취미는 오래 갈 것은 아주 오래 가고 금방 사라질 것은 며칠도 안 가는 편이라, 꽤 오래 가고 있는 것만 적어 두었습니다.</p>
-    </section>
+  <section class="pg paper" id="interests">
+    <header class="run r"><span>삼쩌모</span><span>관심</span></header>
+    <div class="body">
+      <h2 class="r">관심</h2><span class="h-rule"></span>
+      <div class="drifts r">
+        <div class="drift" id="driftA"><span class="tag">학문</span><span class="w">언어학</span><span class="dot"></span><span class="w f">도시학</span><span class="dot"></span><span class="w">사회학</span><span class="dot"></span><span class="w f">수학</span><span class="dot"></span><span class="w">지구과학</span><span class="dot"></span><span class="w f">…</span></div>
+        <div class="drift" id="driftB"><span class="tag">취미</span><span class="w f">창작</span><span class="dot"></span><span class="w">개발</span><span class="dot"></span><span class="w f">디자인</span><span class="dot"></span><span class="w">사진</span><span class="dot"></span><span class="w f">그림</span><span class="dot"></span><span class="w">만년필</span><span class="dot"></span><span class="w f">마작</span><span class="dot"></span><span class="w">…</span></div>
+      </div>
+      <p class="remark r">학문 쪽으로는 문리과, 사회, 공학에 걸쳐 여러 분야에 관심이 있습니다만 아직은 아주 많은 지식을 가지고 있는 것은 아닙니다. 취미는 오래 갈 것은 아주 오래 가고 금방 사라질 것은 며칠도 안 가는 편이라, 꽤 오래 가고 있는 것만 적어 두었습니다.</p>
+    </div>
+    <footer class="folio r">3</footer>
+  </section>
 
-    <section id="works" class="works">
-      <h2>제작</h2>
+  <section class="pg paper works" id="works">
+    <header class="run r"><span>삼쩌모</span><span>제작</span></header>
+    <div class="body">
+      <h2 class="r">제작</h2><span class="h-rule"></span>
       <ul class="list">
-        <li>
-          <a class="title" href="https://w.halv.kr/" target="_blank" rel="noopener"><img class="ico" src="images/icons/wiki.png" alt=""><b>쩌모위키</b></a>
+        <li class="r">
+          <a class="title" href="https://w.halv.kr/" target="_blank" rel="noopener"><img class="ico" src="images/icons/wiki.png" alt=""><span>쩌모위키</span></a>
           <div class="line"><span class="grow">소규모 창작 위키</span><span class="end">w.halv.kr</span></div>
         </li>
-        <li>
-          <a class="title" href="https://w.halv.kr/Vierthalb" target="_blank" rel="noopener"><img class="ico" src="images/icons/vierthalb.png" alt=""><b lang="de">Vierthalb</b><small lang="ko">피이어트할프</small></a>
+        <li class="r">
+          <a class="title" href="https://w.halv.kr/Vierthalb" target="_blank" rel="noopener"><img class="ico" src="images/icons/vierthalb.png" alt=""><span lang="de">Vierthalb</span><small>피이어트할프</small></a>
           <div class="line"><span class="grow">미이디어위키 테에마</span><span class="end">w.halv.kr/Vierthalb</span></div>
         </li>
-        <li>
-          <a class="title" href="https://halv.kr/curlybrace/" target="_blank" rel="noopener"><img class="ico" src="images/icons/curlybrace.png" alt=""><b lang="en">CurlyBrace</b><small lang="ko">커얼리브레이스</small></a>
+        <li class="r">
+          <a class="title" href="https://halv.kr/curlybrace/" target="_blank" rel="noopener"><img class="ico" src="images/icons/curlybrace.png" alt=""><span lang="en">CurlyBrace</span><small>커얼리브레이스</small></a>
           <div class="line"><span class="grow">웨브 마아크다운·LaTeX 편집기</span><span class="end">halv.kr/curlybrace</span></div>
         </li>
-        <li>
-          <a class="title" href="https://b.halv.kr/" target="_blank" rel="noopener"><span class="ico" aria-hidden="true">b</span><b>blógue</b><small>블로구</small></a>
+        <li class="r">
+          <a class="title" href="https://b.halv.kr/" target="_blank" rel="noopener"><span class="ico" aria-hidden="true">b</span><span>blógue</span><small>블로구</small></a>
           <div class="line"><span class="grow">개인 블로그</span><span class="end">b.halv.kr</span></div>
         </li>
-        <li>
-          <a class="title" href="https://d.halv.kr/" target="_blank" rel="noopener"><span class="ico" aria-hidden="true" lang="zh">辭</span><b>사전</b></a>
+        <li class="r">
+          <a class="title" href="https://d.halv.kr/" target="_blank" rel="noopener"><span class="ico" aria-hidden="true" lang="zh">辭</span><span>사전</span></a>
           <div class="line"><span class="grow">개인 인공어 사전</span><span class="end">d.halv.kr</span></div>
         </li>
       </ul>
-    </section>
+    </div>
+    <footer class="folio even r">4</footer>
+  </section>
 
-    <section id="creations" class="cre">
-      <h2>창작</h2>
+  <section class="pg paper cre" id="creations">
+    <header class="run r"><span>삼쩌모</span><span>창작</span></header>
+    <div class="body">
+      <h2 class="r">창작</h2><span class="h-rule"></span>
       <dl class="rows">
-        <dt>세계</dt>
-        <dd><a class="line" href="https://w.halv.kr/맑은 빛으로" target="_blank" rel="noopener"><span class="grow">맑은 빛으로<small>합작 가상도시 세계</small></span><span class="end num">2024</span></a></dd>
-        <dt>인공어</dt>
+        <dt class="r">세계</dt>
+        <dd class="r"><a class="line" href="https://w.halv.kr/맑은 빛으로" target="_blank" rel="noopener"><span class="grow">맑은 빛으로<small>합작 가상도시 세계</small></span><span class="end num">2024</span></a></dd>
+        <dt class="r">인공어</dt>
         <dd>
           <ul class="list">
-            <li><a class="line" href="https://w.halv.kr/차샤" target="_blank" rel="noopener"><span class="grow"><span class="no">No. 8</span>차샤<small lang="und-Latn">trácaic</small></span><span class="end num">2022</span></a></li>
-            <li><a class="line" href="https://w.halv.kr/회밀어" target="_blank" rel="noopener"><span class="grow"><span class="no">No. 17</span>외미르샤<small lang="und-Cyrl">Ӫмирэся</small></span><span class="end num">2026</span></a></li>
+            <li class="r"><a class="line" href="https://w.halv.kr/차샤" target="_blank" rel="noopener"><span class="grow"><span class="no">No. 8</span>차샤<small>trácaic</small></span><span class="end num">2022</span></a></li>
+            <li class="r"><a class="line" href="https://w.halv.kr/회밀어" target="_blank" rel="noopener"><span class="grow"><span class="no">No. 17</span>외미르샤<small>Ӫмирэся</small></span><span class="end num">2026</span></a></li>
           </ul>
         </dd>
-        <dt>부캐</dt>
-        <dd>
+        <dt class="r">부캐</dt>
+        <dd class="r">
           <a href="https://halv.kr/jun" target="_blank" rel="noopener" class="jun-fig"><img src="images/profile/jun.webp" alt="쥰: 고양이 귀와 꼬리를 단 흰 머리 캐르크터" width="851" height="1100"></a>
           <a href="https://halv.kr/jun" target="_blank" rel="noopener"><span lang="ja">純</span> 쥰</a>
           <span class="note">시라타마 고양이 쥰. <span lang="en">Fursona</span></span>
         </dd>
       </dl>
-    </section>
+    </div>
+    <footer class="folio r">5</footer>
+  </section>
 
-    <section id="contact">
-      <h2>연락</h2>
+  <!-- 뒤 見返し -->
+  <section class="pg cover back" id="contact">
+    <div class="body">
+      <h2 class="r">연락</h2><span class="h-rule"></span>
       <ul class="list">
-        <li><a class="line" href="https://x.com/halvfjerde/" target="_blank" rel="noopener"><span class="grow">튀터</span><span class="end">halvfjerde</span></a></li>
-        <li><a class="line" href="https://www.instagram.com/halv.kr/" target="_blank" rel="noopener"><span class="grow">인스트그램</span><span class="end">halv.kr</span></a></li>
-        <li><a class="line" href="https://discord.com/users/1185926173956505664/" target="_blank" rel="noopener"><span class="grow">디스코오드</span><span class="end">h.8.e</span></a></li>
-        <li><a class="line" href="https://github.com/halvfjerde/" target="_blank" rel="noopener"><span class="grow">기트허브</span><span class="end">halvfjerde</span></a></li>
+        <li class="r"><a class="line" href="https://x.com/halvfjerde/" target="_blank" rel="noopener"><span class="grow">튀터</span><span class="end">halvfjerde</span></a></li>
+        <li class="r"><a class="line" href="https://www.instagram.com/halv.kr/" target="_blank" rel="noopener"><span class="grow">인스트그램</span><span class="end">halv.kr</span></a></li>
+        <li class="r"><a class="line" href="https://discord.com/users/1185926173956505664/" target="_blank" rel="noopener"><span class="grow">디스코오드</span><span class="end">h.8.e</span></a></li>
+        <li class="r"><a class="line" href="https://github.com/halvfjerde/" target="_blank" rel="noopener"><span class="grow">기트허브</span><span class="end">halvfjerde</span></a></li>
       </ul>
-    </section>
-  </main>
+    </div>
+    <footer class="colophon r"><span>© <span id="yr" class="num">2026</span> 송지후 · 삼쩌모</span><a href="#top" id="toTop">처음으로</a></footer>
+  </section>
 
-  <footer>
-    © <span id="yr" class="num">2026</span> 송지후 · 삼쩌모
-  </footer>
+</main>
 
-</div>
 <script>
+(function () {
+  'use strict';
+  var $ = function (s, c) { return (c || document).querySelector(s); };
+  var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
+  var clamp = function (v) { return v < 0 ? 0 : v > 1 ? 1 : v; };
+  var ease = function (t) { return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+  var root = document.documentElement, motion = root.classList.contains('motion');
+
+  /* 나이, 해 */
+  var now = new Date(), B = { y: 2010, m: 4, d: 3 };
+  var age = now.getFullYear() - B.y - ((now.getMonth() + 1 < B.m || (now.getMonth() + 1 === B.m && now.getDate() < B.d)) ? 1 : 0);
+  $('#age').textContent = ' (' + age + '세)';
+  $('#yr').textContent = now.getFullYear();
+
+  var pages = $$('.pg'), N = pages.length, tops = [], hs = [], vh = innerHeight;
+  var thumbs = $('#thumbs'), tabs = $$('a', thumbs);
+  var tabPage = tabs.map(function (a) { return pages.indexOf($(a.getAttribute('href'))); });
+
+  /* 나타날 차례 매기기 */
+  pages.forEach(function (pg) { $$('.r', pg).forEach(function (el, i) { el.style.setProperty('--i', i); }); });
+  if ('IntersectionObserver' in window && motion) {
+    var io = new IntersectionObserver(function (es) { es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }); }, { threshold: 0.18 });
+    pages.forEach(function (pg) { io.observe(pg); });
+  } else pages.forEach(function (pg) { pg.classList.add('in'); });
+
+  function measure() {
+    vh = innerHeight;
+    var y = $('main').offsetTop;
+    pages.forEach(function (pg, i) {
+      hs[i] = pg.offsetHeight; tops[i] = y; y += hs[i];
+      if (motion) {
+        var t = Math.min(0, vh - hs[i]);
+        pg.style.top = t + 'px';
+        pg.style.setProperty('--oy', (-t + vh * 0.4) + 'px');
+      }
+    });
+    driftW = [driftA.scrollWidth, driftB.scrollWidth];
+  }
+  function jump(i) { scrollTo({ top: tops[i], behavior: motion ? 'smooth' : 'auto' }); }
+  tabs.forEach(function (a, k) { a.addEventListener('click', function (e) { e.preventDefault(); jump(tabPage[k]); }); });
+  $('#toTop').addEventListener('click', function (e) { e.preventDefault(); jump(0); });
+
+  /* 관심: 쪽을 넘기는 동안 두 줄이 엇갈려 흐른다 */
+  var driftA = $('#driftA'), driftB = $('#driftB'), driftW = [0, 0], iInt = pages.indexOf($('#interests'));
+
+  var cache = [], active = -1;
+  function frame() {
+    var y = scrollY;
+    for (var i = 0; i < N; i++) {
+      var x = i < N - 1 ? clamp((y - (tops[i + 1] - vh)) / vh) : 0;
+      x = Math.round(x * 1000) / 1000;
+      if (cache[i] !== x) { cache[i] = x; pages[i].style.setProperty('--x', x); }
+    }
+    if (motion) {
+      var p = ease(clamp((y - (tops[iInt] - vh)) / (hs[iInt] + vh) * 1.15 - 0.05)), vw = innerWidth;
+      var mA = Math.max(0, driftW[0] - vw), mB = Math.max(0, driftW[1] - vw);
+      driftA.style.transform = 'translateX(' + (-mA * p).toFixed(1) + 'px)';
+      driftB.style.transform = 'translateX(' + (-mB * (1 - p)).toFixed(1) + 'px)';
+    }
+    var a = 0;
+    for (var k = 0; k < N; k++) if (y >= tops[k] - vh * 0.5) a = k;
+    if (a !== active) {
+      active = a;
+      thumbs.classList.toggle('show', a > 0);
+      thumbs.classList.toggle('on-green', a === N - 1);
+      tabs.forEach(function (t, k) { t.classList.toggle('on', tabPage[k] === a); });
+    }
+    coverOn = y < tops[1];
+  }
+  var raf = 0;
+  addEventListener('scroll', function () { if (!raf) raf = requestAnimationFrame(function () { raf = 0; frame(); }); }, { passive: true });
+  addEventListener('resize', function () { measure(); typeResize(); frame(); });
+
+  /* 앞 見返し: 이름 바꾸기 */
+  var names = $$('#names span'), ni = 0, coverOn = true;
+  if (motion) setInterval(function () { if (!coverOn) return; names[ni].classList.remove('on'); ni = (ni + 1) % names.length; names[ni].classList.add('on'); }, 2600);
+
+  /* 앞 見返し: 活字 상자. 이 쪽에 실린 글자들로 바탕을 채우고, 손이 지나가면 진해진다 */
+  var cv = $('#type'), cx = cv.getContext('2d'), cells = [], W = 0, H = 0, cell = 34, pool = [], ink = '24,52,18', last = 0;
+  var M = { x: -9999, y: -9999, on: false };
+  addEventListener('pointermove', function (e) { M.x = e.clientX; M.y = e.clientY; M.on = true; }, { passive: true });
+  document.addEventListener('pointerleave', function () { M.on = false; });
   (function () {
-    var b = { y: 2010, m: 4, d: 3 }, n = new Date();
-    var a = n.getFullYear() - b.y - ((n.getMonth() + 1 < b.m || (n.getMonth() + 1 === b.m && n.getDate() < b.d)) ? 1 : 0);
-    document.getElementById('age').textContent = ' (' + a + '세)';
-    document.getElementById('yr').textContent = n.getFullYear();
+    var seen = {}, s = document.body.innerText + 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん語言都市学数地球創作写真光深広';
+    for (var i = 0; i < s.length; i++) { var c = s[i]; if (/[가-힣ぁ-んァ-ン一-龥a-zA-ZáéíóúγЀ-ӿ]/.test(c) && !seen[c]) { seen[c] = 1; pool.push(c); } }
   })();
+  function g() { return pool[Math.random() * pool.length | 0]; }
+  function typeResize() {
+    var dpr = Math.min(devicePixelRatio || 1, 2), r = cv.getBoundingClientRect();
+    W = r.width; H = r.height; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cell = W < 640 ? 30 : 36; cells = [];
+    for (var yy = 0; yy * cell < H + cell; yy++) for (var xx = 0; xx * cell < W + cell; xx++)
+      cells.push({ x: xx * cell + cell / 2 + (yy % 2 ? cell / 4 : 0), y: yy * cell + cell / 2, ch: g(), base: 0.07 + Math.random() * 0.09, heat: 0 });
+    cx.font = (cell * 0.5) + 'px "UnBatang", "IshiiMincho Old R", "Zen Old Mincho", "Shippori Mincho B1", "Newsreader", serif';
+    cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    ink = getComputedStyle(root).getPropertyValue('--type-ink').trim() || ink;
+    draw(0, true);
+  }
+  function draw(t, force) {
+    if (!force && t - last < 45) return; last = t;
+    var r = cv.getBoundingClientRect(), mx = M.x - r.left, my = M.y - r.top, R = 130, R2 = R * R, hot = M.on && my > 0 && my < H;
+    cx.clearRect(0, 0, W, H);
+    for (var i = 0; i < cells.length; i++) {
+      var q = cells[i], dx = q.x - mx, dy = q.y - my, d2 = dx * dx + dy * dy;
+      if (hot && d2 < R2) { var k = 1 - Math.sqrt(d2) / R; if (k > q.heat) q.heat = k; if (Math.random() < 0.02 * k) q.ch = g(); }
+      var a = q.base + q.heat * 0.45; if (q.heat > 0.01) q.heat *= 0.95; else q.heat = 0;
+      cx.fillStyle = 'rgba(' + ink + ',' + Math.min(0.6, a).toFixed(3) + ')';
+      cx.fillText(q.ch, q.x, q.y);
+    }
+    if (motion) { var z = cells[Math.random() * cells.length | 0]; if (z) { z.ch = g(); z.heat = Math.max(z.heat, 0.25); } }
+  }
+  function loop(t) { requestAnimationFrame(loop); if (!document.hidden && coverOn) draw(t); }
+
+  measure(); typeResize(); frame();
+  if (motion) requestAnimationFrame(loop);
+  if (document.fonts) document.fonts.ready.then(function () { measure(); typeResize(); frame(); });
+  addEventListener('load', function () { measure(); frame(); });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', typeResize);
+})();
 </script>
 </body>
 </html>
