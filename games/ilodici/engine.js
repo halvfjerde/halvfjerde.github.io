@@ -177,7 +177,7 @@ export function legalTakes(st, p) {
   return acts;
 }
 
-/** 奪: 남의 다 차지 않은 칸의 개패 한 장 + 내 폐패로 내 칸 하나를 바로 조로 채운다 */
+/** 奪: 남의 다 차지 않은 칸의 개패 한 장 + 내 폐패로, 이미 패가 놓인 내 칸 하나를 바로 조로 채운다 */
 export function stealOptions(st, p) {
   const me = st.players[p];
   const acts = [];
@@ -189,7 +189,8 @@ export function stealOptions(st, p) {
         if (seen.has(key(x))) continue;
         seen.add(key(x));
         me.kans.forEach((mk, k) => {
-          if (mk.length === 3) return;
+          // 빈 칸에는 奪 할 수 없다: 내 패가 한 장 이상 이미 놓인 (다 차지 않은) 칸만
+          if (mk.length === 3 || mk.length === 0) return;
           const need = 3 - mk.length - 1;
           if (need < 0) return;
           for (const c of combos(sortCards(me.closed), need)) {

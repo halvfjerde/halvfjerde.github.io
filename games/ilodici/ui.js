@@ -175,7 +175,7 @@ function renderActs() {
   const hint = (t, tip = '') => { const s = document.createElement('span'); s.className = 'hint'; s.innerHTML = t; if (tip) s.dataset.tip = tip; box.appendChild(s); };
 
   if (G.mode === 'take') {
-    hint('取', '암패산이나 명패산에서 한 장 가져온다. 점선으로 표시된 남의 개패를 누르면 奪');
+    hint('取', '암패산이나 명패산에서 한 장 가져온다. 점선으로 표시된 남의 개패를 누르면 奪 (이미 패가 놓인 내 칸으로만)');
   } else if (G.mode === 'chi') {
     const o = G.chiOpts[0];
     add(`置 · 和了 ${o.ev.total}점`, () => doChi(o), 'primary', `폐패를 한꺼번에 칸에 내려놓아 화료한다 (${o.ev.yaku.map((y) => y.name).join(' · ')})`);
