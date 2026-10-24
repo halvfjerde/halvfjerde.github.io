@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>일로디스 ilódici</title>
+<script>/* 한 글자 주소로: halv.kr/games/ilodici → g.halv.kr/ilodici */if(location.hostname==='halv.kr'||location.hostname==='www.halv.kr')location.replace('https://g.halv.kr/ilodici/'+location.search+location.hash);</script>
+<meta name="description" content="차샤-하제크 문화의 3~4인 카드 게임 일로디스. CPU와 겨룬다.">
+<link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+<header class="top">
+  <h1>일로디스 <small>ilódici</small></h1>
+  <div class="info" id="info"></div>
+  <a class="rules" href="https://w.halv.kr/%EA%B2%8C%EC%9E%84:%EC%9D%BC%EB%A1%9C%EB%94%94%EC%8A%A4" target="_blank" rel="noopener">규칙</a>
+</header>
+
+<main id="table" hidden>
+  <section id="opps"></section>
+  <section class="center">
+    <button class="pile" id="wall" type="button"><span class="card back"></span><span class="cnt" id="wallCnt"></span><span class="lbl">暗牌山</span></button>
+    <button class="pile" id="river" type="button"><span id="riverTop"></span><span class="cnt" id="riverCnt"></span><span class="lbl">明牌山</span></button>
+    <div class="msg" id="msg"></div>
+  </section>
+  <section class="me" id="me">
+    <div class="name" id="meName"></div>
+    <div class="kans" id="myKans"></div>
+    <div class="hand" id="hand"></div>
+    <div class="acts" id="acts"></div>
+  </section>
+  <details class="log"><summary>기록</summary><ol id="log"></ol></details>
+</main>
+
+<section id="start" class="panel">
+  <p class="lead">81장의 일레지시리피에로 하는 3~4인 카드 게임.<br>칸 세 개를 조로 채우고 역을 갖추면 화료한다.</p>
+  <div class="row">
+    <button type="button" data-n="4">4인으로 시작</button>
+    <button type="button" data-n="3">3인으로 시작</button>
+  </div>
+  <p class="note">CPU와 겨룬다. 각자 한 번씩 친을 맡아 한 바퀴 돌면 한 판이 끝난다.</p>
+</section>
+
+<div class="modal" id="modal" hidden><div class="box" id="modalBox"></div></div>
+
+<script type="module" src="ui.js?v=1"></script>
+</body>
+</html>
