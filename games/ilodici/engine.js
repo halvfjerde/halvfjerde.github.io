@@ -90,10 +90,10 @@ export function evaluate(sets, ctx = {}) {
   if (oneSuit) normal.push({ name: '일색', hanja: '一色', pts: 12 });
 
   const allRed = all.every((c) => c.s === RED);
-  if (allRed) ex.push({ name: '적일색', hanja: '赤一色', pts: 24 });
   if (oneSuit && types.every((t) => t === 'run')
       && sets.map(runStart).sort((a, b) => a - b).join() === '1,4,7') ex.push({ name: '일기통관', hanja: '一氣通貫', pts: 24 });
-  if (allRed && all.every((c) => [1, 2, 3, 4, 6, 7, 8].includes(c.n))) ex.push({ name: '순적일색', hanja: '純赤一色', pts: 36 });
+  // 적일색: ◇ 의 1·2·3·4·6·7·8 만으로 (마작의 녹일색처럼 5·9 는 가운데가 다른 색이라 들지 않는다)
+  if (allRed && all.every((c) => [1, 2, 3, 4, 6, 7, 8].includes(c.n))) ex.push({ name: '적일색', hanja: '赤一色', pts: 36 });
   if (types.every((t) => t === 'same')) ex.push({ name: '삼동', hanja: '三同', pts: 48 });
   if (types.every((t) => t === 'same') && oneSuit) ex.push({ name: '일색삼동', hanja: '一色三同', pts: 96 });
   if (ctx.tenhou) ex.push({ name: '천화', hanja: '天和', pts: 96 });

@@ -59,6 +59,7 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 .card .num { font-family: "Newsreader", var(--mincho); font-weight: 600; font-size: 13.5px; fill: currentColor; font-variant-numeric: lining-nums; }
 .card .num.big { font-size: 30px; }
 .card.red { color: var(--red); }
+.card .alt { color: var(--ink); }
 .card.back .lattice { fill: url(#backPat); }
 .card.back .frame { fill: none; stroke: color-mix(in srgb, var(--accent) 60%, var(--ink)); stroke-width: .8; }
 .card.sm { --cw: 1.55rem; --ch: 2.17rem; }
