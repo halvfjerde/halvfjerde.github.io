@@ -7,8 +7,9 @@
   --rule: #bdb6a6; --line: #d5cfc1; --accent: #639c59; --red: #b0302a; --paper: #fffefb;
   --ink-rule: color-mix(in srgb, var(--ink) 72%, var(--bg));
   --mincho: "Newsreader", "IshiiMincho Old R", "UnBatang", "Zen Old Mincho", "Hiragino Mincho ProN", "AppleMyungjo", serif;
-  --gothic: "IshiiGothic R", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-  --gothic-b: "IshiiGothic B", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  /* 고딕 자리의 라틴 문자·숫자도 Newsreader (石井ゴシック 의 라틴은 덧붙인 다른 글꼴이라) */
+  --gothic: "Newsreader", "IshiiGothic R", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --gothic-b: "Newsreader", "IshiiGothic B", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --cw: 2.15rem; --ch: 3.01rem;
   color-scheme: light dark;
 }
@@ -81,14 +82,14 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 
 /* ── 사람 이름: 目次처럼 點線으로 점수까지 ── */
 .who { display: flex; align-items: baseline; gap: .5rem; font-family: var(--gothic); font-size: .9rem; margin-bottom: .45rem; }
-.who .nm { font-family: var(--gothic-b); font-weight: 700; font-synthesis: none; }
+.who .nm { display: inline-flex; align-items: center; gap: .32em; font-family: var(--gothic-b); font-weight: 700; font-synthesis-style: none; }
 .who .ex { color: var(--muted); font-size: .82rem; }
 .who .lead { flex: 1; min-width: 1.5rem; border-bottom: 1.5px dotted var(--rule); transform: translateY(-.3em); }
 .who .pt { font-variant-numeric: tabular-nums; }
 .who.turn .nm { color: var(--accent); }
-.who.turn .nm::before { content: "▸"; margin-right: .25em; font-size: .85em; }
-.oya { display: inline-block; margin-left: .35em; padding: 0 .18em; font-family: var(--mincho); font-weight: 400; font-size: .78em; line-height: 1.25;
-  border: 1px solid var(--red); color: var(--red); vertical-align: .08em; }
+.who.turn .nm::before { content: "▸"; font-size: .85em; }
+.oya { display: inline-block; padding: .14em .16em .1em; font-family: var(--mincho); font-weight: 400; font-size: .74em; line-height: 1;
+  border: 1px solid var(--red); color: var(--red); }
 
 #opps { padding-top: 1.2rem; }
 .opp { padding: .2rem 0 .9rem; }
@@ -103,6 +104,9 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 .pile.click .card { outline: 1.5px dotted var(--accent); outline-offset: 2px; }
 .pile:disabled { cursor: default; }
 .msg { flex: 1; margin: 0; font-size: .92rem; color: var(--muted); }
+#riverTop { display: block; line-height: 0; }
+.pile > .card, #riverTop { grid-row: 2; }
+.pile .cnt { grid-row: 2; }
 
 /* ── 나 ── */
 .me { padding-top: .8rem; }
@@ -147,3 +151,10 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 .ts-glyphs { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; font-family: "IshiiMincho Old R"; }
 .ts-glyphs.g { font-family: "IshiiGothic B"; }
 .ts-glyphs.r { font-family: "IshiiGothic R"; }
+
+/* 풀이 */
+[data-tip] { -webkit-touch-callout: none; }
+.hint[data-tip], .lbl[data-tip], .ex [data-tip], .lead[data-tip] { cursor: help; text-decoration: underline dotted var(--faint); text-underline-offset: .25em; }
+#tip { position: fixed; z-index: 30; max-width: 16rem; padding: .4rem .6rem; background: var(--ink); color: var(--bg);
+  font-family: var(--gothic); font-size: .8rem; line-height: 1.5; pointer-events: none; }
+#tip[hidden] { display: none; }
