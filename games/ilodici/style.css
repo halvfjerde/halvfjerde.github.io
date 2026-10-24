@@ -9,7 +9,7 @@
   --mincho: "Newsreader", "IshiiMincho Old R", "UnBatang", "Zen Old Mincho", "Hiragino Mincho ProN", "AppleMyungjo", serif;
   --gothic: "IshiiGothic R", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --gothic-b: "IshiiGothic B", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-  --cw: 2.05rem; --ch: 2.85rem;
+  --cw: 2.15rem; --ch: 3.01rem;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -52,20 +52,21 @@ a:hover { text-decoration: underline; text-underline-offset: .25em; }
 button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis: none; border-bottom: 2px solid var(--accent); }
 
 /* ── 패 ── */
-.card { position: relative; display: inline-flex; align-items: baseline; justify-content: center; padding-top: .62em;
-  width: var(--cw); height: var(--ch); border: 1px solid var(--ink); border-radius: 2px; background: var(--paper);
-  font-family: "Newsreader", var(--mincho); font-weight: 600; font-size: 1.12rem; line-height: 1; flex: none; user-select: none; }
-.card i { font-style: normal; font-weight: 400; font-size: .72em; margin-left: .04em; font-family: var(--mincho); }
-.card.red { color: var(--red); border-color: var(--red); }
-.card.back { background: var(--accent);
-  background-image: repeating-linear-gradient(45deg, transparent 0 3px, color-mix(in srgb, var(--paper) 35%, transparent) 3px 4px);
-  border-color: color-mix(in srgb, var(--accent) 70%, var(--ink)); }
-.card.sm { --cw: 1.55rem; --ch: 2.12rem; font-size: .86rem; }
+.card { position: relative; display: inline-block; width: var(--cw); height: var(--ch); flex: none; user-select: none; color: var(--ink); line-height: 0; }
+.card svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.card .face { fill: var(--paper); stroke: var(--ink-rule); stroke-width: 1; }
+.card .num { font-family: "Newsreader", var(--mincho); font-weight: 600; font-size: 13.5px; fill: currentColor; font-variant-numeric: lining-nums; }
+.card .num.big { font-size: 30px; }
+.card.red { color: var(--red); }
+.card.back .lattice { fill: url(#backPat); }
+.card.back .frame { fill: none; stroke: color-mix(in srgb, var(--accent) 60%, var(--ink)); stroke-width: .8; }
+.card.sm { --cw: 1.55rem; --ch: 2.17rem; }
 .card.ghost { opacity: .25; }
 /* 고를 수 있는 것: 點線 테두리 */
 .card.click { outline: 1.5px dotted var(--accent); outline-offset: 2px; cursor: pointer; }
 .card.pick { cursor: pointer; }
-.card.sel { transform: translateY(-.45rem); border-color: var(--accent); box-shadow: 0 2px 0 var(--accent); }
+.card.sel { transform: translateY(-.45rem); }
+.card.sel .face { stroke: var(--accent); stroke-width: 2; }
 /* 방금 들어온 패: 위에 작은 점 */
 .card.new::after { content: ""; position: absolute; top: -.42rem; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--accent); }
 
@@ -73,9 +74,8 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 .kans { display: flex; gap: .6rem; flex-wrap: wrap; }
 .kan { display: inline-flex; gap: 2px; padding: 3px; align-items: center;
   min-width: calc(var(--cw) * 3 + 10px); min-height: calc(var(--ch) + 8px); border: 1px dotted var(--rule); }
-.kan.sm { --cw: 1.55rem; --ch: 2.12rem; }
-.kan.md { --cw: 1.8rem; --ch: 2.5rem; }
-.kan.md .card { font-size: 1rem; }
+.kan.sm { --cw: 1.55rem; --ch: 2.17rem; }
+.kan.md { --cw: 1.85rem; --ch: 2.59rem; }
 .kan.full { border: 3px double var(--ink-rule); padding: 1px; }
 .kan.target { border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); cursor: pointer; }
 
