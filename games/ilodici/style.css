@@ -157,5 +157,5 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 [data-tip] { -webkit-touch-callout: none; }
 .hint[data-tip], .lbl[data-tip], .ex [data-tip], .lead[data-tip] { cursor: help; text-decoration: underline dotted var(--faint); text-underline-offset: .25em; }
 #tip { position: fixed; z-index: 30; max-width: 16rem; padding: .4rem .6rem; background: var(--ink); color: var(--bg);
-  font-family: var(--gothic); font-size: .8rem; line-height: 1.5; pointer-events: none; }
+  font-family: var(--gothic); font-size: .8rem; line-height: 1.5; word-break: keep-all; pointer-events: none; }
 #tip[hidden] { display: none; }
