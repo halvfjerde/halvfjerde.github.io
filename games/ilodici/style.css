@@ -155,7 +155,7 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 
 /* 풀이 */
 [data-tip] { -webkit-touch-callout: none; }
-.hint[data-tip], .lbl[data-tip], .ex [data-tip], .lead[data-tip] { cursor: help; text-decoration: underline dotted var(--faint); text-underline-offset: .25em; }
-#tip { position: fixed; z-index: 30; max-width: 16rem; padding: .4rem .6rem; background: var(--ink); color: var(--bg);
+.hint[data-tip], .lbl[data-tip], .ex [data-tip] { cursor: help; }
+#tip { position: fixed; z-index: 30; max-width: 16rem; padding: .5rem .7rem .42rem;   /* 은돋움이 조금 올라가 있어 위를 조금 더 */ background: var(--ink); color: var(--bg);
   font-family: var(--gothic); font-size: .8rem; line-height: 1.5; word-break: keep-all; pointer-events: none; }
 #tip[hidden] { display: none; }
