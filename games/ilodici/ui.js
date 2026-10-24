@@ -27,13 +27,15 @@ const PIPS = {
   8: [[18, 16], [32, 16], [25, 25.5], [18, 35], [32, 35], [25, 44.5], [18, 54], [32, 54]],
   9: [[17, 15], [33, 15], [17, 28], [33, 28], [25, 35], [17, 42], [33, 42], [17, 55], [33, 55]],
 };
-const use = (s, x, y, w) => `<use href="#suit${s}" x="${x - w / 2}" y="${y - w / 2}" width="${w}" height="${w}"/>`;
+const use = (s, x, y, w, cls = '') => `<use href="#suit${s}"${cls ? ` class="${cls}"` : ''} x="${x - w / 2}" y="${y - w / 2}" width="${w}" height="${w}"/>`;
+/* ◇ 의 5·9 는 가운데 문양 하나를 먹색으로 (마작 녹일색의 5·9삭처럼, 적일색에 들지 않는 패) */
+const oddMid = (c) => c.s === E.RED && (c.n === 5 || c.n === 9);
 function faceSVG(c, sm) {
   const body = sm
-    ? `<text class="num big" x="25" y="37" text-anchor="middle">${c.n}</text>${use(c.s, 25, 51, 13)}`
+    ? `<text class="num big" x="25" y="37" text-anchor="middle">${c.n}</text>${use(c.s, 25, 51, 13, oddMid(c) ? 'alt' : '')}`
     : `<g class="idx"><text class="num" x="7" y="14.5" text-anchor="middle">${c.n}</text>${use(c.s, 7, 20.5, 6)}</g>`
       + `<g class="idx" transform="rotate(180 25 35)"><text class="num" x="7" y="14.5" text-anchor="middle">${c.n}</text>${use(c.s, 7, 20.5, 6)}</g>`
-      + PIPS[c.n].map(([x, y, w = 9.2]) => use(c.s, x, y, w)).join('');
+      + PIPS[c.n].map(([x, y, w = 9.2]) => use(c.s, x, y, w, oddMid(c) && x === 25 && y === 35 ? 'alt' : '')).join('');
   return `<svg viewBox="0 0 50 70" aria-hidden="true"><rect class="face" x="0.6" y="0.6" width="48.8" height="68.8" rx="3"/>${body}</svg>`;
 }
 const BACK_SVG = '<svg viewBox="0 0 50 70" aria-hidden="true"><rect class="face" x="0.6" y="0.6" width="48.8" height="68.8" rx="3"/>'
