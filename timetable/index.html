@@ -13,6 +13,9 @@
 })();
 </script>
 <title>시각표 편집기</title>
+<!-- 은바탕·은돋움 (한글만 든 판, 위키와 같은 파일을 t.halv.kr/font/un 에서 읽는다) -->
+<link rel="stylesheet" href="/font/un/unbatang.css?v=1">
+<link rel="stylesheet" href="/font/un/undotum.css?v=1">
 <!-- 寫硏 書體 (TypeSquare 웹폰트, 登錄한 도메인에서만 나온다). 미리보기의 明朝·고딕에만 쓴다 -->
 <script type="text/javascript" src="//typesquare.com/accessor/ko/script/typesquare.js?ee85a1e0da0743cc9ca6031dd3b19c5d" charset="utf-8"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -601,11 +604,11 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   --jtt-fg: var(--text, var(--jtt-fg0));
   --jtt-bg: var(--background, var(--bg, var(--jtt-bg0)));
   /* 本文（駅名・見出し・注記）— 明朝体。使えるものを先頭に */
-  /* 写研書体（TypeSquare）が読めればそれを先に（ウィキの Common.css と同じ） */
-  --jtt-text: "IshiiMincho Old R", "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "MS PMincho",
+  /* 写研書体（TypeSquare）が読めればそれを先に。한글은 은바탕・은돋움（ウィキの Common.css と同じ） */
+  --jtt-text: "IshiiMincho Old R", "UnBatang", "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "MS PMincho",
               "AppleMyungjo", "Nanum Myeongjo", "Batang", serif !important;
   /* 太字・マーク類 — ゴシック（実物の時刻表でも太字は角ゴシック） */
-  --jtt-sans: "IshiiGothic B", "Hiragino Kaku Gothic ProN", "Yu Gothic", "YuGothic", "Meiryo",
+  --jtt-sans: "IshiiGothic B", "UnDotum", "Hiragino Kaku Gothic ProN", "Yu Gothic", "YuGothic", "Meiryo",
               "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
   /* 時刻・キロ程・記号 — DiaPro（数字と記号だけ。他は本文に落ちる） */
   --jtt-dia:  "DiaPro", var(--jtt-text) !important;
