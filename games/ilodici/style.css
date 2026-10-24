@@ -41,16 +41,16 @@ a:hover { text-decoration: underline; text-underline-offset: .25em; }
 /* ── 扉 (처음 화면) ── */
 .title-page { text-align: center; padding: 2.6rem 0 1rem; }
 .title-page .lead { margin: 0 0 1.8rem; line-height: 1.9; }
-.title-page .choose { display: flex; justify-content: center; align-items: baseline; gap: .9rem; margin: 0; }
+.title-page .choose { display: flex; justify-content: center; align-items: baseline; gap: .9rem; margin: 0; font-size: .95rem; }
 .title-page .choose span { color: var(--faint); }
 .title-page .note { margin-top: 1.8rem; color: var(--muted); font-size: .88rem; }
 .title-page .note::before { content: ""; display: block; width: 2.5rem; margin: 0 auto 1.4rem; border-top: 1px solid var(--ink-rule); }
 
 /* 글자 단추: 둥근 단추 대신 草綠 글자와 밑줄 */
 .title-page button, .acts button, .box button {
-  color: var(--accent); border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); padding: .1rem 0; line-height: 1.4; }
+  color: var(--accent); border-bottom: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); padding: 0 0 .04em; line-height: 1.2; }
 .title-page button:hover, .acts button:hover, .box button:hover { border-bottom-color: var(--accent); }
-button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis: none; border-bottom: 2px solid var(--accent); }
+button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis: none; border-bottom: 1.5px solid var(--accent); }
 
 /* ── 패 ── */
 .card { position: relative; display: inline-block; width: var(--cw); height: var(--ch); flex: none; user-select: none; color: var(--ink); line-height: 0; }
@@ -82,9 +82,9 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 .kan.target { border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); cursor: pointer; }
 
 /* ── 사람 이름: 目次처럼 點線으로 점수까지 ── */
-.who { display: flex; align-items: baseline; gap: .5rem; font-family: var(--gothic); font-size: .9rem; margin-bottom: .45rem; }
+.who { display: flex; align-items: baseline; gap: .5rem; font-family: var(--gothic); font-size: .86rem; margin-bottom: .5rem; }
 .who .nm { display: inline-flex; align-items: center; gap: .32em; font-family: var(--gothic-b); font-weight: 700; font-synthesis-style: none; }
-.who .ex { color: var(--muted); font-size: .82rem; }
+.who .ex { color: var(--muted); font-size: .9em; }
 .who .lead { flex: 1; min-width: 1.5rem; border-bottom: 1.5px dotted var(--rule); transform: translateY(-.3em); }
 .who .pt { font-variant-numeric: tabular-nums; }
 .who.turn .nm { color: var(--accent); }
@@ -100,11 +100,11 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 .center { display: flex; align-items: center; gap: 1.4rem; margin: .6rem 0; padding: .9rem 0;
   border-top: 1px solid var(--ink-rule); border-bottom: 1px solid var(--ink-rule); }
 .pile { display: grid; grid-template-columns: auto auto; align-items: end; gap: .25rem .45rem; }
-.pile .lbl { grid-column: 1 / 3; font-size: .78rem; color: var(--muted); letter-spacing: .1em; text-align: left; }
-.pile .cnt { font-family: var(--gothic); font-size: .8rem; color: var(--muted); }
+.pile .lbl { grid-column: 1 / 3; font-size: .74rem; color: var(--muted); letter-spacing: .14em; text-align: left; margin-bottom: .1rem; }
+.pile .cnt { font-family: var(--gothic); font-size: .76rem; color: var(--muted); }
 .pile.click .card { outline: 1.5px dotted var(--accent); outline-offset: 2px; }
 .pile:disabled { cursor: default; }
-.msg { flex: 1; margin: 0; font-size: .92rem; color: var(--muted); }
+.msg { flex: 1; margin: 0; font-size: .86rem; color: var(--muted); }
 #riverTop { display: block; line-height: 0; }
 .pile > .card, #riverTop { grid-row: 2; }
 .pile .cnt { grid-row: 2; }
@@ -112,8 +112,8 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 /* ── 나 ── */
 .me { padding-top: .8rem; }
 .hand { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 1rem; padding-top: .55rem; min-height: calc(var(--ch) + .6rem); }
-.acts { display: flex; gap: .5rem 1.2rem; flex-wrap: wrap; align-items: baseline; margin-top: 1rem; min-height: 1.8rem; font-size: .95rem; }
-.acts .hint { color: var(--muted); font-size: .88rem; }
+.acts { display: flex; gap: .6rem 1.15rem; flex-wrap: wrap; align-items: baseline; margin-top: 1.1rem; min-height: 1.6rem; font-size: .9rem; }
+.acts .hint { color: var(--muted); font-family: var(--gothic); font-size: .82rem; letter-spacing: .06em; }
 
 /* ── 記錄 · 奧付 ── */
 .log { margin-top: 1.6rem; font-family: var(--gothic); font-size: .82rem; color: var(--muted); }
