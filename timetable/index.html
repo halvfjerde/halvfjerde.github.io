@@ -13,6 +13,8 @@
 })();
 </script>
 <title>시각표 편집기</title>
+<!-- 寫硏 書體 (TypeSquare 웹폰트, 登錄한 도메인에서만 나온다). 미리보기의 明朝·고딕에만 쓴다 -->
+<script type="text/javascript" src="//typesquare.com/accessor/ko/script/typesquare.js?ee85a1e0da0743cc9ca6031dd3b19c5d" charset="utf-8"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
@@ -599,10 +601,11 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   --jtt-fg: var(--text, var(--jtt-fg0));
   --jtt-bg: var(--background, var(--bg, var(--jtt-bg0)));
   /* 本文（駅名・見出し・注記）— 明朝体。使えるものを先頭に */
-  --jtt-text: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "MS PMincho",
+  /* 写研書体（TypeSquare）が読めればそれを先に（ウィキの Common.css と同じ） */
+  --jtt-text: "IshiiMincho Old R", "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "MS PMincho",
               "AppleMyungjo", "Nanum Myeongjo", "Batang", serif !important;
   /* 太字・マーク類 — ゴシック（実物の時刻表でも太字は角ゴシック） */
-  --jtt-sans: "Hiragino Kaku Gothic ProN", "Yu Gothic", "YuGothic", "Meiryo",
+  --jtt-sans: "IshiiGothic B", "Hiragino Kaku Gothic ProN", "Yu Gothic", "YuGothic", "Meiryo",
               "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
   /* 時刻・キロ程・記号 — DiaPro（数字と記号だけ。他は本文に落ちる） */
   --jtt-dia:  "DiaPro", var(--jtt-text) !important;
@@ -3610,6 +3613,10 @@ function initImport() {
    ========================================================================= */
 let pvTimer = 0;
 function schedulePreview() { clearTimeout(pvTimer); pvTimer = setTimeout(renderPreview, 280); }
+/* TypeSquare は読み込んだ時点の文字しか取ってこないので、미리보기를 다시 그리면 잠시 뒤 새 글자를 받게 한다 */
+let tsTimer = 0;
+function tsReload() { clearTimeout(tsTimer); tsTimer = setTimeout(() => { if (window.Ts && Ts.loadFont) Ts.loadFont(); }, 800); }
+
 function renderPreview() {
   if (!LUA) return;
   const view = $('#pvView').value, selSt = $('#pvStation');
@@ -3624,6 +3631,7 @@ function renderPreview() {
     const text = C.toText(S.doc, { wrap: false });
     const html = LUA.call('render_text', text, view, S.dir, view === 'board' ? (selSt.value || names[0] || '') : '');
     $('#pvBody').innerHTML = html;
+    tsReload();
     $('#pvTime').textContent = `${Math.round(performance.now() - t0)}ms`;
     scheduleGrow();
   } catch (err) {
