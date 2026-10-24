@@ -15,16 +15,43 @@ const G = {
 
 /* ── 그리기 ───────────────────────────────────────────────────────── */
 
+/* 패 앞면: 옛 서양 트럼프처럼 모서리에 수, 가운데에 문양을 수만큼. 작은 패는 수와 문양 하나만 */
+const PIPS = {
+  1: [[25, 35, 17]],
+  2: [[25, 18], [25, 52]],
+  3: [[25, 17], [25, 35], [25, 53]],
+  4: [[18, 18], [32, 18], [18, 52], [32, 52]],
+  5: [[18, 18], [32, 18], [25, 35], [18, 52], [32, 52]],
+  6: [[18, 18], [32, 18], [18, 35], [32, 35], [18, 52], [32, 52]],
+  7: [[18, 17], [32, 17], [25, 26], [18, 35], [32, 35], [18, 53], [32, 53]],
+  8: [[18, 16], [32, 16], [25, 25.5], [18, 35], [32, 35], [25, 44.5], [18, 54], [32, 54]],
+  9: [[17, 15], [33, 15], [17, 28], [33, 28], [25, 35], [17, 42], [33, 42], [17, 55], [33, 55]],
+};
+const use = (s, x, y, w) => `<use href="#suit${s}" x="${x - w / 2}" y="${y - w / 2}" width="${w}" height="${w}"/>`;
+function faceSVG(c, sm) {
+  const body = sm
+    ? `<text class="num big" x="25" y="37" text-anchor="middle">${c.n}</text>${use(c.s, 25, 51, 13)}`
+    : `<g class="idx"><text class="num" x="7" y="14.5" text-anchor="middle">${c.n}</text>${use(c.s, 7, 20.5, 6)}</g>`
+      + `<g class="idx" transform="rotate(180 25 35)"><text class="num" x="7" y="14.5" text-anchor="middle">${c.n}</text>${use(c.s, 7, 20.5, 6)}</g>`
+      + PIPS[c.n].map(([x, y, w = 9.2]) => use(c.s, x, y, w)).join('');
+  return `<svg viewBox="0 0 50 70" aria-hidden="true"><rect class="face" x="0.6" y="0.6" width="48.8" height="68.8" rx="3"/>${body}</svg>`;
+}
+const BACK_SVG = '<svg viewBox="0 0 50 70" aria-hidden="true"><rect class="face" x="0.6" y="0.6" width="48.8" height="68.8" rx="3"/>'
+  + '<rect class="lattice" x="4.5" y="4.5" width="41" height="61" rx="1"/><rect class="frame" x="4.5" y="4.5" width="41" height="61" rx="1"/></svg>';
+
 function cardEl(c, { sm = false, cls = '' } = {}) {
   const el = document.createElement('span');
   el.className = `card${c.s === E.RED ? ' red' : ''}${sm ? ' sm' : ''} ${cls}`.trim();
-  el.innerHTML = `${c.n}<i>${E.SUITS[c.s]}</i>`;
+  el.innerHTML = faceSVG(c, sm);
+  el.setAttribute('role', 'img');
+  el.setAttribute('aria-label', `${c.n}${E.SUITS[c.s]}`);
   el.dataset.id = c.id;
   return el;
 }
 function backEl(sm = true) {
   const el = document.createElement('span');
   el.className = `card back${sm ? ' sm' : ''}`;
+  el.innerHTML = BACK_SVG;
   return el;
 }
 const cardText = (c) => `<span class="${c.s === E.RED ? 'minus' : ''}">${c.n}${E.SUITS[c.s]}</span>`;
