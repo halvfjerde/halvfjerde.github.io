@@ -1,4 +1,17 @@
-<script>/* 한 글자 주소로: halv.kr/timetable → t.halv.kr */if(location.hostname==='halv.kr'||location.hostname==='www.halv.kr')location.replace('https://t.halv.kr/'+location.search+location.hash);</script>
+<script>/* 한 글자 주소로: halv.kr/timetable → t.halv.kr. 주소(origin)가 바뀌면 브라우저 저장소가 따로 되므로, 옛 주소에 저장된 편집 내용을 함께 넘겨 준다 */
+(function () {
+  var K = 'tt-editor-v4', M = '#tt-migrate=';
+  if (location.hostname === 'halv.kr' || location.hostname === 'www.halv.kr') {
+    var d = null; try { d = localStorage.getItem(K); } catch (e) {}
+    location.replace('https://t.halv.kr/' + location.search + (d ? M + encodeURIComponent(d) : location.hash));
+    return;
+  }
+  if (location.hash.indexOf(M) === 0) {
+    try { if (!localStorage.getItem(K)) localStorage.setItem(K, decodeURIComponent(location.hash.slice(M.length))); } catch (e) {}
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+})();
+</script>
 <title>시각표 편집기</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
