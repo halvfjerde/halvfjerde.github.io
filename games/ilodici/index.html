@@ -6,42 +6,59 @@
 <title>일로디스 ilódici</title>
 <script>/* 한 글자 주소로: halv.kr/games/ilodici → g.halv.kr/ilodici */if(location.hostname==='halv.kr'||location.hostname==='www.halv.kr')location.replace('https://g.halv.kr/ilodici/'+location.search+location.hash);</script>
 <meta name="description" content="차샤-하제크 문화의 3~4인 카드 게임 일로디스. CPU와 겨룬다.">
-<link rel="stylesheet" href="style.css?v=1">
+<!-- 라틴 문자: Newsreader (블로그와 같다) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..600&display=swap" rel="stylesheet">
+<!-- 한글: 은바탕·은돋움 (한글만 든 판) -->
+<link rel="stylesheet" href="/font/un/unbatang.css?v=1">
+<link rel="stylesheet" href="/font/un/undotum.css?v=1">
+<!-- 漢字·가나: 寫硏 書體 (TypeSquare, 登錄한 도메인에서만 나온다) -->
+<script type="text/javascript" src="//typesquare.com/accessor/ko/script/typesquare.js?ee85a1e0da0743cc9ca6031dd3b19c5d" charset="utf-8"></script>
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
-<header class="top">
-  <h1>일로디스 <small>ilódici</small></h1>
-  <div class="info" id="info"></div>
-  <a class="rules" href="https://w.halv.kr/%EA%B2%8C%EC%9E%84:%EC%9D%BC%EB%A1%9C%EB%94%94%EC%8A%A4" target="_blank" rel="noopener">규칙</a>
+<header class="mast">
+  <h1>일로디스</h1>
+  <p class="roman">ilódici</p>
+  <nav class="bar">
+    <span id="info"></span>
+    <a href="https://w.halv.kr/%EA%B2%8C%EC%9E%84:%EC%9D%BC%EB%A1%9C%EB%94%94%EC%8A%A4" target="_blank" rel="noopener">規則</a>
+    <a href="../">目錄</a>
+  </nav>
 </header>
 
 <main id="table" hidden>
   <section id="opps"></section>
   <section class="center">
-    <button class="pile" id="wall" type="button"><span class="card back"></span><span class="cnt" id="wallCnt"></span><span class="lbl">暗牌山</span></button>
-    <button class="pile" id="river" type="button"><span id="riverTop"></span><span class="cnt" id="riverCnt"></span><span class="lbl">明牌山</span></button>
-    <div class="msg" id="msg"></div>
+    <button class="pile" id="wall" type="button"><span class="lbl">暗牌山</span><span class="card back"></span><span class="cnt" id="wallCnt"></span></button>
+    <button class="pile" id="river" type="button"><span class="lbl">明牌山</span><span id="riverTop"></span><span class="cnt" id="riverCnt"></span></button>
+    <p class="msg" id="msg"></p>
   </section>
   <section class="me" id="me">
-    <div class="name" id="meName"></div>
+    <div id="meName"></div>
     <div class="kans" id="myKans"></div>
     <div class="hand" id="hand"></div>
     <div class="acts" id="acts"></div>
   </section>
-  <details class="log"><summary>기록</summary><ol id="log"></ol></details>
+  <details class="log"><summary>記錄</summary><ol id="log"></ol></details>
 </main>
 
-<section id="start" class="panel">
-  <p class="lead">81장의 일레지시리피에로 하는 3~4인 카드 게임.<br>칸 세 개를 조로 채우고 역을 갖추면 화료한다.</p>
-  <div class="row">
-    <button type="button" data-n="4">4인으로 시작</button>
-    <button type="button" data-n="3">3인으로 시작</button>
-  </div>
-  <p class="note">CPU와 겨룬다. 각자 한 번씩 친을 맡아 한 바퀴 돌면 한 판이 끝난다.</p>
+<section id="start" class="title-page">
+  <p class="lead">차샤-하제크 文化의 3~4인 카드 게임.<br>81장의 일레지시리피에로 칸 세 개를 조로 채우고,<br>役을 갖추면 和了한다.</p>
+  <p class="choose"><button type="button" data-n="4">4인으로 시작</button><span>·</span><button type="button" data-n="3">3인으로 시작</button></p>
+  <p class="note">相對는 CPU. 저마다 한 번씩 親을 맡아 한 바퀴 돌면 한 판이 끝난다.</p>
 </section>
+
+<footer class="colophon">일로디스 · 規則은 쩌모위키 「게임:일로디스」를 따른다</footer>
 
 <div class="modal" id="modal" hidden><div class="box" id="modalBox"></div></div>
 
-<script type="module" src="ui.js?v=1"></script>
+<!-- TypeSquare 는 처음 읽을 때 문서에 있는 글자만 받아 오므로, 나중에 그려지는 漢字·가나를 미리 적어 둔다 -->
+<div class="ts-glyphs" aria-hidden="true">暗牌山明牌山閉開親局判規則目錄記錄文化役和了取出奪置換榮流展赤組冇連帯端盃口一色氣通貫純三同天上排他相對＋●◇×・…「」</div>
+<div class="ts-glyphs g" aria-hidden="true">暗牌山明牌山閉開親局判規則目錄記錄文化役和了取出奪置換榮流展赤組冇連帯端盃口一色氣通貫純三同天上排他相對＋●◇×・…「」</div>
+<div class="ts-glyphs r" aria-hidden="true">暗牌山明牌山閉開親局判規則目錄記錄文化役和了取出奪置換榮流展赤組冇連帯端盃口一色氣通貫純三同天上排他相對＋●◇×・…「」</div>
+
+<script type="module" src="ui.js?v=2"></script>
 </body>
 </html>
