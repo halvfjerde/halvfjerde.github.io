@@ -451,6 +451,7 @@ function closeModal() { $('#modal').hidden = true; }
 
 /* ── 시작 ─────────────────────────────────────────────────────────── */
 
+$('#wall .card').innerHTML = BACK_SVG;
 document.querySelectorAll('#start [data-n]').forEach((b) => (b.onclick = () => startMatch(+b.dataset.n)));
 $('#wall').onclick = () => G.mode === 'take' && doTake({ type: 'wall' });
 $('#river').onclick = () => G.mode === 'take' && G.st.river.length && doTake({ type: 'river' });
