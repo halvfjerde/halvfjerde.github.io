@@ -104,7 +104,7 @@ function render() {
     const pl = st.players[p];
     const row = document.createElement('div');
     row.className = 'opp';
-    row.innerHTML = whoHTML(p, `閉牌 ${pl.closed.length}`);
+    row.innerHTML = whoHTML(p, `<span data-tip="폐패(손에 든 패) ${pl.closed.length}장">閉 ${pl.closed.length}</span>`);
     const ks = document.createElement('div');
     ks.className = 'kans';
     pl.kans.forEach((k, i) => ks.appendChild(kanEl(k, { sm: true, idx: i, owner: p })));
@@ -161,34 +161,36 @@ function renderActs() {
   const box = $('#acts');
   box.innerHTML = '';
   const st = G.st;
-  const add = (text, fn, cls = '') => {
+  const add = (text, fn, cls = '', tip = '') => {
     const b = document.createElement('button');
     b.type = 'button';
     b.innerHTML = text;
     if (cls) b.className = cls;
+    if (tip) b.dataset.tip = tip;
     b.onclick = fn;
     box.appendChild(b);
   };
-  const hint = (t) => { const s = document.createElement('span'); s.className = 'hint'; s.innerHTML = t; box.appendChild(s); };
+  const hint = (t, tip = '') => { const s = document.createElement('span'); s.className = 'hint'; s.innerHTML = t; if (tip) s.dataset.tip = tip; box.appendChild(s); };
 
   if (G.mode === 'take') {
-    hint('取: 암패산이나 명패산을 누르거나, 노란 테두리의 남의 개패를 눌러 奪');
+    hint('取', '암패산이나 명패산에서 한 장 가져온다. 점선으로 표시된 남의 개패를 누르면 奪');
   } else if (G.mode === 'chi') {
     const o = G.chiOpts[0];
-    add(`置 하여 화료 (${o.ev.total}점)`, () => doChi(o), 'primary');
-    add('置 하지 않고 계속', () => { G.mode = 'out'; afterTakeOut(); });
+    add(`置 · 和了 ${o.ev.total}점`, () => doChi(o), 'primary', `폐패를 한꺼번에 칸에 내려놓아 화료한다 (${o.ev.yaku.map((y) => y.name).join(' · ')})`);
+    add('넘기기', () => { G.mode = 'out'; afterTakeOut(); }, '', '置 하지 않고 出 로 넘어간다');
   } else if (G.mode === 'out') {
-    if (G.sel == null) { hint('出: 폐패 한 장을 고른다'); return; }
+    if (G.sel == null) { hint('出', '폐패 한 장을 고른다'); return; }
     const acts = outActsFor(G.sel);
     const c = st.players[0].closed.find((x) => x.id === G.sel);
     for (const a of acts) {
-      if (a.type === 'place') add(a.win ? `칸 ${a.kan + 1}에 놓고 화료 (${a.win.total}점)` : `칸 ${a.kan + 1}에 놓기`, () => doOut(a), a.win ? 'primary' : '');
+      if (a.type === 'place') add(a.win ? `칸 ${a.kan + 1} · 和了 ${a.win.total}점` : `칸 ${a.kan + 1}`, () => doOut(a), a.win ? 'primary' : '',
+        a.win ? `칸 ${a.kan + 1}에 놓아 세 칸을 채우고 화료한다 (${a.win.yaku.map((y) => y.name).join(' · ')})` : `칸 ${a.kan + 1}에 놓는다`);
     }
-    add('명패산에 내놓기', () => doOut(acts.find((a) => a.type === 'discard')));
+    add('明牌山', () => doOut(acts.find((a) => a.type === 'discard')), '', '명패산 맨 위에 앞면으로 내놓는다');
     for (const a of acts) {
       if (a.type !== 'swap') continue;
       const o = st.players[0].kans[a.kan].find((x) => x.id === a.outId);
-      add(`換: 칸 ${a.kan + 1}의 ${cardText(o)} ↔ ${cardText(c)}`, () => doOut(a));
+      add(`換 ${cardText(o)}`, () => doOut(a), '', `칸 ${a.kan + 1}의 ${o.n}${E.SUITS[o.s]}를 빼고 ${c.n}${E.SUITS[c.s]}를 놓는다. 빠진 패는 명패산으로`);
     }
   } else if (st && st.phase !== 'end' && st.turn !== 0) {
     hint(`${G.names[st.turn]}의 차례`);
@@ -241,9 +243,9 @@ function humanTake() {
   const st = G.st;
   G.steals = E.stealOptions(st, 0);
   const takes = E.legalTakes(st, 0);
-  if (!takes.length) { say('가져올 패가 없어 取 를 건너뛴다.'); afterTake(); return; }
+  if (!takes.length) { say('取 없음'); afterTake(); return; }
   G.mode = 'take';
-  say('내 차례.');
+  say('');
   render();
 }
 
@@ -282,17 +284,17 @@ function afterTake() {
   const st = G.st;
   st.phase = 'out';
   G.chiOpts = E.chiOptions(st, 0);
-  if (G.chiOpts.length) { G.mode = 'chi'; say('置 할 수 있다.'); render(); return; }
+  if (G.chiOpts.length) { G.mode = 'chi'; say(''); render(); return; }
   afterTakeOut();
 }
 
 function afterTakeOut() {
   const st = G.st;
   G.outs = E.legalOuts(st, 0);
-  if (!G.outs.length) { say('폐패가 없어 出 를 건너뛴다.'); G.mode = 'busy'; render(); return finishTurn(0, {}); }
+  if (!G.outs.length) { say('出 없음'); G.mode = 'busy'; render(); return finishTurn(0, {}); }
   G.mode = 'out';
   G.sel = null;
-  say('出: 폐패 한 장을 고른다.');
+  say('');
   render();
 }
 
@@ -357,7 +359,7 @@ async function step() {
   const p = st.turn;
   if (p === 0) return humanTake();
   G.mode = 'busy';
-  say(`${G.names[p]}의 차례…`);
+  say(`${G.names[p]}…`);
   render();
   await wait(DELAY);
   const t = AI.chooseTake(st, p);
@@ -393,7 +395,7 @@ function startRound() {
   G.st = E.newRound(G.N, dealer);
   G.lastRiver = null;
   G.sel = null;
-  say(`제${G.round + 1}국. ${G.names[dealer]}이 친.`);
+  say(`第${G.round + 1}局`);
   step();
 }
 
@@ -452,6 +454,41 @@ function closeModal() { $('#modal').hidden = true; }
 /* ── 시작 ─────────────────────────────────────────────────────────── */
 
 $('#wall .card').innerHTML = BACK_SVG;
+
+/* ── 풀이(툴팁): data-tip. 마우스는 올리면, 손가락은 길게 누르면 ── */
+const tipEl = document.createElement('div');
+tipEl.id = 'tip';
+tipEl.hidden = true;
+document.body.appendChild(tipEl);
+let tipTimer = 0, tipEat = false;
+function showTip(el) {
+  tipEl.textContent = el.dataset.tip;
+  tipEl.hidden = false;
+  const r = el.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+  const x = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2));
+  const y = r.top - h - 8 < 8 ? r.bottom + 8 : r.top - h - 8;
+  tipEl.style.left = `${x}px`;
+  tipEl.style.top = `${y}px`;
+}
+const hideTip = () => { clearTimeout(tipTimer); tipEl.hidden = true; };
+document.addEventListener('pointerover', (e) => {
+  const el = e.target.closest('[data-tip]');
+  if (!el || e.pointerType !== 'mouse') return;
+  clearTimeout(tipTimer);
+  tipTimer = setTimeout(() => showTip(el), 250);
+});
+document.addEventListener('pointerout', (e) => { if (e.pointerType === 'mouse' && e.target.closest('[data-tip]')) hideTip(); });
+document.addEventListener('pointerdown', (e) => {
+  hideTip();
+  const el = e.target.closest('[data-tip]');
+  if (!el || e.pointerType === 'mouse') return;
+  tipTimer = setTimeout(() => { showTip(el); tipEat = true; }, 450);
+});
+document.addEventListener('pointerup', () => clearTimeout(tipTimer));
+document.addEventListener('pointercancel', () => clearTimeout(tipTimer));
+// 길게 눌러 풀이를 본 뒤의 누름은 행동으로 치지 않는다
+document.addEventListener('click', (e) => { if (tipEat) { tipEat = false; e.stopPropagation(); e.preventDefault(); } }, true);
+document.addEventListener('scroll', hideTip, true);
 document.querySelectorAll('#start [data-n]').forEach((b) => (b.onclick = () => startMatch(+b.dataset.n)));
 $('#wall').onclick = () => G.mode === 'take' && doTake({ type: 'wall' });
 $('#river').onclick = () => G.mode === 'take' && G.st.river.length && doTake({ type: 'river' });

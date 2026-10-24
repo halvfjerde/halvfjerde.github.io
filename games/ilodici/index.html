@@ -15,7 +15,7 @@
 <link rel="stylesheet" href="/font/un/undotum.css?v=1">
 <!-- 漢字·가나: 寫硏 書體 (TypeSquare, 登錄한 도메인에서만 나온다) -->
 <script type="text/javascript" src="//typesquare.com/accessor/ko/script/typesquare.js?ee85a1e0da0743cc9ca6031dd3b19c5d" charset="utf-8"></script>
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <header class="mast">
@@ -30,8 +30,8 @@
 <main id="table" hidden>
   <section id="opps"></section>
   <section class="center">
-    <button class="pile" id="wall" type="button"><span class="lbl">暗牌山</span><span class="card back"></span><span class="cnt" id="wallCnt"></span></button>
-    <button class="pile" id="river" type="button"><span class="lbl">明牌山</span><span id="riverTop"></span><span class="cnt" id="riverCnt"></span></button>
+    <button class="pile" id="wall" type="button"><span class="lbl" data-tip="뒷면으로 쌓인 패산. 눌러서 한 장 가져온다">暗牌山</span><span class="card back"></span><span class="cnt" id="wallCnt"></span></button>
+    <button class="pile" id="river" type="button"><span class="lbl" data-tip="내놓은 패가 앞면으로 쌓인다. 맨 위 한 장만 가져올 수 있다">明牌山</span><span id="riverTop"></span><span class="cnt" id="riverCnt"></span></button>
     <p class="msg" id="msg"></p>
   </section>
   <section class="me" id="me">
@@ -44,9 +44,8 @@
 </main>
 
 <section id="start" class="title-page">
-  <p class="lead">차샤-하제크 文化의 3~4인 카드 게임.<br>81장의 일레지시리피에로 칸 세 개를 조로 채우고,<br>役을 갖추면 和了한다.</p>
-  <p class="choose"><button type="button" data-n="4">4인으로 시작</button><span>·</span><button type="button" data-n="3">3인으로 시작</button></p>
-  <p class="note">相對는 CPU. 저마다 한 번씩 親을 맡아 한 바퀴 돌면 한 판이 끝난다.</p>
+  <p class="lead" data-tip="81장의 일레지시리피에로 칸 세 개를 조로 채우고, 役을 갖추면 和了한다">차샤-하제크 文化의 카드 게임</p>
+  <p class="choose"><button type="button" data-n="4" data-tip="CPU 셋과. 저마다 한 번씩 親을 맡아 한 바퀴 돌면 한 판">4인</button><span>·</span><button type="button" data-n="3" data-tip="CPU 둘과. 저마다 한 번씩 親을 맡아 한 바퀴 돌면 한 판">3인</button></p>
 </section>
 
 <footer class="colophon">일로디스 · 規則은 쩌모위키 「게임:일로디스」를 따른다</footer>
@@ -67,6 +66,6 @@
 <div class="ts-glyphs g" aria-hidden="true">暗牌山明牌山閉開親局判規則目錄記錄文化役和了取出奪置換榮流展赤組冇連帯端盃口一色氣通貫純三同天上排他相對＋●◇×・…「」</div>
 <div class="ts-glyphs r" aria-hidden="true">暗牌山明牌山閉開親局判規則目錄記錄文化役和了取出奪置換榮流展赤組冇連帯端盃口一色氣通貫純三同天上排他相對＋●◇×・…「」</div>
 
-<script type="module" src="ui.js?v=4"></script>
+<script type="module" src="ui.js?v=5"></script>
 </body>
 </html>
