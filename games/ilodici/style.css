@@ -168,3 +168,8 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 #tip { position: fixed; z-index: 30; max-width: 16rem; padding: .5rem .7rem .42rem;   /* 은돋움이 조금 올라가 있어 위를 조금 더 */ background: var(--ink); color: var(--bg);
   font-family: var(--gothic); font-size: .8rem; line-height: 1.5; word-break: keep-all; pointer-events: none; }
 #tip[hidden] { display: none; }
+
+/* 글 속의 패 (단추·기록·창) */
+.ct { white-space: nowrap; }
+.ct.r { color: var(--red); }
+.ct .cs { display: inline-block; width: .62em; height: .62em; margin-left: .08em; vertical-align: .02em; fill: currentColor; --card: var(--bg); }
