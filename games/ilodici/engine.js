@@ -82,7 +82,7 @@ export function evaluate(sets, ctx = {}) {
     if (isRed(st) && (types[i] === 'same' || types[i] === 'run')) normal.push({ name: '적조', hanja: '赤組', pts: 1 });
   });
   if (ctx.how === 'steal') normal.push({ name: '탈화', hanja: '奪和', pts: 1 });
-  if ((ctx.how === 'chi' || ctx.how === 'ron') && ctx.placed === 6) normal.push({ name: '치화', hanja: '置和', pts: 1 });
+  // 치에는 따로 점수가 없다 (치화는 없앴다): 치로 화료하려면 다른 역이 있어야 한다
   if (types.every((t) => t === 'same' || t === 'suits')) normal.push({ name: '무련', hanja: '冇連', pts: 3 });
   if (sets.every((st) => st.some((c) => c.n === 1 || c.n === 9))) normal.push({ name: '대단', hanja: '帯端', pts: 3 });
   const pairs = [[0, 1], [0, 2], [1, 2]].filter(([i, j]) => sameRun(sets[i], sets[j])).length;
