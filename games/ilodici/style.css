@@ -11,11 +11,15 @@
   --gothic: "Newsreader", "IshiiGothic R", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --gothic-b: "Newsreader", "IshiiGothic B", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --cw: 2.15rem; --ch: 3.01rem;
+  /* 패: 종이 위에 놓인 한 장. 밝은 모드는 종이보다 희끗한 회백, 어두운 모드도 흰 패 그대로 */
+  --card: #f6f5f0; --card-edge: #bfb8a8; --card-ink: #1c1b18; --card-red: #b0302a; --card-green: #4f8a46; --card-back: #639c59;
+  --card-shade: rgba(70, 60, 40, .16);
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #1c1b18; --bg2: #26241f; --ink: #e6e2d8; --muted: #a19b90; --faint: #6f6a61;
-    --rule: #5a564d; --line: #403d36; --paper: #23221d; --red: #e06a5f; --accent: #7fb874; }
+    --rule: #5a564d; --line: #403d36; --paper: #23221d; --red: #e06a5f; --accent: #7fb874;
+    --card: #ece9e1; --card-edge: #ece9e1; --card-shade: rgba(0, 0, 0, .45); --card-back: #5d8f54; }
 }
 
 * { box-sizing: border-box; }
@@ -53,15 +57,15 @@ a:hover { text-decoration: underline; text-underline-offset: .25em; }
 button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis: none; border-bottom: 1.5px solid var(--accent); }
 
 /* ── 패 ── */
-.card { position: relative; display: inline-block; width: var(--cw); height: var(--ch); flex: none; user-select: none; color: var(--ink); line-height: 0; }
-.card svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.card .face { fill: var(--paper); stroke: var(--ink-rule); stroke-width: 1; }
+.card { position: relative; display: inline-block; width: var(--cw); height: var(--ch); flex: none; user-select: none; color: var(--card-ink); line-height: 0; }
+.card svg { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 1px 0 var(--card-shade)); }
+.card .face { fill: var(--card); stroke: var(--card-edge); stroke-width: 1; }
 .card .num { font-family: "Newsreader", var(--mincho); font-weight: 600; font-size: 13.5px; fill: currentColor; font-variant-numeric: lining-nums; }
 .card .num.big { font-size: 30px; }
-.card.red { color: var(--red); }
-.card .alt { color: var(--accent); }   /* ◇5·◇9 의 가운데 문양 */
+.card.red { color: var(--card-red); }
+.card .alt { color: var(--card-green); }   /* ◇5·◇9 의 가운데 문양 */
 .card.back .lattice { fill: url(#backPat); }
-.card.back .frame { fill: none; stroke: color-mix(in srgb, var(--accent) 60%, var(--ink)); stroke-width: .8; }
+.card.back .frame { fill: none; stroke: color-mix(in srgb, var(--card-back) 70%, #000); stroke-width: .8; }
 .card.sm { --cw: 1.55rem; --ch: 2.17rem; }
 .card.ghost { opacity: .25; }
 /* 고를 수 있는 것: 點線 테두리 */
@@ -79,7 +83,7 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 .kan.sm { --cw: 1.55rem; --ch: 2.17rem; }
 .kan.md { --cw: 1.85rem; --ch: 2.59rem; }
 .kan.full { border: 3px double var(--ink-rule); padding: 1px; }
-.kan.target { border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); cursor: pointer; }
+.kan.target { border: 1px dashed var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); cursor: pointer; }
 
 /* ── 사람 이름: 目次처럼 點線으로 점수까지 ── */
 .who { display: flex; align-items: baseline; gap: .5rem; font-family: var(--gothic); font-size: .86rem; margin-bottom: .5rem; }
@@ -93,11 +97,11 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
   border: 1px solid var(--red); color: var(--red); }
 
 #opps { padding-top: 1.2rem; }
-.opp { padding: .2rem 0 .9rem; }
+.opp { padding: .2rem .5rem .9rem; }
 .opp + .opp { border-top: 1px solid var(--line); padding-top: .8rem; }
 
 /* ── 가운데 ── */
-.center { display: flex; align-items: center; gap: 1.4rem; margin: .6rem 0; padding: .9rem 0;
+.center { display: flex; align-items: center; gap: 1.4rem; margin: .6rem 0; padding: .9rem .5rem;
   border-top: 1px solid var(--ink-rule); border-bottom: 1px solid var(--ink-rule); }
 .pile { display: grid; grid-template-columns: auto auto; align-items: end; gap: .25rem .45rem; }
 .pile .lbl { grid-column: 1 / 3; font-size: .74rem; color: var(--muted); letter-spacing: .14em; text-align: left; margin-bottom: .1rem; }
@@ -110,14 +114,19 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 .pile .cnt { grid-row: 2; }
 
 /* ── 나 ── */
-.me { padding-top: .8rem; }
-.hand { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 1rem; padding-top: .55rem; min-height: calc(var(--ch) + .6rem); }
+.me { padding: .8rem .5rem 0; }
+.hand { --cw: min(2.15rem, calc((min(100vw, 720px) - 32px - 1rem - 27px) / 10)); --ch: calc(var(--cw) * 1.4);
+  display: flex; gap: 3px; flex-wrap: wrap; margin-top: 1rem; padding-top: .55rem; min-height: calc(var(--ch) + .6rem); }
 .acts { display: flex; gap: .6rem 1.15rem; flex-wrap: wrap; align-items: baseline; margin-top: 1.1rem; min-height: 1.6rem; font-size: .9rem; }
 .acts .hint { color: var(--muted); font-family: var(--gothic); font-size: .82rem; letter-spacing: .06em; }
 
 /* ── 記錄 · 奧付 ── */
 .log { margin-top: 1.6rem; font-family: var(--gothic); font-size: .82rem; color: var(--muted); }
-.log summary { cursor: pointer; }
+.log { padding: 0 .5rem; }
+.log summary { cursor: pointer; list-style: none; }
+.log summary::-webkit-details-marker { display: none; }
+.log summary::before { content: "▸"; display: inline-block; width: 1em; color: var(--faint); }
+.log[open] summary::before { content: "▾"; }
 .log ol { margin: .5rem 0; padding-left: 1.6rem; max-height: 14rem; overflow: auto; }
 .colophon { margin-top: 2.6rem; text-align: center; font-family: var(--gothic); font-size: .78rem; color: var(--faint); }
 .colophon::before { content: ""; display: block; width: 2.5rem; margin: 0 auto .9rem; border-top: 1px solid var(--ink-rule); }
@@ -138,7 +147,7 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 .box .row { display: flex; justify-content: center; gap: 1.4rem; margin-top: 1.3rem; }
 
 .toc { list-style: none; margin: .9rem 0 0; padding: 0; font-size: .95rem; }
-.toc li { display: flex; align-items: baseline; gap: .5rem; padding: .18rem 0; }
+.toc li { display: flex; align-items: baseline; gap: .5rem; padding: .18rem .5rem; }
 .toc li i { flex: 1; min-width: 1rem; border-bottom: 1.5px dotted var(--rule); transform: translateY(-.3em); }
 .toc li small { color: var(--muted); font-size: .8em; }
 .toc li > span:not(:first-child) { font-variant-numeric: tabular-nums; }
