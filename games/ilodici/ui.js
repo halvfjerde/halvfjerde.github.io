@@ -56,7 +56,8 @@ function backEl(sm = true) {
   el.innerHTML = BACK_SVG;
   return el;
 }
-const cardText = (c) => `<span class="${c.s === E.RED ? 'minus' : ''}">${c.n}${E.SUITS[c.s]}</span>`;
+/* 글 속의 패: 수 + 작은 문양 그림 (● 같은 글자는 글꼴마다 크기가 들쭉날쭉해서) */
+const cardText = (c) => `<span class="ct${c.s === E.RED ? ' r' : ''}">${c.n}<svg class="cs" viewBox="0 0 10 10" aria-label="${E.SUITS[c.s]}"><use href="#suit${c.s}"/></svg></span>`;
 const cardsHTML = (cs, sm = true) => {
   const w = document.createElement('span');
   w.className = 'kans';
