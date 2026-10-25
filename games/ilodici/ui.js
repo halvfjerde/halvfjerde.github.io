@@ -85,14 +85,11 @@ function kanEl(kan, { sm, idx, owner }) {
 /** 음수는 긴 빼기표 − 로 */
 const num = (v) => (v < 0 ? `−${-v}` : `${v}`);
 
-/* 親 표지: 글꼴마다 글자 높이가 달라 CSS 여백으로는 가운데가 안 맞으므로, SVG 상자 한가운데(central)에 글자를 둔다 */
-const OYA = '<svg class="oya" viewBox="0 0 16 16" role="img" aria-label="親"><rect x=".5" y=".5" width="15" height="15"/><text x="8" y="8">親</text></svg>';
-
 /** 目次처럼: 이름 ……… 점수 */
 function whoHTML(p, extra) {
   const st = G.st;
   const turn = st.turn === p && st.phase !== 'end';
-  return `<div class="who${turn ? ' turn' : ''}"><span class="nm">${G.names[p]}${st.dealer === p ? OYA : ''}</span>`
+  return `<div class="who${turn ? ' turn' : ''}"><span class="nm">${G.names[p]}${st.dealer === p ? '<span class="oya">親</span>' : ''}</span>`
     + `${extra ? `<span class="ex">${extra}</span>` : ''}<span class="lead"></span><span class="pt">${num(G.scores[p])}점</span></div>`;
 }
 
