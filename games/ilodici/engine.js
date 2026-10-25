@@ -87,6 +87,9 @@ export function evaluate(sets, ctx = {}) {
   if (sets.every((st) => st.some((c) => c.n === 1 || c.n === 9))) normal.push({ name: '대단', hanja: '帯端', pts: 3 });
   const pairs = [[0, 1], [0, 2], [1, 2]].filter(([i, j]) => sameRun(sets[i], sets[j])).length;
   if (pairs >= 1 && pairs < 3) normal.push({ name: '배구', hanja: '盃口', pts: 6 });
+  // 삼색동련: 세 문양에 같은 수의 연조가 하나씩 (제조 셋으로 놓으면 무련 9점이 되므로 그보다 높게)
+  const threeSuits = new Set(sets.map((st) => st[0].s)).size === 3;
+  if (types.every((t) => t === 'run') && threeSuits && new Set(sets.map(runStart)).size === 1) normal.push({ name: '삼색동련', hanja: '三色同連', pts: 8 });
   if (oneSuit) normal.push({ name: '일색', hanja: '一色', pts: 12 });
 
   const allRed = all.every((c) => c.s === RED);
@@ -98,6 +101,8 @@ export function evaluate(sets, ctx = {}) {
   if (types.every((t) => t === 'same') && oneSuit) ex.push({ name: '일색삼동', hanja: '一色三同', pts: 96 });
   if (ctx.tenhou) ex.push({ name: '천화', hanja: '天和', pts: 96 });
   if (pairs === 3) ex.push({ name: '연삼동', hanja: '連三同', pts: 120 });
+  // 삼색동동: 세 문양에 같은 수의 동조가 하나씩 (그 수 9장을 모두 모은 것)
+  if (types.every((t) => t === 'same') && threeSuits && new Set(sets.map((st) => st[0].n)).size === 1) ex.push({ name: '삼색동동', hanja: '三色同同', pts: 120 });
   if (pairs === 3 && runStart(sets[0]) === 1) ex.push({ name: '상연삼동', hanja: '上連三同', pts: 168 });
 
   const setPts = types.reduce((a, t) => a + (SET_PTS[t] || 0), 0);
