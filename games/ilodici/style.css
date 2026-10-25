@@ -40,6 +40,7 @@ a:hover { text-decoration: underline; text-underline-offset: .25em; }
   content: ""; position: absolute; inset: auto 0 0; height: 2px;
   border-top: 2.5px solid var(--ink-rule); border-bottom: 1px solid var(--ink-rule); }
 #info { color: var(--muted); }
+#info:empty { display: none; }   /* 처음 화면에서는 비어 있어 規則·目錄이 한쪽으로 밀리지 않게 */
 #info span { color: var(--faint); }
 
 /* ── 扉 (처음 화면) ── */
