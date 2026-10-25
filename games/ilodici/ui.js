@@ -81,12 +81,15 @@ function kanEl(kan, { sm, idx, owner }) {
   return el;
 }
 
+/** 음수는 긴 빼기표 − 로 */
+const num = (v) => (v < 0 ? `−${-v}` : `${v}`);
+
 /** 目次처럼: 이름 ……… 점수 */
 function whoHTML(p, extra) {
   const st = G.st;
   const turn = st.turn === p && st.phase !== 'end';
   return `<div class="who${turn ? ' turn' : ''}"><span class="nm">${G.names[p]}${st.dealer === p ? '<span class="oya">親</span>' : ''}</span>`
-    + `${extra ? `<span class="ex">${extra}</span>` : ''}<span class="lead"></span><span class="pt">${G.scores[p]}점</span></div>`;
+    + `${extra ? `<span class="ex">${extra}</span>` : ''}<span class="lead"></span><span class="pt">${num(G.scores[p])}점</span></div>`;
 }
 
 /* TypeSquare 는 읽어 들인 때의 글자만 받아 오므로, 새로 그린 뒤 잠시 있다가 다시 부른다 */
@@ -420,7 +423,7 @@ function endRound() {
       ${r.ev.exclusive ? '' : `<li><span>조 <small>${r.ev.sets.map((t) => E.SET_NAME[t]).join(' · ')}</small></span><i></i><span>${r.ev.setPts}</span></li>`}
       <li class="sum"><span>합계</span><i></i><span>${r.ev.total}점</span></li></ul>`;
   } else html = '<h2>流局</h2><p class="sub">아무도 화료하지 못했다</p>';
-  html += `<ul class="toc pay">${G.names.map((n, i) => `<li><span>${n}</span><i></i><span class="${pay[i] > 0 ? 'plus' : pay[i] < 0 ? 'minus' : ''}">${pay[i] > 0 ? '+' : pay[i] < 0 ? '−' : '±'}${Math.abs(pay[i])}</span><span class="tot">${G.scores[i]}</span></li>`).join('')}</ul>`;
+  html += `<ul class="toc pay">${G.names.map((n, i) => `<li><span>${n}</span><i></i><span class="${pay[i] > 0 ? 'plus' : pay[i] < 0 ? 'minus' : ''}">${pay[i] > 0 ? '+' : pay[i] < 0 ? '−' : '±'}${Math.abs(pay[i])}</span><span class="tot">${num(G.scores[i])}</span></li>`).join('')}</ul>`;
   html += `<div class="row"><button type="button" class="primary" data-next>${last ? '판 결과' : '다음 국'}</button></div>`;
   setTimeout(() => modal(html, (el) => {
     el.querySelector('[data-next]').onclick = () => {
@@ -437,7 +440,7 @@ function showFinal() {
   const top = order[0].s;
   const winners = order.filter((o) => o.s === top).map((o) => o.n);
   modal(`<h2>판 결과</h2><p class="sub">${winners.join(', ')} 승리</p>
-    <ul class="toc">${order.map((o, i) => `<li><span>${i + 1}. ${o.n}</span><i></i><span>${o.s}점</span></li>`).join('')}</ul>
+    <ul class="toc">${order.map((o, i) => `<li><span>${i + 1}. ${o.n}</span><i></i><span>${num(o.s)}점</span></li>`).join('')}</ul>
     <div class="row"><button type="button" class="primary" data-again>한 판 더</button><button type="button" data-menu>처음으로</button></div>`, (el) => {
     el.querySelector('[data-again]').onclick = () => { closeModal(); startMatch(G.N); };
     el.querySelector('[data-menu]').onclick = () => { closeModal(); $('#table').hidden = true; $('#start').hidden = false; $('#info').textContent = ''; };
