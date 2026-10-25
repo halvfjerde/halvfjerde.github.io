@@ -101,7 +101,7 @@ function render() {
   const st = G.st;
   if (!st) return;
   tsReload();
-  $('#info').innerHTML = `第${G.round + 1}局 <span>/ ${G.N}局</span>`;
+  $('#info').innerHTML = `제${G.round + 1}국 <span>/ ${G.N}국</span>`;
 
   // 상대
   const opps = $('#opps');
@@ -110,7 +110,7 @@ function render() {
     const pl = st.players[p];
     const row = document.createElement('div');
     row.className = 'opp';
-    row.innerHTML = whoHTML(p, `<span data-tip="폐패(손에 든 패) ${pl.closed.length}장">閉 ${pl.closed.length}</span>`);
+    row.innerHTML = whoHTML(p, `<span data-tip="손에 든 패">폐패 ${pl.closed.length}</span>`);
     const ks = document.createElement('div');
     ks.className = 'kans';
     pl.kans.forEach((k, i) => ks.appendChild(kanEl(k, { sm: true, idx: i, owner: p })));
@@ -179,39 +179,40 @@ function renderActs() {
   const hint = (t, tip = '') => { const s = document.createElement('span'); s.className = 'hint'; s.innerHTML = t; if (tip) s.dataset.tip = tip; box.appendChild(s); };
 
   if (G.mode === 'take') {
-    hint('취', '암패산이나 명패산에서 한 장 가져온다. 점선으로 표시된 남의 개패를 누르면 탈 (이미 패가 놓인 내 칸으로만)');
+    hint('취', '패산에서 한 장 가져오거나, 점선 테두리의 남의 패를 탈한다. 탈은 패가 놓인 내 칸으로만');
   } else if (G.mode === 'chi') {
     const o = G.chiOpts[0];
-    add(`치 · 화료 ${o.ev.total}점`, () => doChi(o), 'primary', `폐패를 한꺼번에 칸에 내려놓아 화료한다 (${o.ev.yaku.map((y) => y.name).join(' · ')})`);
-    add('넘기기', () => { G.mode = 'out'; afterTakeOut(); }, '', '치 하지 않고 출로 넘어간다');
+    add(`치 · 화료 ${o.ev.total}점`, () => doChi(o), 'primary', o.ev.yaku.map((y) => y.name).join(' · '));
+    add('넘기기', () => { G.mode = 'out'; afterTakeOut(); }, '', '치하지 않고 출로');
   } else if (G.mode === 'out') {
     if (G.sel == null) { hint('출', '폐패 한 장을 고른다'); return; }
     const acts = outActsFor(G.sel);
     const c = st.players[0].closed.find((x) => x.id === G.sel);
     for (const a of acts) {
       if (a.type === 'place') add(a.win ? `칸 ${a.kan + 1} · 화료 ${a.win.total}점` : `칸 ${a.kan + 1}`, () => doOut(a), a.win ? 'primary' : '',
-        a.win ? `칸 ${a.kan + 1}에 놓아 세 칸을 채우고 화료한다 (${a.win.yaku.map((y) => y.name).join(' · ')})` : `칸 ${a.kan + 1}에 놓는다`);
+        a.win ? a.win.yaku.map((y) => y.name).join(' · ') : '');
     }
-    add('明牌山', () => doOut(acts.find((a) => a.type === 'discard')), '', '명패산 맨 위에 앞면으로 내놓는다');
+    add('명패산', () => doOut(acts.find((a) => a.type === 'discard')));
     for (const a of acts) {
       if (a.type !== 'swap') continue;
       const o = st.players[0].kans[a.kan].find((x) => x.id === a.outId);
-      add(`환 ${cardText(o)}`, () => doOut(a), '', `칸 ${a.kan + 1}의 ${o.n}${E.SUITS[o.s]}를 빼고 ${c.n}${E.SUITS[c.s]}를 놓는다. 빠진 패는 명패산으로`);
+      add(`환 ${cardText(o)}`, () => doOut(a), '', `칸 ${a.kan + 1}의 ${o.n}${E.SUITS[o.s]}와 바꾼다. 빠진 패는 명패산으로`);
     }
   } else if (st && st.phase !== 'end' && st.turn !== 0) {
     hint(`${G.names[st.turn]}의 차례`);
   }
 }
 
+/* 기록: 패 이름 뒤에 조사를 붙이지 않는다 (수에 따라 을/를, 로/으로가 갈려서) */
 const LOGTXT = {
   wall: () => '암패산에서 취',
-  river: (e) => `명패산의 ${cardText(e.card)}을 취`,
-  steal: (e) => `${G.names[e.from]}의 ${cardText(e.card)}을 탈`,
-  place: (e) => `${cardText(e.card)}을 칸 ${e.kan + 1}에`,
-  discard: (e) => `${cardText(e.card)}을 명패산에`,
-  swap: (e) => `환: 칸 ${e.kan + 1}의 ${cardText(e.out)}를 ${cardText(e.card)}로`,
-  ron: (e) => `${G.names[e.from]}의 ${cardText(e.card)}으로 영화`,
-  win: (e) => `화료 (${e.total}점)`,
+  river: (e) => `명패산에서 ${cardText(e.card)} 취`,
+  steal: (e) => `${G.names[e.from]}에게서 ${cardText(e.card)} 탈`,
+  place: (e) => `${cardText(e.card)} → 칸 ${e.kan + 1}`,
+  discard: (e) => `${cardText(e.card)} → 명패산`,
+  swap: (e) => `환: 칸 ${e.kan + 1}의 ${cardText(e.out)} ↔ ${cardText(e.card)}`,
+  ron: (e) => `${G.names[e.from]}에게서 ${cardText(e.card)} 영화`,
+  win: (e) => `화료 ${e.total}점`,
   draw: () => '유국',
 };
 function renderLog() {
@@ -269,7 +270,7 @@ function askSteal(cardId) {
     seen.add(k);
     return true;
   });
-  modal(`<h2>탈: ${cardText(x)}을 어디에?</h2>` + uniq.map((a, i) => {
+  modal(`<h2>탈 ${cardText(x)}</h2><p class="sub">놓을 칸</p>` + uniq.map((a, i) => {
     const cs = me.kans[a.kan].concat([x], a.ids.map((id) => me.closed.find((c) => c.id === id)));
     return `<button type="button" class="opt" data-i="${i}">칸 ${a.kan + 1}: ${cardsHTML(cs)}</button>`;
   }).join('') + '<div class="row"><button type="button" data-x>그만두기</button></div>', (el) => {
@@ -348,7 +349,7 @@ async function ronCheck(from) {
 
 function confirmRon(opt, card) {
   return new Promise((res) => {
-    modal(`<h2>영화?</h2><p>방금 명패산에 나온 ${cardText(card)}을 가져와 치 하면 화료한다.</p>
+    modal(`<h2>영화?</h2><p class="sub">${cardText(card)} · 화료할 수 있다</p>
       <div class="sets">${G.st.players[0].kans.map((k, i) => cardsHTML(k.concat(opt.add[i].map((id) => id === card.id ? card : G.st.players[0].closed.find((c) => c.id === id))))).join('')}</div>
       <p>${opt.ev.yaku.map((y) => y.name).join(' · ')} — ${opt.ev.total}점 × ${G.N - 1}</p>
       <div class="row"><button type="button" class="primary" data-y>영화</button><button type="button" data-n>넘기기</button></div>`, (el) => {
@@ -401,7 +402,7 @@ function startRound() {
   G.st = E.newRound(G.N, dealer);
   G.lastRiver = null;
   G.sel = null;
-  say(`第${G.round + 1}局`);
+  say(`제${G.round + 1}국`);
   step();
 }
 
@@ -418,14 +419,14 @@ function endRound() {
   let html;
   if (r.type === 'win') {
     const pl = st.players[r.p];
-    html = `<h2>${G.names[r.p]} 화료</h2><p class="sub">${HOW[r.how]}${r.how === 'ron' ? ` · ${G.names[r.from]}의 패` : ''}</p>
+    html = `<h2>${G.names[r.p]} 화료</h2><p class="sub">${HOW[r.how]}${r.how === 'ron' ? ` · ${G.names[r.from]}에게서` : ''}</p>
       <div class="sets">${pl.kans.map((k) => `<span class="kan sm full">${k.map((c) => cardEl(c, { sm: true }).outerHTML).join('')}</span>`).join('')}</div>
-      <ul class="toc">${r.ev.yaku.map((y) => `<li><span>${y.name} <small>${y.hanja}</small>${y.ex ? ' <small>排他役</small>' : ''}</span><i></i><span>${y.pts}</span></li>`).join('')}
+      <ul class="toc">${r.ev.yaku.map((y) => `<li><span>${y.name} <small>${y.hanja}</small>${y.ex ? ' <small>배타역</small>' : ''}</span><i></i><span>${y.pts}</span></li>`).join('')}
       ${r.ev.exclusive ? '' : `<li><span>조 <small>${r.ev.sets.map((t) => E.SET_NAME[t]).join(' · ')}</small></span><i></i><span>${r.ev.setPts}</span></li>`}
       <li class="sum"><span>합계</span><i></i><span>${r.ev.total}점</span></li></ul>`;
-  } else html = '<h2>유국</h2><p class="sub">아무도 화료하지 못했다</p>';
+  } else html = '<h2>유국</h2>';
   html += `<ul class="toc pay">${G.names.map((n, i) => `<li><span>${n}</span><i></i><span class="${pay[i] > 0 ? 'plus' : pay[i] < 0 ? 'minus' : ''}">${pay[i] > 0 ? '+' : pay[i] < 0 ? '−' : '±'}${Math.abs(pay[i])}</span><span class="tot">${num(G.scores[i])}</span></li>`).join('')}</ul>`;
-  html += `<div class="row"><button type="button" class="primary" data-next>${last ? '판 결과' : '다음 국'}</button></div>`;
+  html += `<div class="row"><button type="button" class="primary" data-next>${last ? '판 끝' : '다음 국'}</button></div>`;
   setTimeout(() => modal(html, (el) => {
     el.querySelector('[data-next]').onclick = () => {
       closeModal();
@@ -440,7 +441,7 @@ function showFinal() {
   const order = G.names.map((n, i) => ({ n, s: G.scores[i] })).sort((a, b) => b.s - a.s);
   const top = order[0].s;
   const winners = order.filter((o) => o.s === top).map((o) => o.n);
-  modal(`<h2>판 결과</h2><p class="sub">${winners.join(', ')} 승리</p>
+  modal(`<h2>판 끝</h2><p class="sub">${winners.join(', ')} 승리</p>
     <ul class="toc">${order.map((o, i) => `<li><span>${i + 1}. ${o.n}</span><i></i><span>${num(o.s)}점</span></li>`).join('')}</ul>
     <div class="row"><button type="button" class="primary" data-again>한 판 더</button><button type="button" data-menu>처음으로</button></div>`, (el) => {
     el.querySelector('[data-again]').onclick = () => { closeModal(); startMatch(G.N); };
