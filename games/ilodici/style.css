@@ -93,8 +93,9 @@ button.primary { font-family: var(--gothic-b); font-weight: 700; font-synthesis:
 .who .pt { font-variant-numeric: tabular-nums; }
 .who.turn .nm { color: var(--accent); }
 .who.turn .nm::before { content: "▸"; font-size: .85em; }
-.oya { display: inline-block; padding: .2em .16em .04em;   /* 石井明朝의 親이 위로 붙어 있어 위를 넓게 */ font-family: var(--mincho); font-weight: 400; font-size: .74em; line-height: 1;
-  border: 1px solid var(--red); color: var(--red); }
+.oya { display: inline-block; width: 1.12em; height: 1.12em; overflow: visible; }
+.oya rect { fill: none; stroke: var(--red); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.oya text { fill: var(--red); font-family: var(--mincho); font-weight: 400; font-size: 11.5px; text-anchor: middle; dominant-baseline: central; }
 
 #opps { padding-top: 1.2rem; }
 .opp { padding: .2rem .5rem .9rem; }
