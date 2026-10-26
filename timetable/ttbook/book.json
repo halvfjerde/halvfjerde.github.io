@@ -6,8 +6,8 @@
     "margin": {
       "top": 15,
       "bottom": 11,
-      "inner": 17,
-      "outer": 8
+      "inner": 16,
+      "outer": 7
     }
   },
   "fs": 6.5,
@@ -39,5 +39,6 @@
       "fit": "spread"
     }
   ],
-  "alignStrength": 0.85
+  "alignStrength": 0.85,
+  "titleInMargin": true
 }

@@ -6,8 +6,8 @@
     "margin": {
       "top": 15,
       "bottom": 11,
-      "inner": 17,
-      "outer": 8
+      "inner": 16,
+      "outer": 7
     }
   },
   "fs": 6.5,
@@ -45,5 +45,6 @@
     "~/mnt/halvfjerde--Library--Fonts",
     "~/mnt/Library--Fonts",
     "~/mnt/System--Library--Fonts"
-  ]
+  ],
+  "titleInMargin": true
 }

@@ -655,6 +655,7 @@ class Book:
         self.P0 = cfg.get('colWidth', 2.3) * self.fs             # 열차 열 폭
         self.frame_w = self.rw[2]                                 # 틀 굵기
         self.frame_pad = cfg.get('framePad', 0.5) * MM            # 틀과 표 사이
+        self.hang_title = cfg.get('titleInMargin', False)         # 세로 제목을 바깥 여백에 내어 달기
         # 글꼴: 이름으로 찾고, 조판 전에 재어 둔다
         dirs = cfg.get('fontDirs') or DEFAULT_FONT_DIRS
         self.font_dirs = [os.path.expanduser(d) if os.path.isabs(os.path.expanduser(d)) else os.path.join(base, d) for d in dirs]
@@ -824,6 +825,7 @@ class Book:
         else:
             self.mirror = False
         _, _, TW = self.title_tex(T)
+        if self.hang_title: TW = 0       # 세로 제목은 바깥 여백에 내어 단다 (판면은 표에만)
         fw = self.frame_w + self.frame_pad
         Lw = sum(T.colW[j] for j in L)
         Rw = sum(T.colW[j] for j in Rc)
@@ -897,7 +899,8 @@ class Book:
                     tgt = idx
                     if side != 'R': break
             if tgt is not None: widths[tgt] += ch['extra']
-        tx = x0 + (TW if side != 'R' else 0)
+        if self.hang_title: tx = x0           # 제목은 판면 밖(바깥 여백)에
+        else: tx = x0 + (TW if side != 'R' else 0)
         fx0 = tx
         xs = [tx + fw + fp]
         for w in widths: xs.append(xs[-1] + w)
@@ -915,7 +918,7 @@ class Book:
         if side == 'R':
             tex.append(self.put_box(fx1 + 0.3 * fs, y0, TW - 0.3 * fs, ttlH, ttl, 'l', 't'))
         else:
-            tex.append(self.put_box(x0, y0, TW - 0.3 * fs, ttlH, ttl, 'l', 't'))
+            tex.append(self.put_box(tx - TW if self.hang_title else x0, y0, TW - 0.3 * fs, ttlH, ttl, 'l', 't'))
         # 노선 머리띠
         if hb:
             hd = T.head
