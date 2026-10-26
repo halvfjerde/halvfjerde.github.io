@@ -1334,7 +1334,7 @@ function colophon(book, docs, L) {
   const fonts = {
     shaken: 'DiaPro (OFL) · 石井明朝·石井ゴシック (TypeSquare) · 은바탕·은돋움 (GPL)',
     antique: 'DiaPro · Shippori Mincho B1 · Zen Kaku Gothic Antique · Song Myung (OFL) · 은바탕·은돋움 (GPL)',
-    shippori: 'DiaPro · Shippori Mincho · Shippori Antique (OFL) · 은바탕·은돋움 (GPL)',
+    shippori: 'DiaPro · Shippori Mincho · Zen Kaku Gothic New (OFL) · 은바탕·은돋움 (GPL)',
     tokumin: 'DiaPro · Kaisei Tokumin · Shippori Antique B1 · Gowun Batang (OFL) · 은바탕·은돋움 (GPL)',
   }[book.fonts] || 'DiaPro (OFL) · Zen Old Mincho·Zen Kaku Gothic New (OFL) · 은바탕·은돋움 (GPL)';
   const d = document.createElement('div');

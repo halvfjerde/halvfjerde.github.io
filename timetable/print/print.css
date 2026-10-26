@@ -135,10 +135,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
   --bk-mincho: "Kaisei Tokumin", "Gowun Batang", "UnBatang", "Zen Old Mincho", serif;
   --bk-gothic: "Shippori Antique B1", "UnDotum", "Zen Kaku Gothic New", sans-serif;
 }
-/* しっぽり: 명조·고딕 모두 しっぽり (しっぽり明朝 · しっぽりアンチック). 한글은 은바탕·은돋움 */
+/* しっぽり: 명조만 しっぽり明朝, 고딕은 기본(Zen 角ゴシック New). 한글은 은바탕·은돋움 */
 .book.f-shippori {
   --bk-mincho: "Shippori Mincho", "UnBatang", "Zen Old Mincho", serif;
-  --bk-gothic: "Shippori Antique", "UnDotum", "Zen Kaku Gothic New", sans-serif;
 }
 .book.shaken {
   --bk-mincho: "IshiiMincho Old R", "UnBatang", "Zen Old Mincho", serif;
