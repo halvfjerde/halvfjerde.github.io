@@ -829,7 +829,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
       if (b.kind === 'divider') {
         pages.push({ kind: 'divider', item: b.item });
         markRestart();
-        tocEntries.push({ text: b.item.text || '', page: pages.length, level: 0 });
+        tocEntries.push({ text: b.item.text || '', page: pages.length, level: 0, sec: true });
         continue;
       }
       if (b.kind === 'text') {
@@ -942,6 +942,9 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
   const folios = [];
   pages.forEach((p, i) => folios.push(p.restart ?? (i ? folios[i - 1] + 1 : 1)));
   for (const e of tocEntries) e.page = folios[e.page - 1];
+  // 구역(중표지) 색: 찾기 표와 차례의 띠가 같은 색
+  let si = -1;
+  for (const e of tocEntries) if (e.sec) e.color = book.color === 'mono' ? '#000' : TAB_COLORS[++si % TAB_COLORS.length];
   const tocChunks = book.parts.toc ? await splitToc(tocEntries, box, availH, L) : [];
   // 찾기 표(爪): 중표지마다 한 구역. 구역의 쪽들 바깥 가장자리에 구역 이름을 단다
   let sec = null, secN = -1;
@@ -956,7 +959,11 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
     const page = sheet.querySelector('.page');
     const content = page.querySelector('.content');
     let runhead = '', folio = String(folios[i]);
-    if (p.kind === 'cover') { content.appendChild(cover(book)); folio = ''; page.classList.add('is-cover'); }
+    if (p.kind === 'cover') {
+      page.insertAdjacentHTML('beforeend', coverPage(book, g, isRightHand(n), tocEntries.filter((e) => e.sec && e.text)));
+      folio = '';
+      page.classList.add('is-cover');
+    }
     else if (p.kind === 'toc') { content.appendChild(tocChunks[p.part] || document.createElement('div')); }
     else if (p.kind === 'divider') { content.appendChild(divider(p.item)); folio = ''; page.classList.add('is-blank'); }
     else if (p.kind === 'text') { const d = document.createElement('div'); d.className = 'textpage'; d.innerHTML = p.html; content.appendChild(d); runhead = p.item.toc || ''; }
@@ -1101,14 +1108,29 @@ function cropMarks(sw, sh, W, H) {
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-function cover(book) {
-  const d = document.createElement('div');
-  d.className = 'cover';
-  d.innerHTML = `<div class="cv-top">${esc(book.edition || '')}</div>
-    <h1 class="cv-title">${esc(book.title || '')}</h1>
-    <div class="cv-sub">${esc(book.subtitle || '')}</div>
-    <div class="cv-foot"><div>${esc(book.date || '')}</div><div class="cv-pub">${esc(book.publisher || '')}</div></div>`;
-  return d;
+/**
+ * 표지: 월간 시각표처럼. 위쪽 색 띠(도련까지)에 책 이름과 큰 달 숫자(호), 아래에 부제·주요 내용(구역과 쪽)·펴낸 날·펴낸 곳.
+ * '표지 머리'가 '2026년 10월호'·'1979年3月号' 꼴이면 해와 달을 뽑아 큰 숫자로.
+ */
+function coverPage(book, g, recto, secs) {
+  const ja = book.lang === 'ja';
+  const m = /(\d{3,4})\s*[年년.\-/]\s*(\d{1,2})/.exec(book.edition || '');
+  const bleed = book.output?.marks ? BLEED : 0;
+  const inL = recto ? g.inner : g.outer, inR = recto ? g.outer : g.inner;
+  const bandH = Math.round(g.H * 0.36);
+  const bg = book.color === 'mono' ? '#000' : TAB_COLORS[0];
+  const issue = m
+    ? `<div class="cv2-issue"><span class="cv2-year">${esc(m[1])}${ja ? '年' : '년'}</span><span class="cv2-month">${+m[2]}</span><span class="cv2-gou">${ja ? '月号' : '월호'}</span></div>`
+    : (book.edition ? `<div class="cv2-issue cv2-issue-t">${esc(book.edition)}</div>` : '');
+  const list = secs.length
+    ? `<div class="cv2-cl">${ja ? '主な内容' : '주요 내용'}</div><ul class="cv2-secs">${secs.map((e) => `<li><i style="background:${e.color || '#000'}"></i><span>${esc(e.text)}</span><b>${e.page}</b></li>`).join('')}</ul>`
+    : '';
+  return `<div class="cv2-band" style="left:${-bleed}mm;right:${-bleed}mm;top:${-bleed}mm;height:${bandH + bleed}mm;background:${bg};padding:${g.top + bleed}mm ${inR + bleed}mm 7mm ${inL + bleed}mm">
+      <div class="cv2-title">${esc(book.title || '')}</div>${issue}</div>
+    <div class="cv2-body" style="left:${inL}mm;right:${inR}mm;top:${bandH + 8}mm;bottom:${g.bottom}mm">
+      ${book.subtitle ? `<div class="cv2-sub">${esc(book.subtitle)}</div>` : ''}${list}
+      <div class="cv2-foot"><div>${esc(book.date || '')}</div><div class="cv2-pub">${esc(book.publisher || '')}</div></div>
+    </div>`;
 }
 
 function divider(it) {
@@ -1158,6 +1180,8 @@ async function textPages(src, box, availH) {
 }
 
 function tocRow(e) {
+  // 구역(중표지)은 색 띠로, 그 아래 표들은 점선과 쪽 번호로 (JTB 시각표의 さくいん처럼)
+  if (e.sec) return `<li class="toc-l0 toc-sec" style="background:${e.color || '#000'}"><span>${esc(e.text)}</span><i></i><span class="toc-p">${e.page}</span></li>`;
   return `<li class="toc-l${e.level}"><span>${esc(e.text)}</span><i></i><span class="toc-p">${e.page}</span></li>`;
 }
 
@@ -1166,7 +1190,7 @@ async function splitToc(entries, box, availH, L) {
   let wrap, ul;
   const start = (first) => {
     wrap = document.createElement('div');
-    wrap.className = 'toc';
+    wrap.className = box.getBoundingClientRect().width < 100 * MM ? 'toc toc-1col' : 'toc';
     if (first) wrap.innerHTML = `<h2 class="toc-h">${esc(L.toc)}</h2>`;
     ul = document.createElement('ul');
     wrap.appendChild(ul);

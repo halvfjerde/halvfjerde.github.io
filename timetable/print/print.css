@@ -89,6 +89,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pv-right { display: flex; align-items: center; gap: 14px; }
 .pv-right input[type=checkbox] { margin: 0 4px 0 0; vertical-align: -1px; }
 @media screen {
+  /* 읽기(디지털판): 편집 칸 없이 한 번에 한 펼침면. 쪽은 인쇄판과 똑같다 */
+  .reading .side, .reading .grp .ed, .reading .pv-right label:first-child { display: none !important; }
+  .reading .app { grid-template-columns: 1fr; }
+  .reading #sheets .sheet:not(.cur) { display: none; }
+  .reading #sheets { padding-top: 14px; }
+  .reading .preview { min-height: calc(100vh - 49px); }
+  .pv-nav { display: none; align-items: center; gap: 8px; }
+  .reading .pv-nav { display: flex; }
+  .pv-nav button { border: 1px solid #d3d1cb; background: var(--ui-bg); border-radius: 4px; padding: 1px 10px; cursor: pointer; font-size: 14px; }
+  .grp .rd { display: none; }
+  .reading .grp .rd { display: inline-block; }
   /* 펼쳐 보기: 첫 쪽(표지)은 혼자, 다음부터 두 쪽씩 맞붙여 */
   #sheets.spreads { display: grid; grid-template-columns: repeat(2, max-content); justify-content: center; column-gap: 0; row-gap: 14px; }
   #sheets.spreads.rtl { direction: rtl; }
@@ -131,17 +142,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
   -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .page { position: absolute; font-family: var(--bk-mincho); }
 .page .content { position: absolute; overflow: visible; }
-.page .runhead { position: absolute; font: 7.5pt/1.2 var(--bk-gothic); color: #333; border-bottom: .3pt solid #555; padding-bottom: 1.2mm; }
+.page .runhead { position: absolute; font: 7.5pt/1.2 var(--bk-gothic); color: #333; padding-bottom: 1.2mm; }
 .page.verso .runhead, .page.verso .folio { text-align: left; }
 .page.recto .runhead, .page.recto .folio { text-align: right; }
-.page .runhead:empty { border-bottom: 0; }
 .page .folio { position: absolute; font: 8pt/1 "Zen Old Mincho", var(--bk-mincho); font-variant-numeric: lining-nums; }
 /* 쪽 번호 자리: 아래 가운데 / 위 바깥.
    위 바깥은 JTB 시각표처럼: 굵은 고딕의 큰 쪽 번호가 바깥 모서리, 그 옆에 굵은 노선 이름, 아래에 굵은 괘선 */
 .page.fol-bottom-center .folio { text-align: center; }
-.page.fol-top-outer .runhead { font: 700 8.5pt/1.2 var(--bk-gothic); color: #000; border-bottom: 1.2pt solid #000; padding-bottom: .8mm; }
-.page.fol-top-outer .runhead:empty { border-bottom: 1.2pt solid #000; }
-.page.is-cover .runhead, .page.is-blank .runhead { border-bottom: 0 !important; }
+.page.fol-top-outer .runhead { font: 700 8.5pt/1.2 var(--bk-gothic); color: #000; border-bottom: 0; padding-bottom: .8mm; }
 .page.recto.fol-top-outer .runhead { padding-right: 12mm; }
 .page.verso.fol-top-outer .runhead { padding-left: 12mm; }
 .page.fol-top-outer .folio { font: 700 13pt/1 var(--bk-gothic); }
@@ -168,16 +176,25 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .book.mono .jtt-wrap [style*="color"] { color: #000 !important; background: transparent !important; }
 .book.mono .sheet { filter: grayscale(1); }
 
-/* 표지 */
-.cover { position: absolute; inset: 0; display: flex; flex-direction: column; }
-.cv-top { font: 10pt/1.4 var(--bk-gothic); padding-bottom: 4mm; position: relative; }
-.cv-top::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1.6mm;
-  border-top: 1.2pt solid #000; border-bottom: .4pt solid #000; }
-.cv-title { margin: 18mm 0 0; font: 700 30pt/1.25 var(--bk-mincho); letter-spacing: .04em; }
-.cv-sub { margin-top: 5mm; font: 12pt/1.5 var(--bk-mincho); }
-.cv-foot { margin-top: auto; display: flex; justify-content: space-between; align-items: baseline; font: 10pt/1.4 var(--bk-gothic);
-  padding-top: 4mm; border-top: .4pt solid #000; }
-.cv-pub { font-weight: 700; }
+/* 표지: 월간 시각표처럼 위쪽 색 띠에 책 이름과 큰 달 숫자 */
+.cv2-band { position: absolute; color: #fff; display: flex; justify-content: space-between; align-items: flex-end; gap: 6mm;
+  box-sizing: border-box; overflow: hidden; }
+.cv2-title { font: 700 30pt/1.15 var(--bk-gothic); letter-spacing: .06em; align-self: flex-start; max-width: 62%; }
+.cv2-issue { display: flex; align-items: baseline; gap: 1.5mm; font-family: var(--bk-gothic); font-weight: 700; white-space: nowrap; }
+.cv2-year { font-size: 13pt; align-self: flex-start; margin-top: 4mm; }
+.cv2-month { font-size: 92pt; line-height: .82; letter-spacing: -.03em; font-variant-numeric: lining-nums; }
+.cv2-gou { font-size: 15pt; }
+.cv2-issue-t { font-size: 15pt; white-space: normal; text-align: right; max-width: 40%; }
+.cv2-body { position: absolute; display: flex; flex-direction: column; }
+.cv2-sub { font: 700 14pt/1.45 var(--bk-gothic); margin-bottom: 7mm; }
+.cv2-cl { font: 700 8pt/1 var(--bk-gothic); letter-spacing: .2em; color: #444; margin-bottom: 2mm; }
+.cv2-secs { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 8mm; }
+.cv2-secs li { display: flex; align-items: center; gap: 2.5mm; break-inside: avoid; font: 700 11pt/2 var(--bk-gothic); border-bottom: .3pt solid #bbb; }
+.cv2-secs li i { width: 3mm; height: 3mm; flex: none; }
+.cv2-secs li span { flex: 1; }
+.cv2-secs li b { font-variant-numeric: tabular-nums lining-nums; }
+.cv2-foot { margin-top: auto; display: flex; justify-content: space-between; align-items: baseline; font: 9.5pt/1.4 var(--bk-gothic); }
+.cv2-pub { font-weight: 700; font-size: 12pt; }
 
 /* 중표지 */
 .divider { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
@@ -192,10 +209,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* 차례 */
 .toc { width: 100%; }
-.toc-h { font: 700 14pt/1.4 var(--bk-mincho); margin: 0 0 6mm; padding-bottom: 2mm; position: relative; }
+.toc-h { font: 700 15pt/1.4 var(--bk-gothic); letter-spacing: .15em; margin: 0 0 6mm; padding-bottom: 2mm; position: relative; }
 .toc-h::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1.2mm; border-top: 1pt solid #000; border-bottom: .3pt solid #000; }
-.toc ul { list-style: none; margin: 0; padding: 0; }
-.toc li { display: flex; align-items: baseline; gap: 2mm; font: 9.5pt/1.9 var(--bk-mincho); }
+.toc ul { list-style: none; margin: 0; padding: 0; column-count: 2; column-gap: 8mm; }
+.toc.toc-1col ul { column-count: 1; }
+.toc li { display: flex; align-items: baseline; gap: 2mm; font: 9.5pt/1.9 var(--bk-mincho); break-inside: avoid; }
+.toc .toc-sec { color: #fff; font: 700 9.5pt/1.75 var(--bk-gothic); padding: 0 2mm; margin-top: 3mm; letter-spacing: .08em; }
+.toc .toc-sec:first-child { margin-top: 0; }
+.toc .toc-sec i { border-bottom-color: rgba(255, 255, 255, .55) !important; }
 .toc li i { flex: 1; min-width: 4mm; border-bottom: .6pt dotted #777; transform: translateY(-.3em); }
 .toc .toc-p { font-variant-numeric: tabular-nums lining-nums; }
 .toc .toc-l0 { font-family: var(--bk-gothic); font-weight: 700; margin-top: 3mm; }

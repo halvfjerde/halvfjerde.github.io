@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/font/un/unbatang.css?v=1">
 <link rel="stylesheet" href="/font/un/undotum.css?v=1">
 <link rel="stylesheet" href="api.php?action=css">
-<link rel="stylesheet" href="print.css?v=7">
+<link rel="stylesheet" href="print.css?v=8">
 <style id="pagesize">@page { size: 182mm 257mm; margin: 0; }</style>
 </head>
 <body>
@@ -21,10 +21,12 @@
   <div class="brand"><h1>시각표 인쇄</h1><a href="/" class="sub">편집기로</a></div>
   <div class="grp">
     <button type="button" id="btnPrint" class="primary">인쇄 · PDF</button>
-    <button type="button" id="btnSave" title="책의 구성과 설정을 파일로 저장">설계도 저장</button>
-    <label class="filebtn" title="저장한 설계도 불러오기">불러오기<input type="file" id="fileLoad" accept=".json,application/json" hidden></label>
-    <button type="button" id="btnLatest" title="실은 문서들을 위키의 최신 판으로 바꾼다">최신 판으로</button>
-    <button type="button" id="btnNew" title="빈 책으로 새로 시작">새 책</button>
+    <button type="button" id="btnShare" class="ed" title="이 책을 인쇄판과 똑같은 쪽으로 넘겨 보는 읽기 링크를 만든다 (판이 고정되어 있어 나중에 열어도 같은 책)">읽기 링크</button>
+    <button type="button" id="btnEdit" class="rd" title="이 책을 편집기로 가져온다 (지금 편집 중인 책은 바뀐다)">편집기에서 열기</button>
+    <button type="button" id="btnSave" class="ed" title="책의 구성과 설정을 파일로 저장">설계도 저장</button>
+    <label class="filebtn ed" title="저장한 설계도 불러오기">불러오기<input type="file" id="fileLoad" accept=".json,application/json" hidden></label>
+    <button type="button" id="btnLatest" class="ed" title="실은 문서들을 위키의 최신 판으로 바꾼다">최신 판으로</button>
+    <button type="button" id="btnNew" class="ed" title="빈 책으로 새로 시작">새 책</button>
   </div>
 </header>
 
@@ -100,6 +102,7 @@
   <section class="preview">
     <div class="pv-bar">
       <span id="status">준비 중…</span>
+      <span class="pv-nav"><button type="button" id="pvPrev" title="앞 펼침면">‹</button><span id="pvPage"></span><button type="button" id="pvNext" title="다음 펼침면">›</button></span>
       <span class="pv-right"><label class="zoom" title="책을 펼친 것처럼 마주 보는 두 쪽을 나란히 본다 (인쇄에는 영향 없음)"><input type="checkbox" id="pvSpread">펼쳐 보기</label>
       <label class="zoom">보기<select id="pvZoom">
         <option value="fit">폭에 맞춤</option><option value="0.5">50%</option><option value="0.75">75%</option>
@@ -112,6 +115,6 @@
 
 <div id="measure" class="book" aria-hidden="true"></div>
 
-<script type="module" src="app.js?v=7"></script>
+<script type="module" src="app.js?v=8"></script>
 </body>
 </html>

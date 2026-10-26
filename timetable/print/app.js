@@ -1,5 +1,5 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=7';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=8';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
@@ -18,6 +18,33 @@ const DEFAULT = () => ({
 
 /* ── 상태 ── */
 let book = load() || DEFAULT();
+// 읽기(디지털판): 주소의 #read= 에 책 설계도가 눌려 들어 있다. 편집 중인 책(브라우저 저장)은 건드리지 않는다
+let reading = false;
+if (location.hash.startsWith('#read=')) {
+  try { book = merge(DEFAULT(), upgrade(await unpackBook(location.hash.slice(6)))); reading = true; } catch (e) { console.warn('읽기 링크를 풀지 못함', e); }
+}
+document.body.classList.toggle('reading', reading);
+addEventListener('hashchange', () => { if (location.hash.startsWith('#read=') || reading) location.reload(); });
+if (reading) {
+  document.title = `${book.title || '시각표'}${book.edition ? ` ${book.edition}` : ''}`;
+  document.querySelector('.brand h1').textContent = document.title;
+  document.querySelector('.brand .sub').hidden = true;
+}
+
+/** 설계도 ↔ 주소에 넣을 글자 (deflate + base64url) */
+async function packBook(b) {
+  const z = new Blob([JSON.stringify(b)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  const u8 = new Uint8Array(await new Response(z).arrayBuffer());
+  let s = '';
+  for (const x of u8) s += String.fromCharCode(x);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+async function unpackBook(str) {
+  const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64 + '==='.slice((b64.length + 3) % 4));
+  const z = new Blob([Uint8Array.from(bin, (c) => c.charCodeAt(0))]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return JSON.parse(await new Response(z).text());
+}
 const docs = new Map();          // 'title@revid' → { title, revid, timestamp, latest, tables }
 let pageList = [];               // 위키의 시각표 문서들
 const open = new Set();          // 펼친 문서
@@ -38,7 +65,7 @@ function upgrade(j) {
   j.v = 3;
   return j;
 }
-function persist() { try { localStorage.setItem(KEY, JSON.stringify(book)); } catch (e) { /* 저장 불가 */ } }
+function persist() { if (reading) return; try { localStorage.setItem(KEY, JSON.stringify(book)); } catch (e) { /* 저장 불가 */ } }
 function merge(base, j) {
   const out = { ...base, ...j };
   out.page = { ...base.page, ...(j.page || {}), margin: { ...base.page.margin, ...(j.page?.margin || {}) } };
@@ -237,6 +264,7 @@ async function render() {
     w.hidden = !r.warnings.length;
     w.textContent = r.warnings.join(' / ');
     if (book.fonts === 'shaken' && window.Ts?.loadFont) window.Ts.loadFont();
+    if (reading) showSpread(curSpread);
     fitZoom();
   } catch (e) {
     console.error(e);
@@ -266,23 +294,73 @@ function spreadView() {
   const on = $('#pvSpread').checked;
   $('#sheets').classList.toggle('spreads', on);
   $('#sheets').classList.toggle('rtl', on && book.binding === 'right');
-  try { localStorage.setItem(SPREAD_KEY, on ? '1' : ''); } catch (e) { /* 저장 불가 */ }
+  if (!reading) try { localStorage.setItem(SPREAD_KEY, on ? '1' : ''); } catch (e) { /* 저장 불가 */ }
 }
 try { $('#pvSpread').checked = localStorage.getItem(SPREAD_KEY) === '1'; } catch (e) { /* 없음 */ }
 $('#pvSpread').addEventListener('change', () => { spreadView(); fitZoom(); });
 
+/* 읽기: 한 번에 한 펼침면 (첫 쪽은 혼자). 왼쪽 철이면 → 가 다음, 오른쪽 철이면 ← 가 다음 */
+let curSpread = 0;
+const narrow = () => innerWidth < 760;   // 좁은 화면에서는 한 쪽씩
+function spreadOf(i) { return narrow() ? i : i === 0 ? 0 : Math.floor((i + 1) / 2); }
+function showSpread(k) {
+  const sheets = [...document.querySelectorAll('#sheets .sheet')];
+  if (!sheets.length) return;
+  const last = spreadOf(sheets.length - 1);
+  curSpread = Math.max(0, Math.min(last, k));
+  const on = sheets.map((s, i) => { const c = spreadOf(i) === curSpread; s.classList.toggle('cur', c); return c ? i + 1 : 0; }).filter(Boolean);
+  $('#pvPage').textContent = `${on.join('–')} / ${sheets.length}`;
+}
+function turn(d) { showSpread(curSpread + d); }
+$('#pvPrev').onclick = () => turn(book.binding === 'right' ? 1 : -1);
+$('#pvNext').onclick = () => turn(book.binding === 'right' ? -1 : 1);
+addEventListener('keydown', (e) => {
+  if (!reading || e.target.closest('input, textarea, select')) return;
+  const rtl = book.binding === 'right';
+  if (e.key === 'ArrowRight') turn(rtl ? -1 : 1);
+  else if (e.key === 'ArrowLeft') turn(rtl ? 1 : -1);
+  else if (e.key === 'PageDown' || e.key === ' ') turn(1);
+  else if (e.key === 'PageUp') turn(-1);
+  else if (e.key === 'Home') showSpread(0);
+  else if (e.key === 'End') showSpread(1e9);
+  else return;
+  e.preventDefault();
+});
+$('#sheets').addEventListener('click', (e) => {   // 펼침면의 왼쪽 반을 누르면 왼쪽으로, 오른쪽 반이면 오른쪽으로 넘긴다
+  if (!reading) return;
+  const r = $('#sheets').getBoundingClientRect();
+  const right = e.clientX > r.left + r.width / 2;
+  const rtl = book.binding === 'right';
+  turn(right !== rtl ? 1 : -1);
+});
+
 function fitZoom() {
+  if (reading) { $('#pvSpread').checked = !narrow(); showSpread(curSpread); }
   spreadView();
   const v = $('#pvZoom').value;
   const P = book.page;
   const w = ((P.size === 'custom' ? P.w : SIZES[P.size][0]) + (book.output.marks ? 30 : 0)) * 96 / 25.4 * ($('#pvSpread').checked ? 2 : 1);
   let z = +v;
-  if (v === 'fit') z = Math.min(1, ($('.preview').clientWidth - 32) / w);
+  if (v === 'fit') z = Math.min(reading ? 3 : 1, ($('.preview').clientWidth - 32) / w);
+  if (v === 'fit' && reading) {   // 읽기: 펼침면이 화면 높이에 들게
+    const h = ((P.size === 'custom' ? P.h : SIZES[P.size][1]) + (book.output.marks ? 30 : 0)) * 96 / 25.4;
+    z = Math.min(z, (innerHeight - 49 - 40 - 28) / h);
+  }
   $('#sheets').style.zoom = String(z);
 }
 
 /* ── 단추 ── */
 $('#btnPrint').onclick = async () => { clearTimeout(timer); await render(); window.print(); };
+$('#btnShare').onclick = async () => {
+  const url = `${location.origin}${location.pathname}#read=${await packBook(book)}`;
+  try { await navigator.clipboard.writeText(url); $('#status').textContent = '읽기 링크를 복사했다'; } catch (e) { prompt('읽기 링크', url); }
+};
+$('#btnEdit').onclick = () => {
+  if (!confirm('이 책을 편집기로 가져올까? 지금 편집 중이던 책은 바뀐다.')) return;
+  reading = false;
+  persist();
+  location.href = location.pathname;
+};
 $('#btnSave').onclick = () => {
   const blob = new Blob([JSON.stringify(book, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
