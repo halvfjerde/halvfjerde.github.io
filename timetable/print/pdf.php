@@ -6,7 +6,7 @@
  */
 set_time_limit(320);
 $b = (string)($_GET['b'] ?? '');
-if (!preg_match('/^[A-Za-z0-9_-]{8,200000}$/', $b)) { http_response_code(400); exit('bad book'); }
+if (strlen($b) < 8 || strlen($b) > 500000 || !preg_match('/^[A-Za-z0-9_-]+$/', $b)) { http_response_code(400); exit('bad book'); }
 
 $dir = sys_get_temp_dir() . '/ttprint';
 if (!is_dir($dir)) @mkdir($dir, 0700, true);
