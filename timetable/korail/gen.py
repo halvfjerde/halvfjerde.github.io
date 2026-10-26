@@ -63,6 +63,10 @@ BRANCH = {
     ('gen', '충북선'): [[[], ['대전']]],
 }
 
+# 착발을 나누지 않는 역: 연결선으로 애매하게 붙는 역
+NOSPLIT_ALL = {'행신'}
+NOSPLIT = {('ktx', '중앙선'): {'서울'}, ('ktx', '강릉선'): {'서울'}}
+
 LINE_HANJA = {'경부선': '京釜線', '호남선': '湖南線', '전라선': '全羅線', '경전선': '慶全線', '동해선': '東海線',
               '강릉선': '江陵線', '중앙선': '中央線', '중부내륙선': '中部內陸線', '장항선': '長項線', '서해선': '西海線',
               '충북선': '忠北線', '경북선': '慶北線', '대구선': '大邱線', '영동선': '嶺東線', '태백선': '太白線',
@@ -91,6 +95,7 @@ def vert(s):
 
 # 따로 조사한 도착 시각 {(열차번호, 역): 분}. arrivals.json 이 있으면 읽는다
 ARR = {}
+NEED = set()   # 도착 시각을 더 조사해야 하는 (열차번호, 시발역, 역)
 if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'arrivals.json')):
     ARR = {tuple(k.split('@')): v for k, v in json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'arrivals.json'))).items()}
 
@@ -272,7 +277,13 @@ class Table:
         for tr in self.trains:
             idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
             for i in idx[1:-1]: thru[i] += 1
-        self.split = {i for i in major if 0 < i < n - 1 and ends[i] >= max(2, 0.05 * N) and thru[i] >= 1} | {0, n - 1}
+        self.split = {i for i in major if 0 < i < n - 1 and ends[i] >= max(2, 0.05 * N) and thru[i] >= 1}
+        # 표의 첫 역·끝 역은 그 역에서 떠나거나 닿는 열차가 많을 때만 (행신·중앙선 서울처럼 몇 대만 붙는 역은 한 줄)
+        first_n = sum(1 for tr in self.trains if next(i for i, x in enumerate(tr['times']) if isinstance(x, int)) == 0)
+        last_n = sum(1 for tr in self.trains if max(i for i, x in enumerate(tr['times']) if isinstance(x, int)) == n - 1)
+        if o0 == 0 and first_n >= 0.3 * N: self.split.add(0)
+        if d0 == n - 1 and last_n >= 0.3 * N: self.split.add(n - 1)
+        self.split -= {i for i, s in enumerate(self.st) if s in NOSPLIT.get((self.cat, self.line), set()) | NOSPLIT_ALL}
         L.append('[stations]')
         rules = set()
         for alt in BRANCH.get((self.cat, self.line), []):
@@ -282,7 +293,7 @@ class Table:
         rules -= {0, n}
         for i, s in enumerate(self.st):
             if i in rules: L.append('---')
-            ad = '着発' if i in self.split else '〃'
+            ad = '着発' if i in self.split else '発' if i == 0 else '着' if i == n - 1 else '〃'
             mk = '**' if i in self.split else '*' if i in major else ''
             nm = mk + s
             hj = self.hanja.get(s, '')
@@ -328,7 +339,7 @@ class Table:
                 if '토일' in used: notes.append('◇ 토·일 운행')
             notes.append('운행일 무표시는 매일 운행')
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
-            notes.append('着発을 나눈 역에서 도착 시각이 빈 열차는 도착 시각 조사 중')
+            notes.append('着発 역의 빈 도착 시각은 자료 없음')
         L += notes
         return '\n'.join(L)
 
@@ -371,12 +382,14 @@ class Table:
                 t = hm(x)
                 if not sp: out.append(t); continue
                 st = self.st[i]
-                arr = ARR.get((tr['no'], st))             # 따로 조사한 도착 시각
-                arr = hm(arr) if arr is not None else '_'
+                arr = ARR.get((tr['no'], st))             # 따로 조사한 도착 시각 (TAGO 열차정보)
+                arr = hm(arr) if arr is not None and 0 <= (x - arr) % 1440 <= 15 else '_'   # 정차 15분 넘으면 다른 날 열차로 보고 버린다
                 if i == a and o == st: arr = 'x'          # 여기서 떠나는 열차: 착은 ‥
                 if i == b and d == st:                    # 여기서 끝나는 열차: 착에 시각, 발에 끝 표시
                     out.append(f'{t},-'); bar = True
-                else: out.append(f'{arr},{t}')
+                else:
+                    if arr == '_': NEED.add((tr['no'], o, st))
+                    out.append(f'{arr},{t}')
             else:
                 out.append({'v': 'v', 'x': 'x', 'I': 'i'}[x])
         res = []
@@ -424,6 +437,8 @@ def main():
     I += [f'* [[{PREFIX}/{l}|{l}]]' for l in index]
     open(os.path.join(outdir, '_index.wiki'), 'w').write('\n'.join(I) + '\n')
     json.dump(book_items, open(os.path.join(outdir, 'items.json'), 'w'), ensure_ascii=False, indent=1)
+    json.dump(sorted(NEED), open(os.path.join(outdir, 'need-arrivals.json'), 'w'), ensure_ascii=False)
+    print(len(NEED), 'arrivals to look up,', len({(o, s) for _, o, s in NEED}), 'station pairs')
 
 
 if __name__ == '__main__':
