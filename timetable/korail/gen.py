@@ -72,7 +72,7 @@ LINE_HANJA = {'경부선': '京釜線', '호남선': '湖南線', '전라선': '
               '목포보성선': '木浦寶城線', '교외선': '郊外線'}
 # 종별 → 열차명 칸 (KTX 표에서 그냥 KTX는 비운다)
 KIND = {'KTX': '', 'KTX-산천': '산천', 'KTX산천': '산천', 'KTX_산천': '산천', 'KTX-청룡': '청룡', 'KTX-이음': '이음',
-        'ITX-새마을': '새마을', '새마을': '새마을호', 'ITX-마음': '마음', '무궁화': '무궁화', '누리로': '누리로'}
+        'ITX-새마을': '새마을', '새마을': '새마을', 'ITX-마음': '마음', '무궁화': '무궁화', '누리로': '누리로'}
 LBL = {  # 머리 이름 (한국어, 국한문)
     'fr': ('시발역', '始發驛'), 'no': ('열차번호', '列車番號'), 'kind': ('등급', '等級'), 'car': ('차종', '車種'),
     'to': ('종착역', '終着驛'), 'day': ('운행일', '運行日'),
@@ -98,10 +98,10 @@ NEED = set()   # 도착 시각을 더 조사해야 하는 (열차번호, 시발�
 if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'arrivals.json')):
     ARR = {tuple(k.split('@')): v for k, v in json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'arrivals.json'))).items()}
 
-BLACK = {'새마을', '마음', '새마을호'}      # ITX·새마을급은 검은 네모, 무궁화급·KTX 차종은 흰 네모
-def badge(k):
+BLACK = {'ITX-새마을', 'ITX-마음'}      # ITX는 검은 네모, 새마을호·무궁화·누리로·KTX 차종은 흰 네모
+def badge(k, typ=''):
     if not k: return '_'
-    return f'BS{{k{k}.}}' if k in BLACK else f'S{{{k}}}'
+    return f'BS{{k{k}.}}' if typ in BLACK else f'S{{{k}}}'
 
 def q(s):
     """공백·따옴표가 든 값은 "…"로"""
@@ -326,7 +326,7 @@ class Table:
         L.append('[trains]')
         for tr in self.trains:
             k = KIND.get(tr['type'], tr['type'])
-            hdr = [q(badge(k)), tr['no']]
+            hdr = [q(badge(k, tr['type'])), tr['no']]
             if has_fr:
                 o, d = self.ends_of(tr)
                 hdr.append(q(f'{esc_txt(o)}/{hm(self.end_times(tr)[0])}'))
@@ -350,15 +350,20 @@ class Table:
             parts = ['무표시는 KTX'] + [f'「{k}」은 `{full}`' for k, full in names if k in kinds]
             notes.append('차종 ' + ', '.join(parts))
         else:
-            names = [('새마을', 'ITX-새마을'), ('마음', 'ITX-마음')]
-            parts = [f'「{k}」은 `{full}`' for k, full in names if k in kinds]
+            types = {tr['type'] for tr in self.trains}
+            parts = []
+            if 'ITX-새마을' in types: parts.append('BS{k새마을.} `ITX-새마을`')
+            if '새마을' in types: parts.append('S{새마을} 새마을호')
+            if 'ITX-마음' in types: parts.append('BS{k마음.} `ITX-마음`')
             if parts: notes.append('등급 ' + ', '.join(parts))
-        if has_day:
+        if has_day:   # 운행일 관련은 한 줄로
+            dn = []
             if self.daysym:
                 used = {tr['note'] for tr in self.trains}
-                if '월화수목금' in used: notes.append('◆ 평일(월∼금) 운행')
-                if '토일' in used: notes.append('◇ 토·일 운행')
-            notes.append('운행일 무표시는 매일 운행')
+                if '월화수목금' in used: dn.append('◆ 평일(월∼금) 운행')
+                if '토일' in used: dn.append('◇ 토·일 운행')
+            dn.append('운행일 무표시는 매일 운행')
+            notes.append(', '.join(dn))
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
             notes.append('着発 역의 빈 도착 시각은 자료 없음')
         L += notes
