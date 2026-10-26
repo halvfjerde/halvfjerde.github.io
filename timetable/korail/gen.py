@@ -89,6 +89,11 @@ def esc_txt(s):
 def vert(s):
     return f'r{esc_txt(s)}.' if s else '_'
 
+# 따로 조사한 도착 시각 {(열차번호, 역): 분}. arrivals.json 이 있으면 읽는다
+ARR = {}
+if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'arrivals.json')):
+    ARR = {tuple(k.split('@')): v for k, v in json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'arrivals.json'))).items()}
+
 BLACK = {'새마을', '마음', '새마을호'}      # ITX·새마을급은 검은 네모, 무궁화급·KTX 차종은 흰 네모
 def badge(k):
     if not k: return '_'
@@ -251,8 +256,7 @@ class Table:
         # 머리 행
         L.append('[rows]')
         self.o0, self.d0 = self.st[o0], self.st[d0]
-        odd = [tr for tr in self.trains if self.ends_of(tr) != (self.o0, self.d0)]
-        has_fr = has_to = bool(odd)
+        has_fr = has_to = True
         if has_fr: L.append(f'fr   {lbl("fr")}')
         L.append(f'no   {lbl("no")} fmt=N{{*}}')
         L.append(f'kind {lbl("car" if ktx else "kind")} style=va=t')
@@ -260,13 +264,15 @@ class Table:
         L.append('[footer]')
         if has_to: L.append(f'to   {lbl("to")}')
         has_day = any(tr['note'] for tr in self.trains)
-        if has_day: L.append(f'day  {lbl("day")} style=va=t')
+        days = {tr['note'] for tr in self.trains if tr['note']}
+        self.daysym = {'월화수목금': '◆', '토일': '◇'} if days and days <= {'월화수목금', '토일'} else None
+        if has_day: L.append(f'day  {lbl("day")}' + ('' if self.daysym_pre() else ' style=va=t'))
         L.append('')
         thru = collections.Counter()
         for tr in self.trains:
             idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
             for i in idx[1:-1]: thru[i] += 1
-        self.split = {i for i in major if 0 < i < n - 1 and ends[i] >= max(2, 0.05 * N) and thru[i] >= 1}
+        self.split = {i for i in major if 0 < i < n - 1 and ends[i] >= max(2, 0.05 * N) and thru[i] >= 1} | {0, n - 1}
         L.append('[stations]')
         rules = set()
         for alt in BRANCH.get((self.cat, self.line), []):
@@ -276,7 +282,7 @@ class Table:
         rules -= {0, n}
         for i, s in enumerate(self.st):
             if i in rules: L.append('---')
-            ad = '発' if i == 0 else '着' if i == n - 1 else '着発' if i in self.split else '〃'
+            ad = '着発' if i in self.split else '〃'
             mk = '**' if i in self.split else '*' if i in major else ''
             nm = mk + s
             hj = self.hanja.get(s, '')
@@ -288,7 +294,7 @@ class Table:
             hdr = []
             if has_fr:
                 o, d = self.ends_of(tr)
-                hdr.append(q(esc_txt(o)) if (o, d) != (self.o0, self.d0) else '_')
+                hdr.append(q(esc_txt(o)))
             hdr.append(tr['no'])
             k = KIND.get(tr['type'], tr['type'])
             hdr.append(q(badge(k)))
@@ -296,8 +302,10 @@ class Table:
             ft = []
             if has_to:
                 o, d = self.ends_of(tr)
-                ft.append(q(esc_txt(d)) if (o, d) != (self.o0, self.d0) else '_')
-            if has_day: ft.append(q(vert(tr['note'])) if tr['note'] else '_')
+                ft.append(q(esc_txt(d)))
+            if has_day:
+                nt = tr['note']
+                ft.append('_' if not nt else self.daysym[nt] if self.daysym else q(vert(nt)))
             line = ' '.join(hdr) + ' : ' + ' '.join(cells)
             if ft: line += ' : ' + ' '.join(ft)
             L.append(line)
@@ -313,10 +321,20 @@ class Table:
             names = [('새마을', 'ITX-새마을'), ('마음', 'ITX-마음')]
             parts = [f'「{k}」은 `{full}`' for k, full in names if k in kinds]
             if parts: notes.append('등급 ' + ', '.join(parts))
-        if has_day: notes.append('운행일 무표시는 매일 운행')
-        if self.split: notes.append('着発을 나눈 역의 도착 시각은 그 역에서 끝나는 열차만 표시')
+        if has_day:
+            if self.daysym:
+                used = {tr['note'] for tr in self.trains}
+                if '월화수목금' in used: notes.append('◆ 평일(월∼금) 운행')
+                if '토일' in used: notes.append('◇ 토·일 운행')
+            notes.append('운행일 무표시는 매일 운행')
+        if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
+            notes.append('着発을 나눈 역에서 도착 시각이 빈 열차는 도착 시각 조사 중')
         L += notes
         return '\n'.join(L)
+
+    def daysym_pre(self):
+        days = {tr['note'] for tr in self.trains if tr['note']}
+        return bool(days) and days <= {'월화수목금', '토일'}
 
     def ends_of(self, tr):
         """실제 시발·종착역 (표 밖이어도). 자료에 없으면 표 안의 첫·끝 정차역"""
@@ -341,22 +359,24 @@ class Table:
         T = tr['times']
         idx = [i for i, x in enumerate(T) if isinstance(x, int)]
         a, b = idx[0], idx[-1]
-        ends_here = True   # 표 밖으로 이어 가는 열차도 이 표에서는 끝 표시 (종착역 행에 실제 종착역)
+        o, d = self.ends_of(tr)
         out, bar = [], False
         for i, x in enumerate(T):
             sp = i in self.split
-            if i < a or (i > b and not (i == b + 1 and ends_here and not bar)):
+            if i < a or i > b + 1 or (i == b + 1 and bar):
                 out.append('x')
-            elif i > b:                                   # 종착 다음 칸: 끝 표시
+            elif i == b + 1:                              # 마지막 정차역 다음 칸: 끝 표시
                 out.append('-,x' if sp else '-')
             elif isinstance(x, int):
                 t = hm(x)
-                if not sp: out.append(t)
-                elif i == a and i == b: out.append(t)
-                elif i == a: out.append(f'x,{t}')         # 여기서 떠남
-                elif i == b:                              # 여기서 끝남(끝 표시는 발 줄에)
-                    out.append(f'{t},-' if ends_here else f'{t},x'); bar = True
-                else: out.append(f'_,{t}')                # 지나가며 섬: 도착 시각은 자료에 없음
+                if not sp: out.append(t); continue
+                st = self.st[i]
+                arr = ARR.get((tr['no'], st))             # 따로 조사한 도착 시각
+                arr = hm(arr) if arr is not None else '_'
+                if i == a and o == st: arr = 'x'          # 여기서 떠나는 열차: 착은 ‥
+                if i == b and d == st:                    # 여기서 끝나는 열차: 착에 시각, 발에 끝 표시
+                    out.append(f'{t},-'); bar = True
+                else: out.append(f'{arr},{t}')
             else:
                 out.append({'v': 'v', 'x': 'x', 'I': 'i'}[x])
         res = []
