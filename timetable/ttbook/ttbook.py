@@ -205,34 +205,197 @@ class Ctx:
 FONT_OF_CLASS = {'jtt-st': 'M', 'jtt-ad': 'M', 'jtt-th': 'M', 'jtt-r-st': 'M', 'jtt-r-ad': 'M',
                  'jtt-lit': 'M', 'jtt-td': 'M', 'jtt-no': 'M', 'jtt-tcy': 'M'}
 
+# ───────────────────────── 글꼴 찾기·재기 ─────────────────────────
+# 미세 조정 값을 손으로 정하지 않는다: 조판할 때마다 쓰는 글꼴에서 글자의 높이를 재어 맞춘다.
+# 글꼴을 바꾸면 이름만 바꾸면 된다 (사람이 정하는 것은 '얼마나 맞출지'의 비율 alignStrength 뿐)
+FONT_EXT = ('.ttf', '.otf', '.ttc', '.otc')
+
+class FontDB:
+    def __init__(self, dirs, cache_path):
+        self.map = {}
+        try: cache = json.load(open(cache_path, encoding='utf-8'))
+        except Exception: cache = {}
+        new = {}
+        for d in dirs:
+            for root, _, files in os.walk(d):
+                for fn in files:
+                    if not fn.lower().endswith(FONT_EXT): continue
+                    path = os.path.join(root, fn)
+                    try: mt = os.path.getmtime(path)
+                    except OSError: continue
+                    ent = cache.get(path)
+                    if not ent or ent['mt'] != mt:
+                        ent = {'mt': mt, 'faces': self._names(path)}
+                    new[path] = ent
+                    for idx, names in enumerate(ent['faces']):
+                        for n in names: self.map.setdefault(n.lower(), (path, idx))
+        try: json.dump(new, open(cache_path, 'w', encoding='utf-8'), ensure_ascii=False)
+        except Exception: pass
+        self.fonts = {}
+
+    @staticmethod
+    def _names(path):
+        from fontTools.ttLib import TTFont, TTCollection
+        faces = []
+        try:
+            if path.lower().endswith(('.ttc', '.otc')):
+                fl = TTCollection(path, lazy=True).fonts
+            else:
+                fl = [TTFont(path, lazy=True)]
+            for f in fl:
+                nm = f['name']
+                g = lambda i: (nm.getDebugName(i) or '')
+                ns = {g(4), g(6), (g(1) + ' ' + g(2)).strip(), (g(16) + ' ' + g(17)).strip(), g(1) if g(2) in ('Regular', '') else ''}
+                faces.append(sorted(x for x in ns if x))
+        except Exception:
+            pass
+        return faces
+
+    def get(self, name):
+        key = name.lower()
+        if key not in self.map:
+            for suf in (' regular', ' r'):
+                if key + suf in self.map: key += suf; break
+        if key not in self.map: return None
+        if key not in self.fonts: self.fonts[key] = FontInfo(*self.map[key])
+        return self.fonts[key]
+
+class FontInfo:
+    def __init__(self, path, idx):
+        from fontTools.ttLib import TTFont
+        self.path, self.idx = path, idx
+        self.f = TTFont(path, fontNumber=idx, lazy=True)
+        self.cmap = self.f.getBestCmap()
+        self.gs = self.f.getGlyphSet()
+        self.upm = self.f['head'].unitsPerEm
+        self._bb = {}
+    def has(self, ch): return ord(ch) in self.cmap
+    def bbox(self, ch):
+        """잉크 상자 (em) 와 전진폭"""
+        if ch in self._bb: return self._bb[ch]
+        from fontTools.pens.boundsPen import BoundsPen
+        g = self.cmap.get(ord(ch))
+        r = None
+        if g:
+            pen = BoundsPen(self.gs); self.gs[g].draw(pen)
+            if pen.bounds:
+                u = self.upm
+                b = pen.bounds
+                r = (b[0] / u, b[1] / u, b[2] / u, b[3] / u, self.gs[g].width / u)
+        self._bb[ch] = r
+        return r
+    def center(self, chars):
+        cs = [self.bbox(c) for c in chars]
+        cs = [(b[1] + b[3]) / 2 for b in cs if b]
+        return sum(cs) / len(cs) if cs else None
+
+SAMPLE_HANGUL = '가나다라마바사아자차카타파하서울부산경행역'
+SAMPLE_KANJI = '東西南北大田釜山駅京水原永登浦光明'
+SAMPLE_DIGIT = '0123456789'
+
 # ───────────────────────── 줄 안 요소 ─────────────────────────
 # 줄(line) = 요소 목록. 요소: ('tex', tex, size)  ('just', [tex…], size)  ('obj', tex, w_em, h_em, size)
 GOTHIC = {'DG', 'DGB', 'GB', 'G'}
-HANGUL_RUN = re.compile('[\u1100-\u11ff\u3130-\u318f\uac00-\ud7a3]+')
+KO_OF = {'M': 'KM', 'DM': 'KM', 'G': 'KG', 'DG': 'KG', 'GB': 'KGB', 'DGB': 'KGB'}
+JP_OF = {'M': 'mincho', 'DM': 'mincho', 'G': 'gothic', 'DG': 'gothic', 'GB': 'gothicBold', 'DGB': 'gothicBold'}
+KO_ROLE = {'KM': 'minchoKo', 'KG': 'gothicKo', 'KGB': 'gothicKoBold'}
+# 한글 문맥의 문장 부호: 한글 글꼴의 것을 먼저 쓴다
+KO_PUNCT = set('()[]{}<>,.:;!?\'"-/·「」『』（）〔〕［］《》〈〉―—–‐～〜…')
+
+def char_kind(ch):
+    o = ord(ch)
+    if 0xAC00 <= o <= 0xD7A3 or 0x1100 <= o <= 0x11FF or 0x3130 <= o <= 0x318F: return 'ko'
+    if ch in KO_PUNCT: return 'kp'
+    if 0x4E00 <= o <= 0x9FFF or 0x3400 <= o <= 0x4DBF or 0xF900 <= o <= 0xFAFF or 0x3040 <= o <= 0x30FF: return 'jp'
+    return 'base'
+
+# 세로쓰기에서 돌려 쓸 글자 (세로쓰기 전용 글자 → 가로 글자)
+VROT = {'︵': '(', '︶': ')', '︱': '―', '︹': '〔', '︺': '〕', '(': '(', ')': ')', '（': '(', '）': ')', '―': '―', '—': '―'}
+
+class Metrics:
+    """글꼴에서 잰 값: 기준 중심(명조 한자), 글꼴마다 옮길 양"""
+    def __init__(self, db, fonts, strength):
+        self.db, self.fonts, self.k = db, fonts, strength
+        self.info = {role: db.get(name) for role, name in fonts.items() if isinstance(name, str)}
+        ref = self.info.get('mincho')
+        self.ref = (ref and ref.center(SAMPLE_KANJI)) or 0.37
+        self.shift = {}
+        for role, fi in self.info.items():
+            if not fi: continue
+            if role.endswith('Ko'):
+                c = fi.center(SAMPLE_HANGUL)
+            elif role == 'dia':
+                c = fi.center(SAMPLE_DIGIT)
+            else:
+                c = fi.center(SAMPLE_KANJI)
+            self.shift[role] = (self.ref - c) * self.k if c is not None else 0.0
+        self.missing = [n for r, n in fonts.items() if isinstance(n, str) and not self.info.get(r)]
+    def report(self):
+        return ', '.join('%s %+.3f' % (r, v) for r, v in sorted(self.shift.items()))
 
 class Inline:
-    def __init__(self, fs, hg_up=None):
+    def __init__(self, fs, metrics=None):
         self.fs = fs          # 기준 글자 크기 (bp)
-        self.hg_up = hg_up or {}   # 한글(은 글꼴)을 올리는 양 (em): {'gothic': …, 'mincho': …}
+        self.m = metrics
 
-    def font(self, ctx):
+    @property
+    def c(self):              # 글자 중심의 높이 (em) — 줄 높이의 가운데에 둘 곳
+        return self.m.ref if self.m else 0.37
+
+    def font(self, ctx, fam=None):
         s = ctx.size * self.fs
-        t = r'\f%s\fontsize{%.3fbp}{%.3fbp}\selectfont ' % (ctx.font, s, s * 1.25)
+        t = r'\f%s\fontsize{%.3fbp}{%.3fbp}\selectfont ' % (fam or ctx.font, s, s * 1.25)
         if ctx.color: t += r'\color[HTML]{%s}' % ctx.color
         return t
 
+    def shift_for(self, kind, fam):
+        if not self.m: return 0.0
+        if kind in ('ko', 'kp'): return self.m.shift.get(KO_ROLE[KO_OF[fam]], 0.0)
+        if kind == 'jp': return self.m.shift.get(JP_OF[fam], 0.0)
+        return 0.0
+
     def run(self, s, ctx, vertical=False):
+        """글자들을 글꼴별 토막으로: 한글·문장 부호는 한글 글꼴, 한자·가나는 일본 글꼴, 나머지(숫자·로마자·기호)는 그대로.
+        가로쓰기에서는 글꼴마다 잰 만큼 위아래를 맞춘다"""
         if not s: return ''
-        out = []
+        segs = []
         for ch in s:
-            if ch == ' ': out.append(r'\ ')
-            else: out.append(esc(ch))
-        t = ''.join(out)
-        # 은돋움의 한글은 숫자·한자보다 낮게 앉는다 → 고딕의 한글만 조금 올린다 (가로쓰기에서만)
-        up = self.hg_up.get('gothic' if ctx.font in GOTHIC else 'mincho', 0)
-        if not vertical and up:
-            t = HANGUL_RUN.sub(lambda m: r'\raisebox{%.3fem}{%s}' % (up, m.group(0)), t)
-        return '{' + self.font(ctx) + t + '}'
+            k = char_kind(ch)
+            if k == 'kp' and self.m:
+                ki = self.m.info.get(KO_ROLE[KO_OF[ctx.font]])
+                if not (ki and ki.has(ch)): k = 'base'
+            if ch == ' ': k = segs[-1][0] if segs else 'base'
+            if segs and segs[-1][0] == k: segs[-1][1].append(ch)
+            else: segs.append([k, [ch]])
+        out = []
+        for k, chs in segs:
+            t = ''.join(r'\ ' if ch == ' ' else esc(ch) for ch in chs)
+            fam = KO_OF[ctx.font] if k in ('ko', 'kp') else ctx.font
+            body = '{' + self.font(ctx, fam) + t + '}'
+            up = self.shift_for(k, ctx.font)
+            if not vertical and abs(up) > 0.002:
+                body = r'\raisebox{%.3fbp}{%s}' % (up * ctx.size * self.fs, body)
+            out.append(body)
+        return '{' + ''.join(out) + '}'
+
+    def vglyph(self, ch, ctx, col_w):
+        """세로쓰기의 괄호·줄표: 한글 글꼴의 가로 글자를 돌려, 잉크의 가운데를 열의 가운데에"""
+        base = VROT.get(ch, ch)
+        em = ctx.size * self.fs
+        fam = KO_OF[ctx.font]
+        fi = self.m and self.m.info.get(KO_ROLE[fam])
+        bb = fi.bbox(base) if fi else None
+        if not bb:
+            return r'\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (col_w, self.run(base, ctx, True)), 0.5
+        x0, y0, x1, y1, adv = bb
+        yc, hh = (y0 + y1) / 2 * em, (y1 - y0) / 2 * em
+        g = '{' + self.font(ctx, fam) + esc(base) + '}'
+        # 돌린 뒤 세로(글 방향) 자리는 잉크 길이 + 앞뒤 조금
+        L = (x1 - x0) * em
+        pad = 0.12 * em
+        box = r'\rotatebox{-90}{\raisebox{%.3fbp}[%.3fbp][%.3fbp]{\hbox to %.3fbp{\kern%.3fbp%s\hss}}}' % (
+            -yc, hh, hh, L + 2 * pad, pad - x0 * em, g)
+        return r'\hbox to %.3fbp{\hss %s\hss}' % (col_w, box), (L + 2 * pad) / em
 
     def lines(self, node, ctx):
         """노드 → 줄 목록"""
@@ -298,7 +461,7 @@ class Inline:
         h = 1.3
         if 'jtt-bd--n' in k.cls: w = max(1.3, len(inner_node.text()) * 0.55 + 0.4)
         wb, hb = w * sm * self.fs, h * sm * self.fs
-        tex = r'\ttbadge{%.3f}{%.3f}{%d}{%.3f}{%.3f}{%s}' % (wb, hb, 1 if filled else 0, sx, 0.37 * ctx.size * self.fs, inner)
+        tex = r'\ttbadge{%.3f}{%.3f}{%d}{%.3f}{%.3f}{%s}' % (wb, hb, 1 if filled else 0, sx, self.c * ctx.size * self.fs, inner)
         return ('obj', tex, w * sm, h * sm, ctx.size)
 
     # 세로쓰기 (jtt-v: 왼쪽→오른쪽 열, jtt-vb: 오른쪽→왼쪽)
@@ -312,6 +475,9 @@ class Inline:
                 ch = txt[i]
                 if ch == ' ':
                     rows.append(r'\kern%.3fbp' % (0.33 * em)); h += 0.33; i += 1; continue
+                if ch in VROT:
+                    t, l = self.vglyph(ch, c, em)
+                    rows.append(t); h += l; i += 1; continue
                 if is_latin(ch):
                     j = i
                     while j < len(txt) and is_latin(txt[j]): j += 1
@@ -389,10 +555,12 @@ def line_height(line, fs_em=1.0):
         else: h = max(h, 1.25 * it[-1])
     return h or 1.25
 
+REF_C = 0.37      # 글자 중심의 높이(em). 조판할 때 명조 한자에서 잰 값으로 바뀐다
+
 def strut(size, fs):
     s = size * fs
     L = 1.25 * s
-    c = 0.37 * s
+    c = REF_C * s
     return r'\rule[%.3fbp]{0pt}{%.3fbp}' % (-(L / 2 - c), L)
 
 def line_tex(line, W, halign, fs, inl, sqcenter=False):
@@ -449,7 +617,17 @@ class Book:
         self.P0 = cfg.get('colWidth', 2.3) * self.fs             # 열차 열 폭
         self.frame_w = self.rw[2]                                 # 틀 굵기
         self.frame_pad = cfg.get('framePad', 0.5) * MM            # 틀과 표 사이
-        self.inl = Inline(self.fs, cfg.get('hangulUp', {'gothic': 0.05, 'mincho': 0.05}))
+        # 글꼴: 이름으로 찾고, 조판 전에 재어 둔다
+        dirs = cfg.get('fontDirs') or DEFAULT_FONT_DIRS
+        self.font_dirs = [os.path.expanduser(d) if os.path.isabs(os.path.expanduser(d)) else os.path.join(base, d) for d in dirs]
+        self.font_dirs = [d for d in self.font_dirs if os.path.isdir(d)]
+        os.makedirs(os.path.join(HERE, 'build'), exist_ok=True)
+        db = FontDB(self.font_dirs, os.path.join(HERE, 'build', 'fontdb.json'))
+        self.fonts = dict(DEFAULT_FONTS, **cfg.get('fonts', {}))
+        self.metrics = Metrics(db, self.fonts, cfg.get('alignStrength', 0.85))
+        global REF_C
+        REF_C = self.metrics.ref
+        self.inl = Inline(self.fs, self.metrics)
         self.pages = []                                           # [(side, [tex…], runhead)]
 
     # ── 칸의 괘선(위키 CSS 와 같은 셈) ──
@@ -557,6 +735,9 @@ class Book:
                 ch = s[i]
                 if ch in ' 　':
                     items.append(r'\kern%.3fbp' % (0.3 * em)); hgt += 0.3; i += 1; continue
+                if ch in VROT:
+                    t, l = self.inl.vglyph(ch, c, 1.3 * em)
+                    items.append(t); hgt += l; i += 1; continue
                 if is_latin(ch):
                     j = i
                     while j < len(s) and is_latin(s[j]): j += 1
@@ -871,6 +1052,51 @@ class Book:
                 rect(x0, y0, t, y1 - y0); rect(x1 - t, y0, t, y1 - y0)
         return '0 g ' + ' '.join(ops) + ' f'
 
+    # ── 글꼴 정의: 이름이 아니라 찾아 둔 파일로 (TeX 쪽 이름 찾기에 기대지 않는다) ──
+    FAMILIES = [  # 명령, 주 글꼴, 대체 글꼴들, 추가 기능
+        ('M', 'mincho', ['minchoKo', 'dia'], ''),
+        ('DM', 'dia', ['mincho', 'minchoKo'], ';-liga;-ccmp'),
+        ('DG', 'dia', ['gothic', 'gothicKo'], ';-liga;-ccmp'),
+        ('DGB', 'dia', ['gothicBold', 'gothicKoBold'], ';-liga;-ccmp;+titl'),
+        ('GB', 'gothicBold', ['gothicKoBold', 'dia'], ''),
+        ('G', 'gothic', ['gothicKo', 'dia'], ''),
+        ('KM', 'minchoKo', ['mincho', 'dia'], ''),
+        ('KG', 'gothicKo', ['gothic', 'dia'], ''),
+        ('KGB', 'gothicKoBold', ['gothicBold', 'dia'], ''),
+    ]
+    def fontdefs(self):
+        info = self.metrics.info
+        # 파일 이름에 빈칸·한자 등이 있으면 fontspec 이 이름을 망가뜨리므로, 빈칸 없는 이름의 링크를 만들어 쓴다
+        linkdir = os.path.join(HERE, 'build', 'fontlinks')
+        os.makedirs(linkdir, exist_ok=True)
+        def safe(path):
+            fn = os.path.basename(path)
+            if re.fullmatch(r'[A-Za-z0-9._-]+', fn): return path
+            import hashlib
+            ext = os.path.splitext(fn)[1].lower()
+            dst = os.path.join(linkdir, 'f' + hashlib.md5(path.encode()).hexdigest()[:10] + ext)
+            if not os.path.exists(dst):
+                try: os.symlink(path, dst)
+                except OSError:
+                    import shutil; shutil.copyfile(path, dst)
+            return dst
+        for fi in info.values():
+            if fi and not hasattr(fi, 'tex_path'): fi.tex_path = safe(fi.path)
+        def fb(role):
+            fi = info.get(role)
+            if not fi: return None
+            sub = '(%d)' % fi.idx if fi.path.lower().endswith(('.ttc', '.otc')) else ''
+            return '[%s]%s:mode=node;' % (fi.tex_path.replace('\\', '/'), sub)
+        lua, tex = [], []
+        for cmd, main, fbs, feat in self.FAMILIES:
+            fi = info.get(main)
+            if not fi: raise SystemExit('font not found: %s = %s' % (main, self.fonts.get(main)))
+            lst = [x for x in (fb(r) for r in fbs) if x]
+            lua.append('luaotfload.add_fallback("fb%s", {%s})' % (cmd, ', '.join('"%s"' % x for x in lst)))
+            d, fn = os.path.split(fi.tex_path)
+            tex.append(r'\newfontfamily\f%s{%s}[Path=%s/, FontIndex=%d, RawFeature={fallback=fb%s%s}]' % (cmd, fn, d, fi.idx, cmd, feat))
+        return '\\directlua{\n' + '\n'.join(lua) + '\n}\n' + '\n'.join(tex)
+
     # ── 머리글·쪽 번호 ──
     def page_furniture(self, folio, recto, runhead, part):
         fs = self.fs
@@ -931,17 +1157,18 @@ class Book:
             body.append(r'\put(0,0){\pdfextension literal{%s}}' % self.pdf_ops(rects))
             body += tex
             body.append(r'\end{picture}\newpage')
-        f = self.cfg.get('fonts', {})
         pre = PREAMBLE % {
-            'W': self.W, 'H': self.H,
-            'mincho': f.get('mincho', 'Shippori Mincho'), 'minchoKo': f.get('minchoKo', 'UnBatang'),
-            'gothic': f.get('gothic', 'Zen Kaku Gothic New'), 'gothicKo': f.get('gothicKo', 'UnDotum'),
-            'gothicB': f.get('gothicBold', 'Zen Kaku Gothic New Bold'), 'gothicKoB': f.get('gothicKoBold', 'UnDotum Bold'),
-            'dia': f.get('dia', 'DiaPro'),
+            'W': self.W, 'H': self.H, 'fontdefs': self.fontdefs(),
             'layout': 'TwoPageLeft' if first % 2 == 0 else 'TwoPageRight',
         }
         with open(out_tex, 'w', encoding='utf-8') as fo:
             fo.write(pre + '\n'.join(body) + '\n\\end{document}\n')
+
+DEFAULT_FONT_DIRS = ['fonts', '/usr/share/fonts', '/usr/local/share/fonts',
+                     '~/Library/Fonts', '/Library/Fonts', '/System/Library/Fonts']
+DEFAULT_FONTS = {'mincho': 'Shippori Mincho', 'minchoKo': 'UnBatang',
+                 'gothic': 'BIZ UDPGothic', 'gothicKo': 'UnDotum',
+                 'gothicBold': 'BIZ UDPGothic Bold', 'gothicKoBold': 'UnDotum Bold', 'dia': 'DiaPro'}
 
 ORD_KO = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째', '일곱째', '여덟째', '아홉째', '열째',
           '열한째', '열두째', '열셋째', '열넷째', '열다섯째', '열여섯째']
@@ -950,24 +1177,12 @@ PREAMBLE = r'''\documentclass{article}
 \usepackage[paperwidth=%(W).3fbp,paperheight=%(H).3fbp,margin=0pt]{geometry}
 \usepackage{fontspec}
 \usepackage{graphicx}
+\usepackage{xfp}
 \usepackage[dvipsnames]{xcolor}
 \pagestyle{empty}
 \setlength{\unitlength}{1bp}
 \setlength{\parindent}{0pt}
-\directlua{
-luaotfload.add_fallback("fbM", {"%(minchoKo)s:mode=node;", "%(dia)s:mode=node;"})
-luaotfload.add_fallback("fbDM", {"%(mincho)s:mode=node;", "%(minchoKo)s:mode=node;"})
-luaotfload.add_fallback("fbDG", {"%(gothic)s:mode=node;", "%(gothicKo)s:mode=node;"})
-luaotfload.add_fallback("fbDGB", {"%(gothicB)s:mode=node;", "%(gothicKoB)s:mode=node;"})
-luaotfload.add_fallback("fbGB", {"%(gothicKoB)s:mode=node;", "%(dia)s:mode=node;"})
-luaotfload.add_fallback("fbG", {"%(gothicKo)s:mode=node;", "%(dia)s:mode=node;"})
-}
-\newfontfamily\fM{%(mincho)s}[RawFeature={fallback=fbM}]
-\newfontfamily\fDM{%(dia)s}[RawFeature={fallback=fbDM;-liga;-ccmp}]
-\newfontfamily\fDG{%(dia)s}[RawFeature={fallback=fbDG;-liga;-ccmp}]
-\newfontfamily\fDGB{%(dia)s}[RawFeature={fallback=fbDGB;-liga;-ccmp;+titl}]
-\newfontfamily\fGB{%(gothicB)s}[RawFeature={fallback=fbGB}]
-\newfontfamily\fG{%(gothic)s}[RawFeature={fallback=fbG}]
+%(fontdefs)s
 \pdfvariable pagesattr{/PageLayout /%(layout)s}
 %% 배지: 폭 높이 칠함 가로배율 글자중심높이 내용
 \newcommand\ttbadge[6]{\raisebox{\dimexpr #5bp - #2bp/2\relax}{\begin{picture}(#1,#2)%%
@@ -996,8 +1211,11 @@ def main():
         if it.get('type', 'table') == 'table': bk.add_table(it)
     out = os.path.join(HERE, 'build', cfg.get('name', 'book') + '.tex')
     bk.emit(out)
+    env = dict(os.environ)
+    if bk.metrics.missing: print('fonts not found:', ', '.join(bk.metrics.missing))
+    print('align (em):', bk.metrics.report(), '| ref center %.3f' % bk.metrics.ref)
     r = subprocess.run(['lualatex', '-interaction=nonstopmode', '-halt-on-error', os.path.basename(out)],
-                       cwd=os.path.dirname(out), capture_output=True)
+                       cwd=os.path.dirname(out), capture_output=True, env=env)
     log = r.stdout.decode('utf-8', 'replace')
     if r.returncode != 0:
         print(log[-3000:]); sys.exit(1)

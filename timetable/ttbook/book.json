@@ -39,8 +39,5 @@
       "fit": "spread"
     }
   ],
-  "hangulUp": {
-    "gothic": 0.05,
-    "mincho": 0.05
-  }
+  "alignStrength": 0.85
 }
