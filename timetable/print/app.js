@@ -1,17 +1,18 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=4';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=5';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
 const API = 'api.php';
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}.`; };
+// 기본은 JTB 시각표처럼: 좁은 여백, 7pt, 쪽 번호는 위 바깥, 격자에 맞춰 쪽 끝까지 흘려 넣는다
 const DEFAULT = () => ({
-  v: 1, title: '시각표', subtitle: '', edition: '', date: today(), publisher: '', lang: 'ko', colophonNote: '',
-  page: { size: 'B5', w: 182, h: 257, margin: { top: 14, bottom: 14, inner: 16, outer: 12 } },
-  fs: 8, fonts: 'free', color: 'color', binding: 'left', folioPos: 'bottom-outer',
+  v: 2, title: '시각표', subtitle: '', edition: '', date: today(), publisher: '', lang: 'ko', colophonNote: '',
+  page: { size: 'B5', w: 182, h: 257, margin: { top: 11, bottom: 6, inner: 10, outer: 6 } },
+  fs: 7, fonts: 'free', color: 'color', binding: 'left', folioPos: 'top-outer',
   parts: { cover: true, toc: true, runhead: true, folio: true, colophon: true },
-  pack: true, grid: true, alignBands: false, pad4: false, output: { marks: false },
+  pack: true, grid: true, fill: true, alignBands: false, pad4: false, output: { marks: false },
   items: [],
 });
 
@@ -22,7 +23,17 @@ let pageList = [];               // 위키의 시각표 문서들
 const open = new Set();          // 펼친 문서
 
 function load() {
-  try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); return j && j.v === 1 ? merge(DEFAULT(), j) : null; } catch (e) { return null; }
+  try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); return j && (j.v === 1 || j.v === 2) ? merge(DEFAULT(), upgrade(j)) : null; } catch (e) { return null; }
+}
+/** 1판 설계도: 손대지 않은 옛 기본값(넓은 여백·8pt·아래 쪽 번호)은 JTB식 기본값으로 바꾼다 */
+function upgrade(j) {
+  if (j.v !== 1) return j;
+  const m = j.page?.margin;
+  if (m && m.top === 14 && m.bottom === 14 && m.inner === 16 && m.outer === 12) delete j.page.margin;
+  if (j.fs === 8) delete j.fs;
+  if (j.folioPos === 'bottom-outer') delete j.folioPos;
+  j.v = 2;
+  return j;
 }
 function persist() { try { localStorage.setItem(KEY, JSON.stringify(book)); } catch (e) { /* 저장 불가 */ } }
 function merge(base, j) {
@@ -167,7 +178,7 @@ const FIELDS = [
 ];
 const CHECKS = [
   ['#pCover', 'parts.cover'], ['#pToc', 'parts.toc'], ['#pRunhead', 'parts.runhead'], ['#pFolio', 'parts.folio'],
-  ['#pColophon', 'parts.colophon'], ['#pPack', 'pack'], ['#pGrid', 'grid'], ['#pAlign', 'alignBands'], ['#pPad4', 'pad4'], ['#pMarks', 'output.marks'],
+  ['#pColophon', 'parts.colophon'], ['#pPack', 'pack'], ['#pGrid', 'grid'], ['#pFill', 'fill'], ['#pAlign', 'alignBands'], ['#pPad4', 'pad4'], ['#pMarks', 'output.marks'],
 ];
 const getp = (o, path) => path.split('.').reduce((a, k) => a?.[k], o);
 const setp = (o, path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((a, k) => (a[k] ??= {}), o)[last] = v; };
@@ -268,8 +279,8 @@ $('#fileLoad').onchange = async (e) => {
   if (!f) return;
   try {
     const j = JSON.parse(await f.text());
-    if (j.v !== 1 || !Array.isArray(j.items)) throw new Error('설계도 파일이 아니다');
-    book = merge(DEFAULT(), j);
+    if ((j.v !== 1 && j.v !== 2) || !Array.isArray(j.items)) throw new Error('설계도 파일이 아니다');
+    book = merge(DEFAULT(), upgrade(j));
     fillForm();
     changed(true);
   } catch (err) { alert(`불러오지 못했다: ${err.message}`); }

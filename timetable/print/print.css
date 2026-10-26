@@ -132,6 +132,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .frag { position: absolute; width: max-content; max-width: none; }
 .frag .cont { text-align: right; font: 7pt/1 var(--bk-gothic); margin-top: 1.5mm; }
+.frag .cont.cont-abs { position: absolute; right: 0; top: 100%; margin-top: .5mm; font-size: 6.5pt; white-space: nowrap; }
 
 /* 흑백: 빨강 글씨는 먹으로, 나머지는 회색조로 */
 .book.mono .jtt-wrap [style*="color"] { color: #000 !important; background: transparent !important; }

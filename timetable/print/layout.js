@@ -339,7 +339,10 @@ export async function tableFragments(srcWrap, box, opt) {
   await document.fonts.ready;
   let wrap = holder.firstChild;
   let wr = rect(wrap);
-  const contH = G ? Math.ceil(5 * MM / G.R) * G.R : 5 * MM;   // '계속' 표시 몫
+  const contH = opt.contH ?? (G ? Math.ceil(5 * MM / G.R) * G.R : 5 * MM);   // '계속' 표시 몫
+  const RR = opt.grid?.R;
+  const snapY = (v) => (RR ? Math.ceil(v / RR - 1e-3) * RR : v);
+  const gapY = opt.gapY ?? 0;
 
   if (!G && opt.fit === 'shrink') {
     const s = Math.min(1, opt.availW / wr.width, opt.availH / wr.height);
@@ -406,7 +409,14 @@ export async function tableFragments(srcWrap, box, opt) {
     const frame = el.querySelector('.jtt-frame');
     if (ttl && frame && titleW) {
       const fh = rect(frame).height;
-      if (rect(ttl).height > fh + 0.5) { ttl.style.height = `${fh}px`; ttl.style.whiteSpace = 'normal'; }
+      const natH = rect(ttl).height;
+      if (natH > fh + 0.5) {
+        ttl.style.height = `${fh}px`;
+        ttl.style.whiteSpace = 'normal';
+        // 미리 비워 둔 줄 수(titleLine)를 넘게 꺾여야 하면 글자를 줄인다 (조각이 판면보다 넓어지지 않게)
+        const lines = titleLine ? 2 : 1;
+        if (natH > fh * lines) ttl.style.fontSize = `${parseFloat(getComputedStyle(ttl).fontSize) * (fh * lines / natH) * 0.96}px`;
+      }
     }
     const gi = G ? snapCols(el, tb, colInfo(keepCols), G.P) : null;
     const er = rect(el);
@@ -421,7 +431,8 @@ export async function tableFragments(srcWrap, box, opt) {
   /* 1. 가로 조각: 열차(열)로 자른다. 펼침면이면 왼쪽(L)·오른쪽(R) 쪽을 번갈아 */
   const spread = opt.fit === 'spread' && wr.width > opt.availW + 0.5;
   // 제목이 판면 높이보다 길면 조각마다 한 줄 더 꺾일 수 있으니 그만큼 비워 둔다
-  const titleLine = titleEl && titleW && rect(titleEl).height > opt.availH * 0.6 ? parseFloat(getComputedStyle(titleEl).fontSize) * 1.4 : 0;
+  const titleH0 = titleEl ? rect(titleEl).height : 0;
+  const titleLine = titleEl && titleW && rect(titleEl).height > opt.availH * (opt.fill ? 0.3 : 0.6) ? parseFloat(getComputedStyle(titleEl).fontSize) * 1.4 : 0;
   const gUp = (v) => Math.ceil(v / G.P - 1e-3) * G.P;
   // 가로 조각 i 의 판면 폭: 앞 표가 남긴 단의 오른쪽에 이어 실을 때(opt.firstW)는 첫 조각만 그 폭
   const wAt = (i) => (i === 0 && opt.firstW ? opt.firstW : opt.availW);
@@ -479,6 +490,10 @@ export async function tableFragments(srcWrap, box, opt) {
   else for (let i = 0; i < chunks.length; i += spread ? 2 : 1) groups.push(chunks.slice(i, i + (spread ? 2 : 1)));
   const frags = [];
   const lastNotesH = notesHeight();
+  // 쪽 꽉 채우기(JTB식): 띠를 고르게 나누지 않고, 쪽에 남은 높이만큼 흘려 넣는다.
+  // y 는 다음 띠가 놓일 높이 (쪽에 놓는 쪽과 같은 셈법: 단 높이는 R 의 배수, 단 사이 gapY)
+  const fillMode = opt.fill && !opt.align;
+  let y = opt.startY || 0;
   groups.forEach((grp, gi) => {
     const lastGroup = gi === groups.length - 1;
     const rowH = Array.from({ length: nrow }, (_, i) => Math.max(...grp.map((ch) => ch.tall.rowH[i] || 0)));
@@ -496,6 +511,35 @@ export async function tableFragments(srcWrap, box, opt) {
     // 잰 높이와 실제 높이는 다를 수 있다 (잘린 주기 칸이 행을 늘이는 등). 넘치면 여유(margin)를 늘려 처음부터 다시 나눈다.
     // 마지막 시도에서만 띠 하나를 줄여 맞춘다 (끝에 자투리가 생길 수 있다).
     let bands = null;
+    if (fillMode) {
+      bands = [];
+      const tail = (b) => (b >= fStart ? footH + notesH : contH);
+      const needOf = (bl, c) => snapY(Math.max(...bl.map((x) => x.h)) + (lastGroup && c >= fStart ? 0 : contH));
+      for (let r = hEnd, guard = 0; guard < 500; guard++) {
+        if (spread) y = 0;   // 펼침면 조각은 저마다 한 쪽
+        // 쪽 밑에 머리만 크고 역은 몇 개 없는 띠는 만들지 않는다: 역 다섯 개 이상, 머리 높이의 3/4 이상
+        let minEnd = Math.min(fStart, r + 5);
+        while (minEnd < fStart && rowSum(r, minEnd) < headH * 0.75) minEnd++;
+        const titleNeed = titleW ? titleH0 / (titleLine ? 2 : 1) - (extraH - 8) : 0;   // 표 제목이 두 줄 안에 들 높이
+        if (y > 0 && snapY(Math.max(extraH + headH + rowSum(r, minEnd) + tail(minEnd), titleNeed)) > opt.availH - y + 0.5) y = 0;
+        const room = opt.availH - y;
+        let cut = fStart;
+        if (hEnd < fStart) {
+          let b = r + 1;
+          while (b < fStart && snapY(extraH + headH + rowSum(r, b + 1) + tail(b + 1)) <= room + 0.5) b++;
+          cut = pickBreak(r, b, fStart, S.rowCost, Math.max(2, Math.floor((b - r) / 10)));
+        }
+        let built = bandOf(r, cut);
+        while (needOf(built, cut) > room + 0.5 && cut > r + 1) { cut = pickBreak(r, cut - 1, fStart, S.rowCost, 2); built = bandOf(r, cut); }
+        if (needOf(built, cut) > room + 0.5 && y > 0) { y = 0; continue; }   // 남은 높이에 한 줄도 안 들어가면 새 쪽
+        bands.push({ r, cut, built });
+        const tierH = gi === 0 && bands.length === 1 && opt.firstW ? opt.tierH || 0 : 0;   // 옆에 이어 실은 첫 조각은 그 단의 높이를 따른다
+        y = snapY(y + Math.max(needOf(built, cut), tierH) + gapY);
+        if (y >= opt.availH - 0.5) y = 0;
+        if (cut >= fStart) break;
+        r = cut;
+      }
+    }
     for (let margin = 3, attempt = 0; attempt < 5 && !bands; attempt++) {
       const fits = (a, b, sh = 0) => extraH + headH + rowSum(a, b) + (b >= fStart ? footH + notesH : contH) <= opt.availH - margin - sh;
       const plan = hEnd >= fStart ? [fStart] : cutsFor(hEnd, fStart, fits, S.rowCost, !opt.align, opt.availH * 0.9);
@@ -626,8 +670,9 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
   const rightBound = book.binding === 'right';
   const isRightHand = (n) => (n % 2 === 1) !== rightBound;   // n 쪽이 펼쳤을 때 오른쪽 면인가
   const snapY = (v) => (G ? Math.ceil(v / G.R - 1e-3) * G.R : v);
-  const gapY = snapY(G ? 4 * MM : 7 * MM);
-  const contH = snapY(5 * MM);
+  const fillMode = book.fill !== false;   // 쪽 꽉 채우기(JTB식): 단 사이는 한 줄, '계속'은 자리를 잡지 않고 틀 밑에
+  const gapY = fillMode ? snapY(G ? G.R : 3 * MM) : snapY(G ? 4 * MM : 7 * MM);
+  const contH = fillMode ? 0 : snapY(5 * MM);
 
   /* 1. 본문 조각들 */
   const blocks = [];   // { kind, item, frags | html }
@@ -640,7 +685,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
       if (!t) { warnings.push(`표를 찾지 못함: ${it.label || it.title}`); continue; }
       const fopt = {
         fit: it.fit || 'split', scale: (it.scale || 100) / 100, fs: book.fs, align: !!book.alignBands,
-        minScale: 0.7, availW, availH, grid: G,
+        minScale: 0.7, availW, availH, grid: G, fill: fillMode, gapY, contH,
       };
       // 같은 표·같은 조건이면 지난번에 자른 것을 다시 쓴다 (제목만 고쳤을 때 등)
       const ck = JSON.stringify([it.title, it.oldid, it.idx, fopt, book.fonts]);
@@ -720,7 +765,21 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
           const fk = JSON.stringify([b.ck, Math.round(remW), Math.round(remH)]);
           let ff = FRAG_CACHE.get(fk);
           if (ff === undefined) {
-            ff = await tableFragments(b.src, box, { ...b.fopt, firstW: remW, firstH: remH });
+            ff = await tableFragments(b.src, box, { ...b.fopt, firstW: remW, firstH: remH, startY: tier.y, tierH: tier.h });
+            FRAG_CACHE.set(fk, ff);
+          }
+          if (ff) frags = ff;
+        }
+      }
+      // 쪽 꽉 채우기: 이 쪽의 남은 높이에서부터 띠를 자른다
+      if (fillMode && frags === b.frags && book.pack && cur && !cur.side && !frags[0].side && !b.fopt.align) {
+        const tier = cur.tiers[cur.tiers.length - 1];
+        const startY = snapY(tier.y + tier.h + gapY);
+        if (startY < availH - 0.5) {
+          const fk = JSON.stringify([b.ck, 'y', Math.round(startY)]);
+          let ff = FRAG_CACHE.get(fk);
+          if (ff === undefined) {
+            ff = await tableFragments(b.src, box, { ...b.fopt, startY });
             FRAG_CACHE.set(fk, ff);
           }
           if (ff) frags = ff;
@@ -808,7 +867,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
         holder.appendChild(el);
         if (f.cont) {
           const c = document.createElement('div');
-          c.className = 'cont';
+          c.className = fillMode ? 'cont cont-abs' : 'cont';
           c.textContent = (STR[p.lang] || L).cont + (f.contDir === 'v' ? ' ↓' : ' →');
           holder.appendChild(c);
         }
@@ -843,10 +902,10 @@ function makeSheet(book, g, recto) {
   });
   const inL = recto ? g.inner : g.outer;
   const inR = recto ? g.outer : g.inner;
-  page.innerHTML = `<div class="runhead" style="left:${inL}mm;right:${inR}mm;bottom:${g.H - g.top + 4}mm"></div>`
+  page.innerHTML = `<div class="runhead" style="left:${inL}mm;right:${inR}mm;bottom:${g.H - g.top + 2}mm"></div>`
     + `<div class="content" style="left:${inL}mm;top:${g.top}mm;width:${g.cw}mm;height:${g.ch}mm"></div>`
     + (fp === 'top-outer'
-      ? `<div class="folio" style="left:${inL}mm;right:${inR}mm;bottom:${g.H - g.top + 4 + 1.2}mm"></div>`
+      ? `<div class="folio" style="left:${inL}mm;right:${inR}mm;bottom:${g.H - g.top + 2 + 1.2}mm"></div>`
       : `<div class="folio" style="left:${inL}mm;right:${inR}mm;top:${g.H - g.bottom + 5}mm"></div>`);
   sheet.appendChild(page);
   if (marks) sheet.insertAdjacentHTML('afterbegin', cropMarks(sw, sh, g.W, g.H));
