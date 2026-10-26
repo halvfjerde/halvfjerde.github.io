@@ -352,9 +352,9 @@ class Table:
         else:
             types = {tr['type'] for tr in self.trains}
             parts = []
-            if 'ITX-새마을' in types: parts.append('BS{k새마을.} `ITX-새마을`')
-            if '새마을' in types: parts.append('S{새마을} 새마을호')
-            if 'ITX-마음' in types: parts.append('BS{k마음.} `ITX-마음`')
+            if 'ITX-새마을' in types: parts.append('BS{k새마을.}은 `ITX-새마을`')
+            if '새마을' in types: parts.append('S{새마을}은 새마을호')
+            if 'ITX-마음' in types: parts.append('BS{k마음.}은 `ITX-마음`')
             if parts: notes.append('등급 ' + ', '.join(parts))
         if has_day:   # 운행일 관련은 한 줄로
             dn = []
