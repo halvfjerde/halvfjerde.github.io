@@ -98,6 +98,9 @@ NEED = set()   # 도착 시각을 더 조사해야 하는 (열차번호, 시발�
 if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'arrivals.json')):
     ARR = {tuple(k.split('@')): v for k, v in json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'arrivals.json'))).items()}
 
+def grade(t): return 'KTX' if t.startswith('KTX') else t
+DWELL = {}   # (등급, 역) → 가장 흔한 정차 시간(분). main 에서 ARR 로 채운다
+
 BLACK = {'ITX-새마을', 'ITX-마음'}      # ITX는 검은 네모, 새마을호·무궁화·누리로·KTX 차종은 흰 네모
 def badge(k, typ=''):
     if not k: return '_'
@@ -446,13 +449,16 @@ class Table:
                 t = hm(x)
                 if not sp: out.append(t); continue
                 st = self.st[i]
-                arr = ARR.get((tr['no'], st))             # 따로 조사한 도착 시각 (TAGO 열차정보)
-                arr = hm(arr) if arr is not None and 0 <= (x - arr) % 1440 <= 15 else '_'   # 정차 15분 넘으면 다른 날 열차로 보고 버린다
-                if i == a and o == st: arr = 'x'          # 여기서 떠나는 열차: 착은 ‥
+                arr = ARR.get((tr['no'], st))             # 따로 조사한 도착 시각 (TAGO 열차정보, 시발 시각이 맞는 것만)
+                if arr is None or not 0 <= (x - arr) % 1440 <= 15:
+                    w = DWELL.get((grade(tr['type']), st))   # 없으면 같은 등급·같은 역의 정차 시간으로
+                    arr = x - w if w is not None else None
+                arr = hm(arr) if arr is not None else '_'
+                if (i == a or x == self.end_times(tr)[0]) and o == st: arr = 'x'   # 여기서 떠나는 열차: 착은 ‥ (광주처럼 역 차례가 거꾸로인 지선도)
                 if i == b and d == st:                    # 여기서 끝나는 열차: 착에 시각, 발에 끝 표시
                     out.append(f'{t},-'); bar = True
                 else:
-                    if arr == '_': NEED.add((tr['no'], o, st))
+                    if arr == '_': NEED.add((tr['no'], o, st, self.end_times(tr)[0]))
                     out.append(f'{arr},{t}')
             else:
                 out.append({'v': 'v', 'x': 'x', 'I': 'i'}[x])
@@ -483,6 +489,14 @@ def share(ts):
 
 def main():
     data = json.load(open(sys.argv[1]))
+    c = collections.defaultdict(collections.Counter)
+    for t in data['tables']:
+        for tr in t['trains']:
+            for s, x in zip(t['stations'], tr['times']):
+                s = clean_name(s)
+                if isinstance(x, int) and (tr['no'], s) in ARR and 0 <= (x - ARR[(tr['no'], s)]) % 1440 <= 15:
+                    c[(grade(tr['type']), s)][(x - ARR[(tr['no'], s)]) % 1440] += 1
+    DWELL.update({k: v.most_common(1)[0][0] for k, v in c.items()})
     outdir = sys.argv[2]
     os.makedirs(outdir, exist_ok=True)
     tabs = {(t['cat'], t['line'], t['dir']): t for t in data['tables']}
@@ -525,7 +539,7 @@ def main():
     open(os.path.join(outdir, '_index.wiki'), 'w').write('\n'.join(I) + '\n')
     json.dump(book_items, open(os.path.join(outdir, 'items.json'), 'w'), ensure_ascii=False, indent=1)
     json.dump(sorted(NEED), open(os.path.join(outdir, 'need-arrivals.json'), 'w'), ensure_ascii=False)
-    print(len(NEED), 'arrivals to look up,', len({(o, s) for _, o, s in NEED}), 'station pairs')
+    print(len(NEED), 'arrivals to look up,', len({(o, s) for _, o, s, _ in NEED}), 'station pairs')
 
 
 if __name__ == '__main__':
