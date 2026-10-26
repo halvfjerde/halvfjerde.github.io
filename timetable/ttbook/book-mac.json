@@ -22,11 +22,11 @@
   },
   "fonts": {
     "mincho": "Shippori Mincho",
-    "minchoKo": "UnBatang",
+    "minchoKo": "SM SEMyungJo Std",
     "gothic": "BIZ UDPGothic",
-    "gothicKo": "UnDotum",
+    "gothicKo": "SM TGothic Std",
     "gothicBold": "BIZ UDPGothic Bold",
-    "gothicKoBold": "UnDotum Bold",
+    "gothicKoBold": "SM TGothic Std",
     "dia": "DiaPro"
   },
   "firstFolio": 2,

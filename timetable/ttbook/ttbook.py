@@ -322,7 +322,7 @@ class Metrics:
         self.shift = {}
         for role, fi in self.info.items():
             if not fi: continue
-            if role.endswith('Ko'):
+            if 'Ko' in role:
                 c = fi.center(SAMPLE_HANGUL)
             elif role == 'dia':
                 c = fi.center(SAMPLE_DIGIT)
