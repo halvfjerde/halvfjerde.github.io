@@ -71,8 +71,8 @@ LINE_HANJA = {'경부선': '京釜線', '호남선': '湖南線', '전라선': '
 KIND = {'KTX': '', 'KTX-산천': '산천', 'KTX산천': '산천', 'KTX_산천': '산천', 'KTX-청룡': '청룡', 'KTX-이음': '이음',
         'ITX-새마을': '새마을', '새마을': '새마을호', 'ITX-마음': '마음', '무궁화': '무궁화', '누리로': '누리로'}
 LBL = {  # 머리 이름 (한국어, 국한문)
-    'fr': ('시발', '始發'), 'no': ('열차번호', '列車番號'), 'kind': ('열차명', '列車名'),
-    'to': ('행선', '行先'), 'day': ('운행일', '運行日'),
+    'fr': ('시발역', '始發驛'), 'no': ('열차번호', '列車番號'), 'kind': ('등급', '等級'), 'car': ('차종', '車種'),
+    'to': ('종착역', '終着驛'), 'day': ('운행일', '運行日'),
 }
 def lbl(k): return LBL[k][1 if MIX else 0]
 
@@ -230,13 +230,13 @@ class Table:
         else: band_names = [self.st[i] for i in band]
         dirmark = 'k하행.' if self.dir == 'down' else 'n상행.'
         name = ('KTX ' if ktx else '') + (self.line_disp)
-        span = (f'{band_names[0]} > {band_names[-1]}' if band_names[0] != band_names[-1] else ' > '.join(band_names)) if not sub else (sub if self.dir == 'down' else ' ─ '.join(sub.split(' ─ ')[::-1]))
+        span = (f'{band_names[0]} > {band_names[-1]}' if band_names[0] != band_names[-1] else ' > '.join(band_names)) if not sub else ' > '.join(sub.split(' ─ ')[::-1] if self.dir == 'up' else sub.split(' ─ '))
         L = []
-        L.append(f'title "{dirmark}　{name}　u({span})."')
-        hd = ' ─ '.join(band_names)
+        L.append(f'title "{dirmark} {name} u({span})."')
+        hd = ' ― '.join(band_names)
         L.append(f'head "b{hd}."')
         L.append('headheight 34')
-        if ktx: L.append(f'headstyle "bg={KTX_COLOR} fc=#fff"')
+        if ktx: L.append(f'headstyle "fc={KTX_COLOR}"')
         L.append('cols st ad')
         L.append('rcols st')
         if MIX: L.append('rlabel 驛名')
@@ -244,16 +244,21 @@ class Table:
         # 머리 행
         L.append('[rows]')
         has_fr = not ktx and any(self.origin_out(tr) for tr in self.trains)
-        if has_fr: L.append(f'fr   {lbl("fr")} style="va=b fs=sm"')
+        if has_fr: L.append(f'fr   {lbl("fr")} style="fs=sm"')
         L.append(f'no   {lbl("no")} fmt=N{{*}}')
-        L.append(f'kind {lbl("kind")} style=va=t')
+        L.append(f'kind {lbl("car" if ktx else "kind")} style=va=t')
         L.append('')
         L.append('[footer]')
         has_to = not ktx and any(self.dest_out(tr) for tr in self.trains)
-        if has_to: L.append(f'to   {lbl("to")} style="va=t fs=sm"')
+        if has_to: L.append(f'to   {lbl("to")} style="fs=sm"')
         has_day = any(tr['note'] for tr in self.trains)
         if has_day: L.append(f'day  {lbl("day")} style="va=t fs=sm"')
         L.append('')
+        thru = collections.Counter()
+        for tr in self.trains:
+            idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
+            for i in idx[1:-1]: thru[i] += 1
+        self.split = {i for i in major if 0 < i < n - 1 and ends[i] >= max(2, 0.05 * N) and thru[i] >= 1}
         L.append('[stations]')
         rules = set()
         for alt in BRANCH.get((self.cat, self.line), []):
@@ -263,7 +268,7 @@ class Table:
         rules -= {0, n}
         for i, s in enumerate(self.st):
             if i in rules: L.append('---')
-            ad = '발' if i == 0 else '착' if i == n - 1 else '〃'
+            ad = '発' if i == 0 else '着' if i == n - 1 else '着発' if i in self.split else '〃'
             nm = ('*' if i in major else '') + s
             hj = self.hanja.get(s, '')
             r = f' r={q(("*" if i in major else "") + hj)}' if hj else ''
@@ -274,7 +279,7 @@ class Table:
             hdr = []
             if has_fr:
                 o = self.origin_out(tr)
-                hdr.append(q(vert(o)) if o else '_')
+                hdr.append(q(esc_txt(o)) if o else '_')
             hdr.append(tr['no'])
             k = KIND.get(tr['type'], tr['type'])
             hdr.append(q(vert(k)))
@@ -282,7 +287,7 @@ class Table:
             ft = []
             if has_to:
                 d = self.dest_out(tr)
-                ft.append(q(vert(d)) if d else '_')
+                ft.append(q(esc_txt(d)) if d else '_')
             if has_day: ft.append(q(vert(tr['note'])) if tr['note'] else '_')
             line = ' '.join(hdr) + ' : ' + ' '.join(cells)
             if ft: line += ' : ' + ' '.join(ft)
@@ -290,11 +295,17 @@ class Table:
         L.append('')
         L.append('[notes]')
         notes = []
-        if ktx: notes.append('열차명 칸이 빈 열차는 KTX, 「산천」은 KTX-산천, 「청룡」은 KTX-청룡, 「이음」은 KTX-이음입니다.')
+        kinds = [KIND.get(tr['type'], tr['type']) for tr in self.trains]
+        if ktx:
+            names = [('산천', 'KTX-산천'), ('청룡', 'KTX-청룡'), ('이음', 'KTX-이음')]
+            parts = ['무표시는 KTX'] + [f'「{k}」은 `{full}`' for k, full in names if k in kinds]
+            notes.append('차종 ' + ', '.join(parts))
         else:
-            kinds = {KIND.get(tr['type'], tr['type']) for tr in self.trains}
-            if '새마을' in kinds or '마음' in kinds: notes.append('「새마을」은 ITX-새마을, 「마음」은 ITX-마음입니다.')
-        if has_day: notes.append('운행일 칸이 빈 열차는 매일 운행합니다.')
+            names = [('새마을', 'ITX-새마을'), ('마음', 'ITX-마음')]
+            parts = [f'「{k}」은 `{full}`' for k, full in names if k in kinds]
+            if parts: notes.append('등급 ' + ', '.join(parts))
+        if has_day: notes.append('운행일 무표시는 매일 운행')
+        if self.split: notes.append('着発을 나눈 역의 도착 시각은 그 역에서 끝나는 열차만 표시')
         L += notes
         return '\n'.join(L)
 
@@ -312,22 +323,31 @@ class Table:
         return '' if self.st[idx[-1]] == t else t
 
     def cells(self, tr):
+        """역마다 한 토큰. 달리지 않는 칸은 ‥, 着発 역은 '착,발'"""
         T = tr['times']
-        n = len(T)
         idx = [i for i, x in enumerate(T) if isinstance(x, int)]
         a, b = idx[0], idx[-1]
-        out = []
+        ends_here = not self.dest_out(tr)
+        out, bar = [], False
         for i, x in enumerate(T):
-            if i < a: out.append('_')
-            elif i <= b:
-                out.append(hm(x) if isinstance(x, int) else {'v': 'v', 'x': 'x', 'I': 'i'}[x])
-            elif i == b + 1 and not self.dest_out(tr): out.append('-')
-            else: out.append('_')
-        # 끝의 빈칸은 줄이고, 같은 기호가 이어지면 x*N
-        while out and out[-1] == '_': out.pop()
+            sp = i in self.split
+            if i < a or (i > b and not (i == b + 1 and ends_here and not bar)):
+                out.append('x')
+            elif i > b:                                   # 종착 다음 칸: 끝 표시
+                out.append('-,x' if sp else '-')
+            elif isinstance(x, int):
+                t = hm(x)
+                if not sp: out.append(t)
+                elif i == a and i == b: out.append(t)
+                elif i == a: out.append(f'x,{t}')         # 여기서 떠남
+                elif i == b:                              # 여기서 끝남(끝 표시는 발 줄에)
+                    out.append(f'{t},-' if ends_here else f'{t},x'); bar = True
+                else: out.append(f'_,{t}')                # 지나가며 섬: 도착 시각은 자료에 없음
+            else:
+                out.append({'v': 'v', 'x': 'x', 'I': 'i'}[x])
         res = []
         for c in out:
-            if res and res[-1][0] == c and c in ('v', 'x', 'i', '_'): res[-1][1] += 1
+            if res and res[-1][0] == c and c in ('v', 'x', 'i'): res[-1][1] += 1
             else: res.append([c, 1])
         return [c if k == 1 else f'{c}*{k}' for c, k in res]
 
@@ -341,12 +361,12 @@ def main():
     index = []
     for line, parts in BOOK:
         P = [f'{{{{시각표테마}}}}', f'{{{{상위문서|{PREFIX}}}}}',
-             f"'''{line}'''({LINE_HANJA[line]}) — 코레일이 2026년 10월에 내놓은 시각표 자료로 짠 가상의 {EDITION}입니다.", '']
+             f"'''{line}'''({LINE_HANJA[line]}) 시각표. {EDITION}(가상), 코레일 2026년 10월 발표 자료 기준.", '']
         book_items.append({'type': 'divider', 'text': line, 'sub': '', 'inline': True})
         idx = 0
         title = f'{PREFIX}/{line}'
         for cat, sheet, sub in parts:
-            head = ('KTX' if cat == 'ktx' else '일반열차') + (f' ({sub})' if sub else '')
+            head = ('KTX' if cat == 'ktx' else '일반열차') + (f" ({sub.replace(' ─ ', '–')})" if sub else '')
             P.append(f'== {head} ==')
             for d in ('down', 'up'):
                 t = tabs.get((cat, sheet, d))
@@ -365,8 +385,8 @@ def main():
         open(os.path.join(outdir, f'{line}.wiki'), 'w').write('\n'.join(P) + '\n')
         index.append(line)
     # 목차 문서
-    I = ['{{시각표테마}}', f'코레일이 2026년 10월에 내놓은 시각표 자료(일반열차·고속열차 엑셀)로 짠 가상의 {EDITION}입니다. '
-         'JTB 시각표의 꼴로 다시 짰으며, 오른쪽 역명은 한자로 적었습니다.', '', '== 노선 ==']
+    I = ['{{시각표테마}}', f'시각표 {EDITION}(가상). 코레일 2026년 10월 발표 자료(일반열차·고속열차) 기준, JTB 시각표 꼴로 재구성.', '',
+         '* 시각은 분 단위(초 버림)', '* 오른쪽 역명은 한자', '', '== 노선 ==']
     I += [f'* [[{PREFIX}/{l}|{l}]]' for l in index]
     open(os.path.join(outdir, '_index.wiki'), 'w').write('\n'.join(I) + '\n')
     json.dump(book_items, open(os.path.join(outdir, 'items.json'), 'w'), ensure_ascii=False, indent=1)
