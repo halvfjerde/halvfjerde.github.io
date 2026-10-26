@@ -264,9 +264,10 @@ class Table:
         L.append('[rows]')
         self.o0, self.d0 = self.st[o0], self.st[d0]
         has_fr = has_to = True
+        # 등급(KTX는 차종) 표지 바로 밑에 열차번호, 두 행은 이름 칸을 합쳐 사이 선 없이. 그 밑에 시발역
+        L.append(f'kind {lbl("no")} style=va=b')
+        L.append(f'no   ^ fmt=N{{*}} style=va=t')
         if has_fr: L.append(f'fr   {lbl("fr")}')
-        L.append(f'no   {lbl("no")} fmt=N{{*}}')
-        L.append(f'kind {lbl("car" if ktx else "kind")} style=va=t')
         L.append('')
         L.append('[footer]')
         if has_to: L.append(f'to   {lbl("to")}')
@@ -298,6 +299,13 @@ class Table:
             j = junction(c)
             if j is not None and j in self.split and j != c: self.split.discard(c)
         self.split -= {i for i, s in enumerate(self.st) if s in NOSPLIT_ALL}
+        # 상행·하행이 같은 주요역·착발역을 쓰도록 main 에서 두 방향을 모아 정한 값(shared)으로 덮어쓴다
+        self.cand = {self.st[i]: (self.stops(i) + ends[i]) / N for i in major}
+        self.split_names = {self.st[i] for i in self.split}
+        sh = getattr(self, 'shared', None)
+        if sh:
+            self.split = {i for i, s in enumerate(self.st) if s in sh['split']}
+            major = sorted({i for i, s in enumerate(self.st) if s in sh['major']} | self.split)
         L.append('[stations]')
         rules = set()
         for alt in BRANCH.get((self.cat, self.line), []):
@@ -316,18 +324,16 @@ class Table:
         L.append('')
         L.append('[trains]')
         for tr in self.trains:
-            hdr = []
+            k = KIND.get(tr['type'], tr['type'])
+            hdr = [q(badge(k)), tr['no']]
             if has_fr:
                 o, d = self.ends_of(tr)
-                hdr.append(q(esc_txt(o)))
-            hdr.append(tr['no'])
-            k = KIND.get(tr['type'], tr['type'])
-            hdr.append(q(badge(k)))
+                hdr.append(q(f'{esc_txt(o)}/{hm(self.end_times(tr)[0])}'))
             cells = self.cells(tr)
             ft = []
             if has_to:
                 o, d = self.ends_of(tr)
-                ft.append(q(esc_txt(d)))
+                ft.append(q(f'{esc_txt(d)}/{hm(self.end_times(tr)[1])}'))
             if has_day:
                 nt = tr['note']
                 ft.append('_' if not nt else self.daysym[nt] if self.daysym else q(vert(nt)))
@@ -361,6 +367,12 @@ class Table:
         days = {tr['note'] for tr in self.trains if tr['note']}
         return bool(days) and days <= {'월화수목금', '토일'}
 
+    def end_times(self, tr):
+        """시발역 출발·종착역 도착 시각 (표 밖이어도). 자료에 없으면 표 안의 첫·끝 정차 시각"""
+        idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
+        f, t = tr.get('fromT'), tr.get('toT')
+        return (f if isinstance(f, int) else tr['times'][idx[0]], t if isinstance(t, int) else tr['times'][idx[-1]])
+
     def ends_of(self, tr):
         """실제 시발·종착역 (표 밖이어도). 자료에 없으면 표 안의 첫·끝 정차역"""
         idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
@@ -391,31 +403,33 @@ class Table:
         out, bar = [], False
         # 아래쪽: 표 밖으로 나가는 열차의 주석
         tail = None
-        tail_at = tr.get('via_out_at', b + 1)          # 갈림역 줄부터 주석. 그 앞 역들은 지나감
+        tail_at = tr.get('via_out_at', b + 1)          # 갈림역 줄부터 주석 자리. 그 앞 역들은 지나감
         head_at = tr.get('via_in_at', a - 1)
-        if d != self.st[b] and b + 1 < n:
-            rows = sum(phys(k) for k in range(tail_at, n))
-            via = (tr.get('via_out') or '').replace(' ', '')
-            if rows >= 3 and tr.get('toT') is not None:
-                body = (via.replace('경유', ' 경유') + '/' if via else '') + f"{d} {hm(tr['toT'])}착"
-                tail = f'^{rows} va=t; VR{{{esc_txt(body)}}}'
-        head = None
-        if o != self.st[a] and a > 0:
-            rows = sum(phys(k) for k in range(0, head_at + 1))
-            via = (tr.get('via_in') or '').replace(' ', '')
-            if rows >= 3 and tr.get('fromT') is not None:
-                body = f"{o} {hm(tr['fromT'])}발" + ('/' + via.replace('경유', ' 경유') if via else '')
-                head = f'^{rows} va=b; VR{{{esc_txt(body)}}}'
+        def note_slots(k0, k1, via, va):
+            """역 k0..k1 의 칸(착발역은 두 칸)을 모아 가운데에 (…선 경유) 세로 한 줄, 나머지는 ‥ → {역: 토큰}"""
+            slots = [(k, p) for k in range(k0, k1 + 1) for p in range(phys(k))]
+            if len(slots) < 2: return None
+            text = via.replace(' ', '')
+            text = text.replace('경유', ' 경유')
+            need = -(-(len(text) + 2) * 10 // 12)          # 글자(괄호 포함) 1em, 행 1.2em
+            if need > len(slots): need = 0                   # 자리가 모자라면 주석 없이 ║ 만 (행이 굵어지지 않게)
+            s0 = (len(slots) - need) // 2
+            parts = collections.defaultdict(list)
+            for j, (k, p) in enumerate(slots):
+                if need and j == s0: parts[k].append(q(f'^{need} va={va}; VP{{{esc_txt(text)}}}'))
+                elif need and s0 < j < s0 + need: parts[k].append('!')
+                else: parts[k].append('i')                   # 다른 선을 달림
+            return {k: ','.join(v) if len(v) > 1 and v != ['i', 'i'] else v[0] for k, v in parts.items()}
+        tail = note_slots(tail_at, n - 1, tr['via_out'], 'm') if d != self.st[b] and tr.get('via_out') and tail_at < n else None
+        head = note_slots(0, head_at, tr['via_in'], 'm') if o != self.st[a] and tr.get('via_in') and head_at >= 0 else None
         for i, x in enumerate(T):
             sp = i in self.split
             if head and i <= head_at:
-                cell = q(head) if i == 0 else '!'
-                out.append(f'{cell},!' if sp else cell)
+                out.append(head[i])
             elif head and i < a:
                 out.append('v')
             elif tail and i >= tail_at:
-                cell = q(tail) if i == tail_at else '!'
-                out.append(f'{cell},!' if sp else cell)
+                out.append(tail[i])
             elif tail and i > b:
                 out.append('v')
             elif i < a or i > b + 1 or (i == b + 1 and bar):
@@ -443,6 +457,29 @@ class Table:
         return [c if k == 1 else f'{c}*{k}' for c, k in res]
 
 
+def share(ts):
+    """두 방향 표에서 주요역·착발역을 하나로: 착발역은 합집합, 주요역은 이웃한 두 역이 함께 굵지 않게 점수 높은 것부터"""
+    order = next((t.st for t in ts if t.dir == 'down'), ts[0].st)
+    pos = {s: k for k, s in enumerate(order)}
+    score = collections.Counter()
+    for t in ts:
+        for s, v in t.cand.items(): score[s] += v
+    # 착발역끼리도 바로 이웃하면 점수 높은 쪽만 (경주·서경주 등)
+    split = set()
+    for s in sorted(set().union(*(t.split_names for t in ts)), key=lambda s: -score[s]):
+        k = pos.get(s)
+        if k is not None and any(0 <= k + dk < len(order) and order[k + dk] in split for dk in (-1, 1)): continue
+        split.add(s)
+    fixed = set(split)
+    chosen = set(fixed)
+    for s, v in score.most_common():
+        if s in chosen or s not in pos: continue
+        k = pos[s]
+        if any(0 <= k + dk < len(order) and order[k + dk] in chosen for dk in (-1, 1)): continue
+        chosen.add(s)
+    return {'split': split, 'major': chosen}
+
+
 def main():
     data = json.load(open(sys.argv[1]))
     outdir = sys.argv[2]
@@ -459,11 +496,16 @@ def main():
         for cat, sheet, sub in parts:
             head = ('KTX' if cat == 'ktx' else '일반열차') + (f" ({sub.replace(' ─ ', '–')})" if sub else '')
             P.append(f'== {head} ==')
+            pair = {}
             for d in ('down', 'up'):
                 t = tabs.get((cat, sheet, d))
                 if not t: continue
-                T = Table(t, data['hanja'])
-                T.line_disp = line
+                T = Table(t, data['hanja']); T.line_disp = line
+                T.wiki(sub); pair[d] = T
+            shared = share(list(pair.values()))
+            for d in ('down', 'up'):
+                if d not in pair: continue
+                T = pair[d]; T.shared = shared
                 P.append(f"=== {'하행' if d == 'down' else '상행'} ===")
                 P.append('{{#invoke:Timetable|main|data=')
                 P.append(T.wiki(sub))
