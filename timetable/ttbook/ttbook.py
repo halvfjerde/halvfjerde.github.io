@@ -953,6 +953,7 @@ class Book:
         m = re.match(r'([\d.]+)px', px)
         em = float(m.group(1)) / 14.4 if m else 1.5
         base = math.ceil(em * self.fs / self.R - 0.2) * self.R
+        if self.cfg.get('bandRows'): base = self.cfg['bandRows'] * self.R     # 인쇄에서 띠 높이를 줄 수로 정한다
         if bw is None: return base
         plan = self.band_plan(T, bw, part or ('열넷째' if self.page_title else None))
         need = (sum(p[3] for p in plan) + 0.3) * self.fs
@@ -1321,11 +1322,26 @@ class Book:
         em = size * self.fs
         c = Ctx('GB', size)
         items = []
-        for k, ln in enumerate(lines):
-            if k: items.append(r'\kern%.3fbp\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}\kern%.3fbp' % (
-                0.2 * em, 1.2 * em, -0.12 * em, em, self.inl.run('·', c, True), 0.2 * em))
-            for ch in ln:
+        # KTX 표의 노선은 「KTX 경부선·호남선」으로 묶는다
+        ktx = [ln for kind, ln in lines if kind == 'KTX']
+        names = (['KTX ' + '·'.join(ktx)] if ktx else []) + [ln for kind, ln in lines if kind != 'KTX']
+        dot = lambda: items.append(r'\kern%.3fbp\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}\kern%.3fbp' % (
+            0.2 * em, 1.2 * em, -0.12 * em, em, self.inl.run('·', c, True), 0.2 * em))
+        for k, ln in enumerate(names):
+            if k: dot()
+            i = 0
+            while i < len(ln):
+                ch = ln[i]
+                if ch == ' ':
+                    items.append(r'\kern%.3fbp' % (0.3 * em)); i += 1; continue
+                if ch == '·': dot(); i += 1; continue
+                if is_latin(ch):          # 로마자는 눕혀서
+                    j = i
+                    while j < len(ln) and is_latin(ln[j]) and ln[j] != ' ': j += 1
+                    items.append(r'\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (1.2 * em, self.inl.run(ln[i:j], c)))
+                    i = j; continue
                 items.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (1.2 * em, -0.12 * em, em, self.inl.run(ch, c, True)))
+                i += 1
         box = r'\vbox{\offinterlineskip ' + ''.join(items) + '}'
         gapm = 1.0 * MM
         if recto: x = self.mi + self.cw + gapm
@@ -1379,10 +1395,95 @@ class Book:
     #    끝에 몇 편만 남으면 열 폭을 조금(squeeze) 좁혀 앞 무리에 싣는다
     #  · 좁은 표(한 면을 다 채우지 않는 것)는 앞의 좁은 표 옆에 나란히 (하행 | 상행)
     #  · 읽는 차례를 지킨다: 앞 쪽의 빈자리로 되돌아가 채우지 않는다
+    def is_ktx(self, T):
+        t = (T.title.text() if T.title is not None else '') + (T.head.text() if T.head is not None else '')
+        return 'KTX' in t
+
+    def jobs_of(self, T):
+        """표 하나를 실을 일감들: [{kind single|pair, trs, rows, h, ...}] (역 구간 먼저, 그 안에서 열차 무리 차례)"""
+        PH = self.ch
+        L, Tc, R = self.blocks(T)
+        head = list(range(T.hEnd)); foot = list(range(T.fStart, T.nrow)); body = list(range(T.hEnd, T.fStart))
+        cuts = self.cut_ok(T)
+        TH = 0 if self.page_title else self.title_tex(T, part='열넷째')[1] + 0.5 * self.fs
+        BWF = self.band_w(self.cw)
+        def piece(b0, b1, with_foot, notes, bw=BWF):
+            rows = head + body[b0:b1] + (foot if with_foot else [])
+            return rows, max(self.piece_h(T, rows, notes, bw), TH)
+        # 역 구간: 한 쪽에 들면 하나. 아니면 k 구간으로 고르게 (구획 선 자리를 먼저)
+        secs = [(0, len(body))]
+        if piece(0, len(body), True, True)[1] > PH + 0.01:
+            for k in range(2, 8):
+                total = sum(T.rowH[r] for r in body)
+                bounds = [0]
+                for j in range(1, k):
+                    target = total * j / k
+                    best, bd = None, 1e9
+                    for e in range(bounds[-1] + 1, len(body)):
+                        acc = sum(T.rowH[r] for r in body[:e])
+                        if body[e] not in cuts: continue
+                        d = abs(acc - target) - (3 * self.R if 'jtt-ln' in T.rowcls[body[e]] else 0)
+                        if d < bd: bd, best = d, e
+                    if best is None: break
+                    bounds.append(best)
+                bounds.append(len(body))
+                cand = list(zip(bounds, bounds[1:]))
+                if all(piece(a, b, i == len(cand) - 1, i == len(cand) - 1)[1] <= PH + 0.01 for i, (a, b) in enumerate(cand)):
+                    secs = cand; break
+        # 열차 무리
+        capL, capR = self.cap(T, 'L'), self.cap(T, 'R')
+        sL, sR = self.cap(T, 'L', True), self.cap(T, 'R', True)
+        sB = self.cap(T, 'B', True)      # 한 쪽에 홀로 실리는 표는 양쪽 역명을 다 단다
+        n = len(Tc)
+        if n <= sB:
+            groups = [('single', n)]
+        else:
+            C = capL + capR
+            G = -(-n // C)
+            if G > 1 and n <= (G - 1) * (sL + sR): G -= 1
+            if n <= G * C:
+                full, r = divmod(n, C)
+                groups = [('pair', capL, capR)] * full
+                if r:
+                    if full >= 1 and r <= sB: groups.append(('single', r))
+                    else:
+                        kA = -(-r // 2); groups.append(('pair', kA, r - kA))
+            else:
+                base, ex = divmod(n, G)
+                groups = []
+                for g in range(G):
+                    k = base + (1 if g < ex else 0)
+                    kA = -(-k // 2); groups.append(('pair', kA, k - kA))
+        jobs = []
+        for si, (b0, b1) in enumerate(secs):
+            last_sec = si == len(secs) - 1
+            ti = 0
+            for gi, gdef in enumerate(groups):
+                used = gdef[1] if gdef[0] == 'single' else gdef[1] + gdef[2]
+                trs = Tc[ti:ti + used]; ti += used
+                notes = last_sec and gi == len(groups) - 1
+                job = {'T': T, 'kind': gdef[0], 'trs': trs, 'notes': notes, 'sB': sB}
+                if gdef[0] == 'single':      # 좁은 표는 띠가 여러 줄이 될 수 있다
+                    natB = self.fixed_w(T, 'B') + used * self.P0
+                    job['narrow'] = natB < self.cw * 0.62
+                    job['nat'] = natB
+                    job['bw'] = self.band_w(natB) if job['narrow'] else BWF
+                else:
+                    job['kA'] = gdef[1]; job['bw'] = BWF
+                job['rows'], job['h'] = piece(b0, b1, last_sec, notes, job['bw'])
+                jobs.append(job)
+        return jobs
+
+    # ── 짜기 ──
+    #  · 표 조각은 언제나 '열차 무리 × 역 구간' 하나를 통째로 (역 중간에서 남은 자리에 맞춰 자르지 않는다)
+    #  · 같은 묶음(노선. ktxFirst 이면 모든 노선의 KTX 가 한 묶음) 안에서는, 지금 쪽에 다음 조각이 들지 않을 때
+    #    뒤에 올 작은 표(한 번에 다 실리는 것)를 당겨 와 빈자리를 채운다. 묶음을 넘어서는 당기지 않는다
+    #  · 한 쪽의 표들은 사이를 띄우지 않고 틀(굵은 선)을 함께 쓴다
     def layout(self, tables):
         PH = self.ch
-        gap = self.R * self.cfg.get('tierGap', 1.0)
-        gapX = self.cfg.get('sideGap', 1.5) * MM
+        fw = self.frame_w
+        gap = -fw if self.cfg.get('joinTables', True) else self.R * self.cfg.get('tierGap', 1.0)
+        gapX = -fw if self.cfg.get('joinTables', True) else self.cfg.get('sideGap', 1.5) * MM
         TWh = 0 if self.page_title else (self.title_tex(tables[0])[2] if tables else 0)
         pages = []
         def page(i):
@@ -1399,121 +1500,81 @@ class Book:
                   'narrow': narrow, 'nat': self.fixed_w(T, side) + len(trains) * self.P0,
                   'hb': self.headband_h(T, bw if bw is not None else self.band_w(self.cw), '열넷째' if self.page_title else None)}
             pg['pieces'].append(pc)
-            if T.line not in pg['lines']: pg['lines'].append(T.line)
+            key = ('KTX', T.line) if self.is_ktx(T) else ('', T.line)
+            if key not in pg['lines']: pg['lines'].append(key)
+            placed[id(T)].append(pc)
             return pc
-        for T in tables:
-            L, Tc, R = self.blocks(T)
-            head = list(range(T.hEnd)); foot = list(range(T.fStart, T.nrow)); body = list(range(T.hEnd, T.fStart))
-            cuts = self.cut_ok(T)
-            TH = 0 if self.page_title else self.title_tex(T, part='열넷째')[1] + 0.5 * self.fs
-            BWF = self.band_w(self.cw)
-            def piece(b0, b1, with_foot, notes, bw=BWF):
-                rows = head + body[b0:b1] + (foot if with_foot else [])
-                return rows, max(self.piece_h(T, rows, notes, bw), TH)
-            # 역 구간: 한 쪽에 들면 하나. 아니면 k 구간으로 고르게 (구획 선 자리를 먼저)
-            secs = [(0, len(body))]
-            if piece(0, len(body), True, True)[1] > PH + 0.01:
-                for k in range(2, 8):
-                    total = sum(T.rowH[r] for r in body)
-                    bounds = [0]
-                    for j in range(1, k):
-                        target = total * j / k
-                        acc, best, bd = 0, None, 1e9
-                        for e in range(bounds[-1] + 1, len(body)):
-                            acc = sum(T.rowH[r] for r in body[:e])
-                            if body[e] not in cuts: continue
-                            d = abs(acc - target) - (3 * self.R if 'jtt-ln' in T.rowcls[body[e]] else 0)
-                            if d < bd: bd, best = d, e
-                        if best is None: break
-                        bounds.append(best)
-                    bounds.append(len(body))
-                    cand = list(zip(bounds, bounds[1:]))
-                    if all(piece(a, b, i == len(cand) - 1, i == len(cand) - 1)[1] <= PH + 0.01 for i, (a, b) in enumerate(cand)):
-                        secs = cand; break
-            # 열차 무리
-            capL, capR = self.cap(T, 'L'), self.cap(T, 'R')
-            sL, sR = self.cap(T, 'L', True), self.cap(T, 'R', True)
-            sB = self.cap(T, 'B', True)      # 한 쪽에 홀로 실리는 표는 양쪽 역명을 다 단다
-            n = len(Tc)
-            if n <= sB:
-                groups = [('single', n)]
+        placed = collections.defaultdict(list)
+
+        def try_place(job, c):
+            """지금 쪽 c 에 (짝이면 c 와 c+1 에) 그대로 들면 싣고 True"""
+            T, trs, rows, h, notes = job['T'], job['trs'], job['rows'], job['h'], job['notes']
+            if job['kind'] == 'single':
+                k = len(trs)
+                pg = page(c)
+                if pg['pieces']:          # 앞의 좁은 표 옆에 나란히
+                    prev = pg['pieces'][-1]
+                    low = max(q['y'] for q in pg['pieces'])
+                    if prev['narrow'] and abs(prev['y'] - low) < 0.01:
+                        x = prev['x'] + prev['nat'] + TWh + gapX
+                        if x + job['nat'] <= self.cw + 0.01 and prev['y'] + h <= PH + 0.01:
+                            put(T, c, trs, rows, prev['y'], notes, h, x, True, 'B', job['bw'])
+                            ys[c] = max(ys[c], prev['y'] + h)
+                            return True
+                if job['sB'] >= k and top(c) + h <= PH + 0.01:
+                    y0 = top(c)
+                    put(T, c, trs, rows, y0, notes, h, 0.0, job['narrow'], 'B', job['bw'])
+                    ys[c] = y0 + h
+                    return True
+                return False
+            kA = job['kA']
+            ya, yb = top(c), top(c + 1)
+            if c % 2 == 0 and abs(ya - yb) < 10 * MM: ya = yb = max(ya, yb)
+            if ya + h <= PH + 0.01 and yb + h <= PH + 0.01:
+                put(T, c, trs[:kA], rows, ya, False, h)
+                put(T, c + 1, trs[kA:], rows, yb, notes, h)
+                ys[c] = ya + h; ys[c + 1] = yb + h
+                if c % 2 == 1: cur['c'] = c + 1
+                return True
+            return False
+
+        def advance(job, c):
+            if job['kind'] == 'pair' and c % 2 == 0:
+                # 왼쪽 면에 자리가 없고 오른쪽 면이 비었으면 오른쪽 면에서 시작해 넘겨 잇는다
+                cur['c'] = c + 1 if (ys[c + 1] == 0 and job['h'] <= PH + 0.01) else c + 2
             else:
-                C = capL + capR
-                G = -(-n // C)
-                if G > 1 and n <= (G - 1) * (sL + sR): G -= 1
-                if n <= G * C:
-                    full, r = divmod(n, C)
-                    groups = [('pair', capL, capR)] * full
-                    if r:
-                        if full >= 1 and r <= sB: groups.append(('single', r))
-                        else:
-                            kA = -(-r // 2); groups.append(('pair', kA, r - kA))
-                else:
-                    base, ex = divmod(n, G)
-                    groups = []
-                    for g in range(G):
-                        k = base + (1 if g < ex else 0)
-                        kA = -(-k // 2); groups.append(('pair', kA, k - kA))
-            pieces = []
-            for si, (b0, b1) in enumerate(secs):
-                last_sec = si == len(secs) - 1
-                ti = 0
-                for gi, gdef in enumerate(groups):
-                    used = gdef[1] if gdef[0] == 'single' else gdef[1] + gdef[2]
-                    trs = Tc[ti:ti + used]; ti += used
-                    notes = last_sec and gi == len(groups) - 1
-                    rows, h = piece(b0, b1, last_sec, notes)
-                    if gdef[0] == 'single':      # 좁은 표는 띠가 여러 줄이 될 수 있다
-                        natB = self.fixed_w(T, 'B') + used * self.P0
-                        narrowB = natB < self.cw * 0.62
-                        bwS = self.band_w(natB) if narrowB else self.band_w(self.cw)
-                        rows, h = piece(b0, b1, last_sec, notes, bwS)
-                    for guard in range(200):
-                        c = cur['c']
-                        if gdef[0] == 'single':
-                            k = used
-                            # 앞의 좁은 표 옆에 나란히
-                            pg = page(c)
-                            if pg['pieces']:
-                                prev = pg['pieces'][-1]
-                                low = max(q['y'] for q in pg['pieces'])
-                                if prev['narrow'] and abs(prev['y'] - low) < 0.01:
-                                    x = prev['x'] + prev['nat'] + TWh + gapX
-                                    nat = self.fixed_w(T, 'B') + k * self.P0
-                                    if x + nat <= self.cw + 0.01 and prev['y'] + h <= PH + 0.01:
-                                        pieces.append(put(T, c, trs, rows, prev['y'], notes, h, x, True, 'B', bwS))
-                                        ys[c] = max(ys[c], prev['y'] + h)
-                                        break
-                            if sB >= k and top(c) + h <= PH + 0.01:
-                                y0 = top(c)
-                                narrow = self.fixed_w(T, 'B') + k * self.P0 < self.cw * 0.62
-                                pieces.append(put(T, c, trs, rows, y0, notes, h, 0.0, narrow, 'B', bwS))
-                                ys[c] = y0 + h
-                                break
-                            cur['c'] = c + 1
-                        else:
-                            kA = gdef[1]
-                            if c % 2 == 0:
-                                ya, yb = top(c), top(c + 1)
-                                if abs(ya - yb) < 10 * MM: ya = yb = max(ya, yb)
-                                if ya + h <= PH + 0.01 and yb + h <= PH + 0.01:
-                                    pieces.append(put(T, c, trs[:kA], rows, ya, False, h))
-                                    pieces.append(put(T, c + 1, trs[kA:], rows, yb, notes, h))
-                                    ys[c] = ya + h; ys[c + 1] = yb + h
-                                    break
-                                # 왼쪽 면에 자리가 없고 오른쪽 면이 비었으면 오른쪽 면에서 시작해 넘겨 잇는다
-                                cur['c'] = c + 1 if (ys[c + 1] == 0 and h <= PH + 0.01) else c + 2
-                            else:
-                                y1, y2 = top(c), top(c + 1)
-                                if y1 + h <= PH + 0.01 and y2 + h <= PH + 0.01:
-                                    pieces.append(put(T, c, trs[:kA], rows, y1, False, h))
-                                    pieces.append(put(T, c + 1, trs[kA:], rows, y2, notes, h))
-                                    ys[c] = y1 + h; ys[c + 1] = y2 + h
-                                    cur['c'] = c + 1
-                                    break
-                                cur['c'] = c + 1
-            for k, pc in enumerate(pieces):
-                pc['part'] = (ORD_KO[k] if k < len(ORD_KO) else '%d째' % (k + 1)) if len(pieces) > 1 else ''
+                cur['c'] = c + 1
+
+        # 묶음
+        bunches = []
+        if self.cfg.get('ktxFirst', False):
+            k = [T for T in tables if self.is_ktx(T)]
+            if k: bunches.append(k)
+        for T in tables:
+            if self.cfg.get('ktxFirst', False) and self.is_ktx(T): continue
+            if bunches and bunches[-1] and not self.is_ktx(bunches[-1][0]) and bunches[-1][0].line == T.line:
+                bunches[-1].append(T)
+            else:
+                bunches.append([T])
+        for bunch in bunches:
+            pend = [collections.deque(self.jobs_of(T)) for T in bunch]
+            whole = [len(q) == 1 for q in pend]          # 한 번에 다 실리는 표만 당겨 올 수 있다
+            while any(pend):
+                pi = next(i for i, q in enumerate(pend) if q)
+                job = pend[pi][0]
+                for guard in range(400):
+                    c = cur['c']
+                    if try_place(job, c):
+                        pend[pi].popleft(); break
+                    filled = False
+                    for qi in range(pi + 1, len(pend)):
+                        if pend[qi] and whole[qi] and try_place(pend[qi][0], c):
+                            pend[qi].popleft(); filled = True; break
+                    if not filled: advance(job, c)
+        for T in tables:
+            ps = placed[id(T)]
+            for k, pc in enumerate(ps):
+                pc['part'] = (ORD_KO[k] if k < len(ORD_KO) else '%d째' % (k + 1)) if len(ps) > 1 else ''
         # 단(같은 높이)마다 맨 오른쪽 조각만 빈 열로 판면 끝까지 채운다
         for pg in pages:
             for pc in pg['pieces']:
@@ -1539,7 +1600,7 @@ class Book:
                 tex += self.page_side_title(recto, pg['lines'])
                 tex += self.page_furniture(folio, recto, '', '')
             else:
-                tex += self.page_furniture(folio, recto, '·'.join(pg['lines']), '')
+                tex += self.page_furniture(folio, recto, '·'.join(ln for _, ln in pg['lines']), '')
             body.append(r'\begin{picture}(%.3f,%.3f)' % (self.W, self.H))
             if rects: body.append(r'\put(0,0){\pdfextension literal{%s}}' % self.pdf_ops(rects))
             body += tex
