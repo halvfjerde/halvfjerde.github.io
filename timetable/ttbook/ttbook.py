@@ -10,7 +10,7 @@
   3. HTML 의 class·style 을 위키 CSS 와 같은 뜻으로 읽어, 칸의 자리·괘선을 직접 계산한다.
   4. 모든 것을 절대 위치(picture)로 내보낸다. 괘선은 PDF 사각형으로 — 굵기를 반올림하지 않는다.
 """
-import json, math, os, re, subprocess, sys
+import collections, json, math, os, re, subprocess, sys
 from html.parser import HTMLParser
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -676,6 +676,7 @@ class Book:
         self.frame_w = self.rw[2]                                 # 틀 굵기
         self.frame_pad = cfg.get('framePad', 0.5) * MM            # 틀과 표 사이
         self.hang_title = cfg.get('titleInMargin', False)         # 세로 제목을 바깥 여백에 내어 달기
+        self.squeeze = cfg.get('squeeze', 0.93)                    # 열 폭을 좁혀도 되는 한도 (넘치는 한두 편을 싣기 위해)
         # 글꼴: 이름으로 찾고, 조판 전에 재어 둔다
         dirs = cfg.get('fontDirs') or DEFAULT_FONT_DIRS
         self.font_dirs = [os.path.expanduser(d) if os.path.isabs(os.path.expanduser(d)) else os.path.join(base, d) for d in dirs]
@@ -835,58 +836,57 @@ class Book:
         return r'\vbox{\offinterlineskip ' + ''.join(items) + '}', hgt * em, (1.3 + 0.3) * em
 
     # ── 쪽 나누기: 펼침면 (왼쪽 면 = 제목+역명+열차, 오른쪽 면 = 열차+오른쪽 역명+제목) ──
-    def chunks(self, T, fit):
-        L = [j for j, k in enumerate(T.kind) if k[0] == 'L']
-        Tc = [j for j, k in enumerate(T.kind) if k[0] == 'T']
-        Rc = [j for j, k in enumerate(T.kind) if k[0] == 'R']
-        if not Rc:            # 오른쪽 역명이 없으면 왼쪽 묶음을 거울처럼
-            Rc = [j for j in reversed(L) if T.kind[j][1] in ('st', 'ad')]
-            self.mirror = True
-        else:
-            self.mirror = False
-        _, _, TW = self.title_tex(T)
-        if self.hang_title: TW = 0       # 세로 제목은 바깥 여백에 내어 단다 (판면은 표에만)
-        fw = self.frame_w + self.frame_pad
-        Lw = sum(T.colW[j] for j in L)
-        Rw = sum(T.colW[j] for j in Rc)
-        out = []
-        i, k = 0, 0
-        while i < len(Tc):
-            side = ('L' if k % 2 == 0 else 'R') if fit == 'spread' else 'B'
-            if side == 'L': fixed = TW + 2 * fw + Lw
-            elif side == 'R': fixed = TW + 2 * fw + Rw
-            else: fixed = TW + 2 * fw + Lw + Rw
-            cap = max(1, int((self.cw - fixed) // self.P0))
-            n = min(cap, len(Tc) - i)
-            cols = Tc[i:i + n]
-            # 모자란 자리는 빈 열로 판면 끝까지 (JTB 처럼). 남는 폭(열 하나에 못 미치는)은 역명 칸에
-            cols = cols + [('G', Tc[-1], g) for g in range(cap - n)]
-            extra = self.cw - fixed - cap * self.P0
-            if side == 'L': keep = L + cols
-            elif side == 'R': keep = cols + Rc
-            else: keep = L + cols + Rc
-            out.append({'side': side, 'cols': keep, 'trains': cols, 'extra': max(0, extra)})
-            i += n; k += 1
-        # 마지막 조각이 왼쪽 면이면, 오른쪽 면의 역명 없이 끝나므로 그대로 둔다
-        return out
+    # ── 열 조각: 면(L=왼쪽 면, R=오른쪽 면)에 따라 역명 묶음이 다르다 ──
+    def blocks(self, T):
+        if not hasattr(T, 'Lc'):
+            T.Lc = [j for j, k in enumerate(T.kind) if k[0] == 'L']
+            T.Tc = [j for j, k in enumerate(T.kind) if k[0] == 'T']
+            T.Rc = [j for j, k in enumerate(T.kind) if k[0] == 'R']
+            T.mirror = not T.Rc
+            if T.mirror:     # 오른쪽 역명이 없으면 왼쪽 묶음을 거울처럼
+                T.Rc = [j for j in reversed(T.Lc) if T.kind[j][1] in ('st', 'ad')]
+        return T.Lc, T.Tc, T.Rc
 
-    def bands(self, T):
-        """행으로 나누기: 머리 행은 띠마다, 꼬리 행은 마지막 띠에만"""
-        head = list(range(T.hEnd))
-        foot = list(range(T.fStart, T.nrow))
-        body = list(range(T.hEnd, T.fStart))
-        hb = self.headband_h(T)
-        avail = self.ch - 2 * (self.frame_w + self.frame_pad) - hb - self.notes_h(T)
-        Hh = sum(T.rowH[r] for r in head)
-        Hf = sum(T.rowH[r] for r in foot)
-        out, cur, y = [], [], Hh
-        for r in body:
-            if y + T.rowH[r] + Hf > avail and cur and y + T.rowH[r] > avail:
-                out.append(cur); cur, y = [], Hh
-            # 행 묶음(역 하나에 두 줄)을 가르지 않도록: rowspan 이 걸친 행은 함께
-            cur.append(r); y += T.rowH[r]
-        if cur: out.append(cur)
-        return [head + b + (foot if i == len(out) - 1 else []) for i, b in enumerate(out)]
+    def fixed_w(self, T, side):
+        L, _, R = self.blocks(T)
+        TW = 0 if self.hang_title else self.title_tex(T)[2]
+        fw = self.frame_w + self.frame_pad
+        blk = sum(T.colW[j] for j in (L if side == 'L' else R))
+        return TW + 2 * fw + blk
+
+    def cap(self, T, side, squeeze=False):
+        """그 면에 실을 수 있는 열차 수. squeeze: 열 폭을 조금(squeeze 비율까지) 좁혀서"""
+        P = self.P0 * (self.squeeze if squeeze else 1.0)
+        return max(1, int((self.cw - self.fixed_w(T, side)) / P + 1e-6))
+
+    def make_chunk(self, T, side, trains, avail=None):
+        """면(side)에 실을 열차들로 조각을 만든다. avail: 조각이 쓸 폭(없으면 판면 폭).
+        모자란 자리는 빈 열로 avail 끝까지, 남는 폭은 역명 칸에. 한두 편 넘치면 열 폭을 고르게 좁힌다"""
+        L, Tc, R = self.blocks(T)
+        room = (self.cw if avail is None else avail) - self.fixed_w(T, side)
+        cap = max(1, int(room / self.P0 + 1e-6))
+        if len(trains) > cap:
+            P = room / len(trains)
+            cols, extra = list(trains), 0
+        else:
+            P = self.P0
+            cols = list(trains) + [('G', Tc[-1], g) for g in range(cap - len(trains))]
+            extra = room - cap * self.P0
+        keep = (L + cols) if side == 'L' else (cols + R)
+        return {'side': side, 'cols': keep, 'trains': cols, 'extra': max(0, extra), 'mirror': T.mirror, 'P': P}
+
+    # ── 행 자르기: 착발 두 줄 등 여러 행에 걸친 칸을 가르지 않는 자리에서만 ──
+    def cut_ok(self, T):
+        if not hasattr(T, 'cuts'):
+            bad = set()
+            for c in T.cells:
+                for r in range(c.r + 1, c.r + c.rs): bad.add(r)
+            T.cuts = {r for r in range(T.hEnd + 1, T.fStart) if r not in bad}
+        return T.cuts
+
+    def piece_h(self, T, rows, notes):
+        fw, fp = self.frame_w, self.frame_pad
+        return 2 * (fw + fp) + self.headband_h(T) + sum(T.rowH[r] for r in rows) + (self.notes_h(T) if notes else 0)
 
     def headband_h(self, T):
         if T.head is None: return 0
@@ -906,11 +906,12 @@ class Book:
         fs = self.fs
         tex, rects = [], []
         side = ch['side']
+        self.cur_mirror = ch.get('mirror', False)
         ttl, ttlH, TW = self.title_tex(T, line, part)
         fw, fp = self.frame_w, self.frame_pad
         # 열 x 위치
         cols = ch['cols']
-        widths = [width_of(T, j) for j in cols]
+        widths = [ch['P'] if (isinstance(j, tuple) or T.kind[j][0] == 'T') and 'P' in ch else width_of(T, j) for j in cols]
         # 남는 폭을 역명 칸에
         if ch['extra'] > 0:
             tgt = None
@@ -958,7 +959,7 @@ class Book:
         # 칸
         rowpos = {r: i for i, r in enumerate(rows)}
         colpos = {j: i for i, j in enumerate(cols)}
-        if side == 'R' and self.mirror:
+        if side == 'R' and self.cur_mirror:
             pass
         seen = set()
         for r in rows:
@@ -1048,7 +1049,7 @@ class Book:
 
     def grid_rules(self, T, rows, cols, xs, ys, side):
         nR, nC = len(rows), len(cols)
-        mir = side == 'R' and self.mirror
+        mir = side == 'R' and self.cur_mirror
         def cell_at(i, k): return cell_of(T, rows[i], cols[k])
         out = []
         # 세로선: 열 사이 k (1..nC-1), 행 i
@@ -1186,32 +1187,185 @@ class Book:
             tex.append(r'\put(%.3f,%.3f){\rlap{%s}}' % (x0, Y, fo))
         return tex
 
-    # ── 항목 하나(표) ──
-    def add_table(self, item):
+    # ── 표 읽기 ──
+    def load_tables(self, item):
         src = item['src'] if os.path.isabs(item['src']) else os.path.join(self.base, item['src'])
         text = open(src, encoding='utf-8').read()
         blocks = invoke_blocks(text)
-        data = blocks[item.get('idx', 0)]
-        mod = os.path.join(HERE, 'src', 'Timetable.lua')
-        html = run_module(data, mod, os.path.join(HERE, 'build'))
-        root = parse_html(html)
-        wrap = root.find(lambda n: 'jtt-wrap' in n.cls)
-        T = build_table(wrap)
-        self.prepare(T)
-        chs = self.chunks(T, item.get('fit', 'spread'))
-        bands = self.bands(T)
-        # 펼침면: 짝(L,R)마다 띠를 돈다
-        groups = [chs[i:i + 2] for i in range(0, len(chs), 2)] if item.get('fit', 'spread') == 'spread' else [[c] for c in chs]
-        total = len(chs) * len(bands)
-        k = 0
-        for gi, grp in enumerate(groups):
-            for bi, rows in enumerate(bands):
-                for ch in grp:
-                    last = gi == len(groups) - 1 and bi == len(bands) - 1 and ch is grp[-1]
-                    self.pages.append({'T': T, 'ch': ch, 'rows': rows, 'notes': last,
-                                       'label': item.get('label', ''), 'k': k, 'total': total,
-                                       'line': item.get('line') or (item.get('label', '').split() or [''])[0]})
-                    k += 1
+        idxs = [item['idx']] if 'idx' in item else range(len(blocks))
+        out = []
+        for i in idxs:
+            html = run_module(blocks[i], os.path.join(HERE, 'src', 'Timetable.lua'), os.path.join(HERE, 'build'))
+            wrap = parse_html(html).find(lambda n: 'jtt-wrap' in n.cls)
+            T = build_table(wrap)
+            self.prepare(T)
+            T.line = item.get('line') or os.path.splitext(os.path.basename(src))[0]
+            out.append(T)
+        return out
+
+    # ── 짜기: 쪽을 차례로 위에서부터 채운다 ──
+    #  · 열차 무리: 한 면 폭에 드는 표는 한 면(single), 넓은 표는 이어지는 두 쪽에 나눠 싣는 짝(pair).
+    #    짝이 왼쪽 면에서 시작하면 펼침면 두 쪽에 같은 높이로(행이 맞는다), 오른쪽 면에서 시작하면 넘겨서 다음 왼쪽 면으로.
+    #    끝에 몇 편만 남으면 열 폭을 조금(squeeze) 좁혀 앞 무리에 싣는다
+    #  · 높은 표는 역(행)으로 자른다. 머리 행은 띠마다, 꼬리 행(종착역·운행일)은 열차 무리의 마지막 띠에, 주기는 표의 끝에.
+    #    쪽에 남은 높이가 넉넉하면(splitMin) 잘라서 채우고, 모자라면 새 쪽에서. 자투리 띠(minBandRows 역 미만)는 만들지 않는다
+    #  · 좁은 표(한 면을 다 채우지 않는 single 통째)는 앞의 좁은 표 옆에 나란히 (하행 | 상행)
+    #  · 읽는 차례를 지킨다: 한 쪽을 위→아래로 다 읽은 뒤 다음 쪽 (앞 쪽의 빈자리로 되돌아가 채우지 않는다)
+    def layout(self, tables):
+        PH = self.ch
+        gap = self.R * self.cfg.get('tierGap', 1.0)
+        MINB = self.cfg.get('minBandRows', 6)
+        split_min = self.cfg.get('splitMin', 0.25) * PH
+        gapX = self.cfg.get('sideGap', 1.5) * MM
+        TWh = self.title_tex(tables[0])[2] if tables else 0
+        pages = []
+        def page(i):
+            while len(pages) <= i: pages.append({'pieces': [], 'lines': []})
+            return pages[i]
+        ys = collections.defaultdict(float)
+        cur = {'c': 0}
+        def top(p): return ys[p] + gap if ys[p] > 0 else 0.0
+        def side_of(p): return 'L' if p % 2 == 0 else 'R'
+        def put(T, p, trains, rows, y, notes, h, x=0.0, narrow=False, whole=False):
+            pg = page(p)
+            side = side_of(p)
+            pc = {'T': T, 'side': side, 'trains': trains, 'rows': rows, 'y': y, 'x': x, 'h': h, 'notes': notes,
+                  'narrow': narrow, 'whole': whole, 'nat': self.fixed_w(T, side) + len(trains) * self.P0}
+            pg['pieces'].append(pc)
+            if T.line not in pg['lines']: pg['lines'].append(T.line)
+            return pc
+        for T in tables:
+            L, Tc, R = self.blocks(T)
+            head = list(range(T.hEnd)); foot = list(range(T.fStart, T.nrow)); body = list(range(T.hEnd, T.fStart))
+            cuts = self.cut_ok(T)
+            TH = self.title_tex(T, part='열넷째')[1] + 0.5 * self.fs
+            pieces = []
+            def hgt(bi, e, last_group):
+                fin = e == len(body)
+                rows = head + body[bi:e] + (foot if fin else [])
+                return rows, max(self.piece_h(T, rows, fin and last_group), TH)
+            def band_end(bi, room, last_group, at_top):
+                whole = hgt(bi, len(body), last_group)[1]
+                if whole <= room + 0.01: return len(body)
+                if not at_top and whole <= PH + 0.01 and room < split_min: return None
+                best = None
+                for e in range(bi + 1, len(body)):
+                    if body[e] not in cuts: continue
+                    if hgt(bi, e, last_group)[1] > room + 0.01: break
+                    best = e
+                if best is None: return None
+                if len(body) - best < MINB:
+                    alt = [e for e in range(bi + MINB, best) if body[e] in cuts and len(body) - e >= MINB]
+                    best = alt[-1] if alt else None
+                    if best is None: return None
+                lns = [e for e in range(max(bi + MINB, best - 3), best + 1) if body[e] in cuts and 'jtt-ln' in T.rowcls[body[e]]]
+                if lns: best = lns[-1]
+                if best - bi < MINB and not at_top: return None
+                return best
+            capL, capR = self.cap(T, 'L'), self.cap(T, 'R')
+            sL, sR = self.cap(T, 'L', True), self.cap(T, 'R', True)
+            n = len(Tc)
+            if n <= max(sL, sR):
+                groups = [('single', n)]
+            else:
+                C = capL + capR
+                G = -(-n // C)
+                if G > 1 and n <= (G - 1) * (sL + sR): G -= 1
+                if n <= G * C:
+                    full, r = divmod(n, C)
+                    groups = [('pair', capL, capR)] * full
+                    if r:
+                        if full >= 1 and r <= max(sL, sR): groups.append(('single', r))
+                        else:
+                            kA = -(-r // 2)                      # 두 쪽에 고르게
+                            groups.append(('pair', kA, r - kA))
+                else:
+                    base, ex = divmod(n, G)
+                    groups = []
+                    for g in range(G):
+                        k = base + (1 if g < ex else 0)
+                        kA = -(-k // 2); groups.append(('pair', kA, k - kA))
+            ti = 0
+            for gdef in groups:
+                used = gdef[1] if gdef[0] == 'single' else gdef[1] + gdef[2]
+                last_group = ti + used >= n
+                trs = Tc[ti:ti + used]
+                bi, guard = 0, 0
+                while bi < len(body) and guard < 400:
+                    guard += 1
+                    c = cur['c']
+                    if gdef[0] == 'single':
+                        k = used
+                        # 1) 앞의 좁은 표 옆에 나란히
+                        if bi == 0 and page(c)['pieces']:
+                            prev = page(c)['pieces'][-1]
+                            if prev['whole'] and prev['narrow'] and prev['y'] + 0.01 >= max(q['y'] for q in page(c)['pieces']):
+                                x = prev['x'] + prev['nat'] + TWh + gapX
+                                rows, h = hgt(0, len(body), last_group)
+                                nat = self.fixed_w(T, side_of(c)) + k * self.P0
+                                if x + nat <= self.cw + 0.01 and prev['y'] + h <= PH + 0.01:
+                                    pieces.append(put(T, c, trs, rows, prev['y'], last_group, h, x, True, True))
+                                    ys[c] = max(ys[c], prev['y'] + h)
+                                    bi = len(body); continue
+                        # 2) 이 쪽에서 위→아래로. 자리가 없으면 다음 쪽
+                        if (sL if c % 2 == 0 else sR) >= k:
+                            y0 = top(c)
+                            e = band_end(bi, PH - y0, last_group, y0 == 0)
+                            if e is not None:
+                                rows, h = hgt(bi, e, last_group)
+                                fin = e == len(body)
+                                narrow = self.fixed_w(T, side_of(c)) + k * self.P0 < self.cw * 0.62
+                                pieces.append(put(T, c, trs, rows, y0, fin and last_group, h, 0.0, narrow, bi == 0 and fin))
+                                ys[c] = y0 + h
+                                bi = e; continue
+                        cur['c'] = c + 1
+                    else:
+                        kA, kB = gdef[1], gdef[2]
+                        if c % 2 == 0:
+                            ya, yb = top(c), top(c + 1)
+                            ra, rb = PH - ya, PH - yb
+                            whole_h = hgt(bi, len(body), last_group)[1]
+                            # 왼쪽 면이 훨씬 찼고 오른쪽 면에 이 무리가 통째로 들면: 오른쪽 면에서 시작해 넘겨 잇는다
+                            if bi == 0 and ra < rb - 0.25 * PH and whole_h <= rb + 0.01:
+                                cur['c'] = c + 1; continue
+                            # 펼침면 두 쪽에: 높이가 비슷하면 같은 높이로(행이 맞는다), 아니면 각 쪽의 자리에서
+                            if abs(ya - yb) < 10 * MM: ya = yb = max(ya, yb)
+                            e = band_end(bi, min(PH - ya, PH - yb), last_group, max(ya, yb) == 0)
+                            if e is None:
+                                if ys[c + 1] == 0 and bi == 0: cur['c'] = c + 1
+                                else: cur['c'] = c + 2
+                                continue
+                            rows, h = hgt(bi, e, last_group)
+                            fin = e == len(body)
+                            pieces.append(put(T, c, trs[:kA], rows, ya, False, h))
+                            pieces.append(put(T, c + 1, trs[kA:], rows, yb, fin and last_group, h))
+                            ys[c] = ya + h; ys[c + 1] = yb + h
+                            bi = e
+                            if not fin: cur['c'] = c + 2          # 다음 띠는 다음 펼침면
+                        else:
+                            # 오른쪽 면에서 시작: 넘겨서 다음 왼쪽 면으로 (두 쪽 행은 같다)
+                            y1, y2 = top(c), top(c + 1)
+                            room = min(PH - y1, PH - y2)
+                            e = band_end(bi, room, last_group, y1 == 0)
+                            if e is None:
+                                cur['c'] = c + 1; continue
+                            rows, h = hgt(bi, e, last_group)
+                            fin = e == len(body)
+                            pieces.append(put(T, c, trs[:kA], rows, y1, False, h))
+                            pieces.append(put(T, c + 1, trs[kA:], rows, y2, fin and last_group, h))
+                            ys[c] = y1 + h; ys[c + 1] = y2 + h
+                            bi = e
+                            cur['c'] = c + 1
+                ti += used
+            for k, pc in enumerate(pieces):
+                pc['part'] = (ORD_KO[k] if k < len(ORD_KO) else '%d째' % (k + 1)) if len(pieces) > 1 else ''
+        # 단(같은 높이)마다 맨 오른쪽 조각만 빈 열로 판면 끝까지 채운다
+        for pg in pages:
+            for pc in pg['pieces']:
+                others = sorted([q for q in pg['pieces'] if q is not pc and abs(q['y'] - pc['y']) < 0.01 and q['x'] > pc['x']], key=lambda q: q['x'])
+                avail = min(others[0]['x'] - TWh - gapX - pc['x'], pc['nat']) if others else (self.cw - pc['x'])
+                pc['ch'] = self.make_chunk(pc['T'], pc['side'], pc['trains'], avail)
+        self.pages = pages
 
     def emit(self, out_tex):
         first = self.cfg.get('firstFolio', 2)
@@ -1220,13 +1374,15 @@ class Book:
             folio = first + pi
             recto = folio % 2 == 1
             x0 = self.mi if recto else self.mo
-            part = ORD_KO[pg['k']] if pg['total'] > 1 else ''
+            tex, rects = [], []
+            for pc in pg['pieces']:
+                t, r, w, h = self.render_piece(pc['T'], pc['ch'], pc['rows'], x0 + pc.get('x', 0), self.mt + pc['y'], pc['notes'],
+                                               line=pc['T'].line, part=pc['part'])
+                tex += t; rects += r
             # 머리글은 노선 이름만 (책을 넘기며 찾는 자리). 몇째 조각인지는 표의 세로 제목 끝에
-            tex, rects, w, h = self.render_piece(pg['T'], pg['ch'], pg['rows'], x0, self.mt, pg['notes'],
-                                                 line=pg['line'], part=part)
-            tex += self.page_furniture(folio, recto, pg['line'], '')
+            tex += self.page_furniture(folio, recto, '·'.join(pg['lines']), '')
             body.append(r'\begin{picture}(%.3f,%.3f)' % (self.W, self.H))
-            body.append(r'\put(0,0){\pdfextension literal{%s}}' % self.pdf_ops(rects))
+            if rects: body.append(r'\put(0,0){\pdfextension literal{%s}}' % self.pdf_ops(rects))
             body += tex
             body.append(r'\end{picture}\newpage')
         pre = PREAMBLE % {
@@ -1279,8 +1435,13 @@ def main():
     cfg = json.load(open(cfgp, encoding='utf-8'))
     base = os.path.dirname(os.path.abspath(cfgp))
     bk = Book(cfg, base)
-    for it in cfg['items']:
-        if it.get('type', 'table') == 'table': bk.add_table(it)
+    items = list(cfg.get('items', []))
+    for ln in cfg.get('lines', []):              # 노선 이름만 적으면 pages/노선.txt 의 모든 표
+        items.append({'src': os.path.join('pages', ln + '.txt'), 'line': ln})
+    tables = []
+    for it in items:
+        if it.get('type', 'table') == 'table': tables += bk.load_tables(it)
+    bk.layout(tables)
     out = os.path.join(HERE, 'build', cfg.get('name', 'book') + '.tex')
     bk.emit(out)
     env = dict(os.environ)

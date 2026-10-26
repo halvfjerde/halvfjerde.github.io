@@ -1,0 +1,61 @@
+{
+  "name": "k11-book",
+  "page": {
+    "w": 148,
+    "h": 210,
+    "margin": {
+      "top": 13.5,
+      "bottom": 11,
+      "inner": 14,
+      "outer": 9
+    }
+  },
+  "fs": 6.5,
+  "rules": {
+    "thin": 0.1,
+    "mid": 0.25,
+    "thick": 0.35,
+    "double": [
+      0.1,
+      0.15
+    ]
+  },
+  "fonts": {
+    "mincho": "Zen Old Mincho",
+    "minchoKo": "SM JMyungJo Std",
+    "gothic": "Hiragino Kaku Gothic ProN W3",
+    "gothicKo": "SM TGothic Std",
+    "gothicBold": "Hiragino Kaku Gothic ProN W6",
+    "gothicKoBold": "SM TGothic Std",
+    "dia": "DiaPro"
+  },
+  "firstFolio": 2,
+  "alignStrength": 0.85,
+  "fontDirs": [
+    "fonts",
+    "~/mnt/halvfjerde--Library--Fonts",
+    "~/mnt/Library--Fonts",
+    "~/mnt/System--Library--Fonts"
+  ],
+  "titleInMargin": true,
+  "headGap": 2.0,
+  "lines": [
+    "경부선",
+    "호남선",
+    "전라선",
+    "경전선",
+    "동해선",
+    "강릉선",
+    "중앙선",
+    "중부내륙선",
+    "장항선",
+    "서해선",
+    "충북선",
+    "경북선",
+    "대구선",
+    "영동선",
+    "태백선",
+    "목포보성선",
+    "교외선"
+  ]
+}
