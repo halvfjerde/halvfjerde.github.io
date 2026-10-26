@@ -1,5 +1,5 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=17';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=18';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
@@ -304,7 +304,7 @@ async function render() {
     await pool(need, 4, (it) => getDoc(it.title, it.oldid), (k, n) => { status.textContent = `자료를 불러오는 중… ${k} / ${n}`; });
     for (const el of [$('#sheets'), $('#measure')]) {
       el.classList.toggle('shaken', book.fonts === 'shaken');
-      for (const f of ['antique', 'tokumin', 'shippori', 'sm']) el.classList.toggle(`f-${f}`, book.fonts === f);
+      for (const f of ['antique', 'tokumin', 'shippori', 'sm', 'un']) el.classList.toggle(`f-${f}`, book.fonts === f);
       el.classList.toggle('mono', book.color === 'mono');
       // 내 컴퓨터에 설치한 글꼴: 이름 그대로 쓰고, 없는 글자(한글 등)는 은바탕·은돋움, 그다음 Zen
       const q = (n) => (n ? `"${String(n).replace(/["\\]/g, '')}", ` : '');

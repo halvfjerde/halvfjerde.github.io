@@ -141,6 +141,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .book.f-shippori {
   --bk-mincho: "Shippori Mincho", "UnBatang", "Zen Old Mincho", serif;
 }
+/* 은바탕·은돋움만 (한자·가나처럼 은 글꼴에 없는 글자만 Zen 으로) */
+.book.f-un {
+  --bk-mincho: "UnBatang", "Zen Old Mincho", serif;
+  --bk-gothic: "UnDotum", "Zen Kaku Gothic New", sans-serif;
+}
 /* SM 세명조·태고딕 (손에 둔 것, 이 컴퓨터에 설치). 한글·한자 모두 SM 글꼴, 가나·기호는 뒤의 글꼴로 */
 .book.f-sm {
   --bk-mincho: "SM SEMyungJo Std", "Zen Old Mincho", "UnBatang", serif;
