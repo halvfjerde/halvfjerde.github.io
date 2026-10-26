@@ -702,7 +702,8 @@ class Book:
                 if not any(lines): continue
                 W = xs[-1] - xs[0] - 1.2 * fs
                 lt = line_tex(lines[0], W, al, fs, self.inl)
-                tex.append(self.put_box(xs[0] + 0.6 * fs, ty, W, hb, lt, al, 'm'))
+                # 틀 안쪽 끝에서 띠 아래 괘선까지의 가운데에 (틀과 표 사이 여백도 띠의 일부로 보인다)
+                tex.append(self.put_box(xs[0] + 0.6 * fs, y0 + fw, W, ty + hb - (y0 + fw), lt, al, 'm'))
             rects.append(self.hrule(xs[0], xs[-1], ty + hb, 1))
         # 칸
         rowpos = {r: i for i, r in enumerate(rows)}
@@ -881,12 +882,13 @@ class Book:
         if part:
             rh += r'\ ' + self.inl.run('(%s)' % part, Ctx('M', 8.5 / fs))
         fo = r'{\fGB\fontsize{13bp}{13bp}\selectfont %s}' % folio
+        Yr = Y + 0.37 * (13 - 8.5)     # 머리글 글줄을 쪽 번호의 가운데 높이로
         if recto:
-            tex.append(r'\put(%.3f,%.3f){\makebox(0,0)[br]{%s}}' % (x0 + self.cw - 12 * MM, Y, rh))
-            tex.append(r'\put(%.3f,%.3f){\makebox(0,0)[br]{%s}}' % (x0 + self.cw, Y, fo))
+            tex.append(r'\put(%.3f,%.3f){\llap{%s}}' % (x0 + self.cw - 12 * MM, Yr, rh))
+            tex.append(r'\put(%.3f,%.3f){\llap{%s}}' % (x0 + self.cw, Y, fo))
         else:
-            tex.append(r'\put(%.3f,%.3f){\makebox(0,0)[bl]{%s}}' % (x0 + 12 * MM, Y, rh))
-            tex.append(r'\put(%.3f,%.3f){\makebox(0,0)[bl]{%s}}' % (x0, Y, fo))
+            tex.append(r'\put(%.3f,%.3f){\rlap{%s}}' % (x0 + 12 * MM, Yr, rh))
+            tex.append(r'\put(%.3f,%.3f){\rlap{%s}}' % (x0, Y, fo))
         return tex
 
     # ── 항목 하나(표) ──
