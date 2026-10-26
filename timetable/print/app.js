@@ -1,5 +1,5 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=10';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=11';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
@@ -302,7 +302,7 @@ async function render() {
     await pool(need, 4, (it) => getDoc(it.title, it.oldid), (k, n) => { status.textContent = `자료를 불러오는 중… ${k} / ${n}`; });
     for (const el of [$('#sheets'), $('#measure')]) {
       el.classList.toggle('shaken', book.fonts === 'shaken');
-      for (const f of ['antique', 'tokumin']) el.classList.toggle(`f-${f}`, book.fonts === f);
+      for (const f of ['antique', 'tokumin', 'shippori']) el.classList.toggle(`f-${f}`, book.fonts === f);
       el.classList.toggle('mono', book.color === 'mono');
     }
     if (book.fonts === 'shaken') await typesquare();
@@ -330,6 +330,7 @@ async function render() {
 const FONT_SETS = {
   antique: 'Shippori+Mincho+B1:wght@400;700&family=Zen+Kaku+Gothic+Antique:wght@400;700&family=Song+Myung',
   tokumin: 'Kaisei+Tokumin:wght@400;700&family=Shippori+Antique+B1&family=Gowun+Batang:wght@400;700',
+  shippori: 'Shippori+Mincho:wght@400;700&family=Shippori+Antique',
 };
 async function bookFonts(set) {
   const q = FONT_SETS[set];
