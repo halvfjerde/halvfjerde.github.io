@@ -287,6 +287,45 @@ function snapCols(el, tb, cols, P) {
   return gi;
 }
 
+/** 같은 행들로 된 조각들의 행 높이를 가장 높은 것에 맞춘다 */
+function equalizeRows(built) {
+  const n = Math.min(...built.map((b) => b.rowH.length));
+  for (let i = 0; i < n; i++) {
+    const mx = Math.max(...built.map((b) => b.rowH[i]));
+    for (const b of built) {
+      if (b.rowH[i] >= mx - 0.2) continue;
+      b.el.querySelector('table.jtt').rows[i].style.height = `${mx}px`;
+      b.h += mx - b.rowH[i];
+      b.tableH += mx - b.rowH[i];
+      b.rowH[i] = mx;
+    }
+  }
+}
+
+/**
+ * 왼쪽 묶음(앞 nL 열)을 행 끝으로 거울처럼 옮긴다: [역 칸 | 열차] → [열차 | 역 칸(거꾸로)].
+ * 행마다 묶음 안의 칸 차례를 뒤집어 끝에 붙이면, 위에서 내려온 칸(rowspan)의 자리도 거울로 맞는다.
+ */
+function mirrorBlock(tb, nL) {
+  if (!nL) return;
+  const g = grid(tb);
+  const rows = new Map();
+  for (const x of g.cells) {
+    if (x.c + x.cs > nL) continue;
+    if (!rows.has(x.r)) rows.set(x.r, []);
+    rows.get(x.r).push(x);
+  }
+  for (const [r, xs] of rows) {
+    for (const x of xs.slice().reverse()) {
+      x.td.classList.remove('jtt-c1');
+      x.td.classList.add('jtt-mir');
+      if (x.c + x.cs === nL) x.td.classList.add('jtt-mir1');   // 열차 열과 맞닿는 칸
+      g.rows[r].appendChild(x.td);
+    }
+  }
+  tb.classList.add('jtt-mirror');
+}
+
 /** 쪽에 놓을 때 남는 폭을 빈 열 k 개로 채운다 (열차 열 끝, 오른쪽 묶음 앞에) */
 function padTable(wrapEl, k, gi) {
   const tb = wrapEl.querySelector('table.jtt');
@@ -393,12 +432,27 @@ export async function tableFragments(srcWrap, box, opt) {
   const gw = colW.map((v, j) => (G && j >= t0 && j < t1 ? Math.max(1, Math.ceil(v / G.P - 0.1)) * G.P : v));
   const isSt = new Array(g.ncol).fill(false);
   for (const x of g.cells) if (x.cs === 1 && (x.td.classList.contains('jtt-st') || x.td.classList.contains('jtt-r-st'))) isSt[x.c] = true;
-  const colInfo = (keepCols) => keepCols.map((k, j) => (k ? { nat: colW[j], gw: gw[j], kind: j < t0 ? 'L' : j < t1 ? 'T' : 'R', st: isSt[j] } : null)).filter(Boolean);
+  // 오른쪽 고정 칸이 없는 표를 펼침면에 실으면, 오른쪽 면의 바깥 끝에 역 이름 칸(역명·着発)을 거울처럼 단다
+  const isAd = new Array(g.ncol).fill(false);
+  for (const x of g.cells) if (x.cs === 1 && x.td.classList.contains('jtt-ad')) isAd[x.c] = true;
+  let mirCols = [];
+  for (let j = 0; j < t0; j++) if (isSt[j] || isAd[j]) mirCols.push(j);
+  if (!mirCols.length) mirCols = Array.from({ length: t0 }, (_, j) => j);
+  const mirW = mirCols.reduce((a, j) => a + colW[j], 0);
+  // 잘린 표의 열 차례대로 (거울이면 열차 열 다음에 왼쪽 묶음을 거꾸로, 오른쪽 묶음으로 친다)
+  const colInfo = (keepCols, mirror) => {
+    const cols = keepCols.map((k, j) => (k ? { nat: colW[j], gw: gw[j], kind: j < t0 ? 'L' : j < t1 ? 'T' : 'R', st: isSt[j] } : null)).filter(Boolean);
+    if (!mirror) return cols;
+    const nL = cols.filter((c) => c.kind === 'L').length;
+    return [...cols.slice(nL), ...cols.slice(0, nL).reverse().map((c) => ({ ...c, kind: 'R' }))];
+  };
 
   /** 잘라 낸 조각을 놓아 보고, 지워지기 전에 크기를 다 재 둔다 */
-  const build = (keepRows, keepCols, { notes, title }) => {
+  const build = (keepRows, keepCols, { notes, title, mirror }) => {
     const w = srcWrap.cloneNode(true);
-    w.querySelector('table.jtt').replaceWith(clipTable(table, keepRows, keepCols, t0));
+    const clipped = clipTable(table, keepRows, keepCols, t0);
+    if (mirror) mirrorBlock(clipped, keepCols.slice(0, t0).filter(Boolean).length);
+    w.querySelector('table.jtt').replaceWith(clipped);
     if (!notes) w.querySelectorAll('.jtt-notes').forEach((n) => n.remove());
     if (!title) w.querySelectorAll('.jtt-title').forEach((n) => n.remove());
     const el = place(box, w, fs).firstChild;
@@ -418,7 +472,7 @@ export async function tableFragments(srcWrap, box, opt) {
         if (natH > fh * lines) ttl.style.fontSize = `${parseFloat(getComputedStyle(ttl).fontSize) * (fh * lines / natH) * 0.96}px`;
       }
     }
-    const gi = G ? snapCols(el, tb, colInfo(keepCols), G.P) : null;
+    const gi = G ? snapCols(el, tb, colInfo(keepCols, mirror), G.P) : null;
     const er = rect(el);
     return {
       el, w: er.width, h: er.height, tableH: rect(tb).height, grid: gi,
@@ -438,8 +492,9 @@ export async function tableFragments(srcWrap, box, opt) {
   const wAt = (i) => (i === 0 && opt.firstW ? opt.firstW : opt.availW);
   const availFor = G
     ? (side, i) => wAt(i) - (side !== 'R' ? gUp(tr.left - wr.left + leftW + titleLine) : 0)
-      - (side !== 'L' && t1 < g.ncol ? gUp(wr.right - tr.right + rightW) : 0)
-    : (side, i) => wAt(i) - (side !== 'R' ? extraW + leftW + titleLine : extraW - titleW) - (side !== 'L' ? rightW : 0);
+      - (side !== 'L' && (t1 < g.ncol || side === 'R') ? gUp(wr.right - tr.right + (t1 < g.ncol ? rightW : mirW)) : 0)
+    : (side, i) => wAt(i) - (side !== 'R' ? extraW + leftW + titleLine : extraW - titleW)
+      - (side !== 'L' ? (t1 < g.ncol ? rightW : side === 'R' ? mirW : 0) : 0);
   const sideOf = (i) => (spread ? (i % 2 ? 'R' : 'L') : null);
   const colSum = (a, b) => sum(G ? gw : colW, a, b);
   const slack = G ? -0.5 : 2;
@@ -463,16 +518,17 @@ export async function tableFragments(srcWrap, box, opt) {
   for (let c = t0, i = 0, pi = 0; c < t1; i++, pi++) {
     const side = sideOf(i);
     const withLeft = side !== 'R', withRight = side !== 'L';
+    const mirror = side === 'R' && t1 >= g.ncol;
     const planned = plan[pi] ?? t1;
     let cut = planned, keepCols, tall;
     for (;;) {   // 실제로 놓아 보고 폭이 넘치면 한 열씩 줄인다
       const cc = cut, cs = c;
-      keepCols = Array.from({ length: g.ncol }, (_, j) => (j < t0 && withLeft) || (j >= cs && j < cc) || (j >= t1 && withRight));
-      tall = build(allRows, keepCols, { notes: false, title: withLeft });
+      keepCols = Array.from({ length: g.ncol }, (_, j) => (j < t0 && (withLeft || (mirror && mirCols.includes(j)))) || (j >= cs && j < cc) || (j >= t1 && withRight));
+      tall = build(allRows, keepCols, { notes: false, title: withLeft, mirror });
       if (tall.w <= wAt(i) + 0.5 || cut <= c + 1) break;
       cut--;
     }
-    chunks.push({ keepCols, tall, withLeft, side, overW: tall.w > wAt(i) + 0.5 });
+    chunks.push({ keepCols, tall, withLeft, side, mirror, overW: tall.w > wAt(i) + 0.5 });
     c = cut;
     if (cut !== planned) { plan = greedyCols(c, i + 1); pi = -1; }
   }
@@ -504,7 +560,9 @@ export async function tableFragments(srcWrap, box, opt) {
     const bandOf = (r, cut) => {
       const lastBand = cut >= fStart;
       const keepRows = Array.from({ length: nrow }, (_, i) => i < hEnd || (i >= r && i < cut) || (lastBand && i >= fStart));
-      return grp.map((ch, k) => build(keepRows, ch.keepCols, { notes: lastGroup && lastBand && k === grp.length - 1, title: ch.withLeft }));
+      const built = grp.map((ch, k) => build(keepRows, ch.keepCols, { notes: lastGroup && lastBand && k === grp.length - 1, title: ch.withLeft, mirror: ch.mirror }));
+      if (built.length > 1) equalizeRows(built);   // 펼침면(과 구간 맞추기)의 조각들은 행 높이를 같게: 왼쪽·오른쪽 면의 줄이 맞는다
+      return built;
     };
     const over = (built, cut) => Math.max(...built.map((b) => b.h + (lastGroup && cut >= fStart ? 0 : contH) - opt.availH));
 

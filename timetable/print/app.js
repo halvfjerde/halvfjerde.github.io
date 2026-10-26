@@ -1,5 +1,5 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=6';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=7';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
@@ -260,10 +260,22 @@ function typesquare() {
   return tsLoading;
 }
 
+/* 펼쳐 보기: 마주 보는 두 쪽을 나란히 (오른쪽 철이면 오른쪽에서 왼쪽으로). 화면에만 */
+const SPREAD_KEY = 'tt-print-spread';
+function spreadView() {
+  const on = $('#pvSpread').checked;
+  $('#sheets').classList.toggle('spreads', on);
+  $('#sheets').classList.toggle('rtl', on && book.binding === 'right');
+  try { localStorage.setItem(SPREAD_KEY, on ? '1' : ''); } catch (e) { /* 저장 불가 */ }
+}
+try { $('#pvSpread').checked = localStorage.getItem(SPREAD_KEY) === '1'; } catch (e) { /* 없음 */ }
+$('#pvSpread').addEventListener('change', () => { spreadView(); fitZoom(); });
+
 function fitZoom() {
+  spreadView();
   const v = $('#pvZoom').value;
   const P = book.page;
-  const w = ((P.size === 'custom' ? P.w : SIZES[P.size][0]) + (book.output.marks ? 30 : 0)) * 96 / 25.4;
+  const w = ((P.size === 'custom' ? P.w : SIZES[P.size][0]) + (book.output.marks ? 30 : 0)) * 96 / 25.4 * ($('#pvSpread').checked ? 2 : 1);
   let z = +v;
   if (v === 'fit') z = Math.min(1, ($('.preview').clientWidth - 32) / w);
   $('#sheets').style.zoom = String(z);

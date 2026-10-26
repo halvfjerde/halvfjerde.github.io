@@ -86,6 +86,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .warn { margin: 0 16px 8px; padding: 6px 10px; background: #fff4ef; border: 1px solid #f0d2c6; color: var(--ui-warn); font-size: 12px; border-radius: 4px; }
 #sheets { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 8px 16px 60px; }
 #sheets .sheet { box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.pv-right { display: flex; align-items: center; gap: 14px; }
+.pv-right input[type=checkbox] { margin: 0 4px 0 0; vertical-align: -1px; }
+@media screen {
+  /* 펼쳐 보기: 첫 쪽(표지)은 혼자, 다음부터 두 쪽씩 맞붙여 */
+  #sheets.spreads { display: grid; grid-template-columns: repeat(2, max-content); justify-content: center; column-gap: 0; row-gap: 14px; }
+  #sheets.spreads.rtl { direction: rtl; }
+  #sheets.spreads > .sheet { direction: ltr; }
+  #sheets.spreads > .sheet:first-child { grid-column: 2; }
+}
 
 /* 재기 상자: 화면 밖 */
 #measure { position: absolute; left: -100000px; top: 0; visibility: hidden; pointer-events: none; }
@@ -114,6 +123,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .book .jtt-scroll { overflow: visible !important; }
 .book .jtt .jtt-km, .book .jtt .jtt-mk, .book .jtt .jtt-st, .book .jtt .jtt-ad, .book .jtt .jtt-alt { position: relative !important; left: auto !important; }
+/* 펼침면 오른쪽 면: 거울로 옮긴 역 이름 칸 (열차 열과의 경계는 굵게) */
+.book table.jtt-mirror td.jtt-mir { border-right: 0 !important; border-left: 1px solid var(--jtt-fg) !important; }
+.book table.jtt-mirror td.jtt-mir1 { border-left: 2px solid var(--jtt-fg) !important; }
 
 .sheet { position: relative; background: #fff; color: var(--bk-ink); overflow: hidden; flex: none;
   -webkit-print-color-adjust: exact; print-color-adjust: exact; }

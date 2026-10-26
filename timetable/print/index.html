@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/font/un/unbatang.css?v=1">
 <link rel="stylesheet" href="/font/un/undotum.css?v=1">
 <link rel="stylesheet" href="api.php?action=css">
-<link rel="stylesheet" href="print.css?v=6">
+<link rel="stylesheet" href="print.css?v=7">
 <style id="pagesize">@page { size: 182mm 257mm; margin: 0; }</style>
 </head>
 <body>
@@ -100,9 +100,10 @@
   <section class="preview">
     <div class="pv-bar">
       <span id="status">준비 중…</span>
+      <span class="pv-right"><label class="zoom" title="책을 펼친 것처럼 마주 보는 두 쪽을 나란히 본다 (인쇄에는 영향 없음)"><input type="checkbox" id="pvSpread">펼쳐 보기</label>
       <label class="zoom">보기<select id="pvZoom">
         <option value="fit">폭에 맞춤</option><option value="0.5">50%</option><option value="0.75">75%</option>
-        <option value="1">100%</option></select></label>
+        <option value="1">100%</option></select></label></span>
     </div>
     <div id="warn" class="warn" hidden></div>
     <div id="sheets" class="book"></div>
@@ -111,6 +112,6 @@
 
 <div id="measure" class="book" aria-hidden="true"></div>
 
-<script type="module" src="app.js?v=6"></script>
+<script type="module" src="app.js?v=7"></script>
 </body>
 </html>
