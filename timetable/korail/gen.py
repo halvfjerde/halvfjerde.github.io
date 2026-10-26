@@ -40,7 +40,7 @@ HEADS = {
     ('gen', '동해선'): '부전 태화강 포항 삼척 동해 강릉',
     ('ktx', '강릉선'): '서울 청량리 평창 강릉 동해',
     ('ktx', '중앙선'): '청량리 원주 안동 경주 부전', ('gen', '중앙선'): '청량리 원주 제천 영주 안동 부전',
-    ('ktx', '중부내륙선'): '판교(경기) 충주 문경',
+    ('ktx', '중부내륙선'): '판교 충주 문경',
     ('gen', '장항선'): '용산 천안 홍성 대천 익산', ('gen', '서해선'): '홍성 천안 서화성 홍성',
     ('gen', '충북선'): '대전 조치원 충주 제천 영주', ('gen', '경북선'): '김천 상주 점촌 영주',
     ('gen', '대구선'): '동대구 영천 경주 포항', ('gen', '영동선'): '강릉 동해 철암 영주',
@@ -65,6 +65,10 @@ BRANCH = {
 
 # 착발을 나누지 않는 역: 연결선으로 애매하게 붙는 역
 NOSPLIT_ALL = {'행신'}
+# KTX 에서 착발을 나누는 역
+#  1) 여러 계통이 지나도 모든 열차가 서는 역 (열차 20편 이상인 표에서, 지나는 열차가 모두 서는 역) — 자동
+#  2) 그 밖에 주요역이라 보는 역 (손으로)
+KTX_MAJOR = {'수서', '오송', '익산', '광주송정', '순천', '울산', '포항', '마산', '안동', '강릉', '청량리'}
 
 LINE_HANJA = {'경부선': '京釜線', '호남선': '湖南線', '전라선': '全羅線', '경전선': '慶全線', '동해선': '東海線',
               '강릉선': '江陵線', '중앙선': '中央線', '중부내륙선': '中部內陸線', '장항선': '長項線', '서해선': '西海線',
@@ -79,7 +83,12 @@ LBL = {  # 머리 이름 (한국어, 국한문)
 }
 def lbl(k): return LBL[k][1 if MIX else 0]
 
-def clean_name(s): return re.sub(r'\((출발|도착)\)$', '', s)
+# 역 이름 고침 (위키에서 고친 것): 원본 이름 → 표에 쓸 이름. 한자도 함께
+RENAME = {'판교(경기)': '판교', '진부(오대산)': '진부'}
+RENAME_HANJA = {'진부': '珍富'}
+def clean_name(s):
+    s = re.sub(r'\((출발|도착)\)$', '', s)
+    return RENAME.get(s, s)
 
 def hm(t):
     t %= 1440
@@ -257,7 +266,7 @@ class Table:
         L.append(f'title "{dirmark} {name} u({span})."')
         hd = ' ― '.join(band_names)
         L.append(f'head "b{hd}."')
-        L.append('headheight 34')
+        L.append('headheight 48')
         if ktx: L.append(f'headstyle "fc={KTX_COLOR}"')
         L.append('cols st ad')
         L.append('rcols st')
@@ -302,6 +311,12 @@ class Table:
         for c in sorted(self.split, key=lambda i: min(i, n - 1 - i)):
             j = junction(c)
             if j is not None and j in self.split and j != c: self.split.discard(c)
+        if ktx:
+            for i, s in enumerate(self.st):
+                trav = sum(1 for tr in self.trains if isinstance(tr['times'][i], int) or tr['times'][i] == 'v')
+                stop = self.stops(i)
+                if (N >= 20 and trav and stop == trav and stop >= 0.3 * N) or (s in KTX_MAJOR and stop):
+                    self.split.add(i)
         self.split -= {i for i, s in enumerate(self.st) if s in NOSPLIT_ALL}
         # 상행·하행이 같은 주요역·착발역을 쓰도록 main 에서 두 방향을 모아 정한 값(shared)으로 덮어쓴다
         self.cand = {self.st[i]: (self.stops(i) + ends[i]) / N for i in major}
@@ -322,7 +337,7 @@ class Table:
             ad = '着発' if i in self.split else '発' if i == 0 else '着' if i == n - 1 else '〃'
             mk = '**' if i in self.split else '*' if i in major else ''
             nm = mk + s
-            hj = self.hanja.get(s, '')
+            hj = RENAME_HANJA.get(s) or self.hanja.get(s) or self.hanja.get(next((k for k, v in RENAME.items() if v == s), ''), '')
             r = f' r={q(mk + hj)}' if hj else ''
             L.append(f'{q(nm)} {ad}{r}')
         L.append('')
