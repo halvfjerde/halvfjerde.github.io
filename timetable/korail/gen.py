@@ -89,6 +89,11 @@ def esc_txt(s):
 def vert(s):
     return f'r{esc_txt(s)}.' if s else '_'
 
+BLACK = {'새마을', '마음', '새마을호'}      # ITX·새마을급은 검은 네모, 무궁화급·KTX 차종은 흰 네모
+def badge(k):
+    if not k: return '_'
+    return f'BS{{k{k}.}}' if k in BLACK else f'S{{{k}}}'
+
 def q(s):
     """공백·따옴표가 든 값은 "…"로"""
     if s == '' : return '_'
@@ -177,7 +182,7 @@ class Table:
                     for k in range(u + 1, v):
                         if T[k] is None: T[k] = 'I'
                     continue
-                for k in range(u + 1, v): T[k] = 'x' if k in off else 'v'
+                for k in range(u + 1, v): T[k] = 'I' if k in off else 'v'   # 다른 갈래를 달리는 동안은 ║
 
     # ── 기준 시각으로 줄 세우기 ──
     def sort(self):
@@ -209,7 +214,9 @@ class Table:
         for tr in self.trains:
             idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
             ends[idx[0]] += 1; ends[idx[-1]] += 1
-        major = [i for i in range(n) if self.stops(i) >= 0.75 * N or ends[i] >= max(3, 0.15 * N)]
+        busy = [i for i in range(n) if self.stops(i) >= 0.75 * N]
+        if len(busy) > 0.4 * n: busy = []
+        major = [i for i in range(n) if i in busy or ends[i] >= max(3, 0.15 * N)]
         major = sorted(set(major) | {0, n - 1})
         # 대표 시발·종착: 가장 많은 열차가 떠나고 닿는 역
         o_c = collections.Counter(); d_c = collections.Counter()
@@ -243,16 +250,17 @@ class Table:
         L.append('')
         # 머리 행
         L.append('[rows]')
-        has_fr = not ktx and any(self.origin_out(tr) for tr in self.trains)
-        if has_fr: L.append(f'fr   {lbl("fr")} style="fs=sm"')
+        self.o0, self.d0 = self.st[o0], self.st[d0]
+        odd = [tr for tr in self.trains if self.ends_of(tr) != (self.o0, self.d0)]
+        has_fr = has_to = bool(odd)
+        if has_fr: L.append(f'fr   {lbl("fr")}')
         L.append(f'no   {lbl("no")} fmt=N{{*}}')
         L.append(f'kind {lbl("car" if ktx else "kind")} style=va=t')
         L.append('')
         L.append('[footer]')
-        has_to = not ktx and any(self.dest_out(tr) for tr in self.trains)
-        if has_to: L.append(f'to   {lbl("to")} style="fs=sm"')
+        if has_to: L.append(f'to   {lbl("to")}')
         has_day = any(tr['note'] for tr in self.trains)
-        if has_day: L.append(f'day  {lbl("day")} style="va=t fs=sm"')
+        if has_day: L.append(f'day  {lbl("day")} style=va=t')
         L.append('')
         thru = collections.Counter()
         for tr in self.trains:
@@ -269,25 +277,26 @@ class Table:
         for i, s in enumerate(self.st):
             if i in rules: L.append('---')
             ad = '発' if i == 0 else '着' if i == n - 1 else '着発' if i in self.split else '〃'
-            nm = ('*' if i in major else '') + s
+            mk = '**' if i in self.split else '*' if i in major else ''
+            nm = mk + s
             hj = self.hanja.get(s, '')
-            r = f' r={q(("*" if i in major else "") + hj)}' if hj else ''
+            r = f' r={q(mk + hj)}' if hj else ''
             L.append(f'{q(nm)} {ad}{r}')
         L.append('')
         L.append('[trains]')
         for tr in self.trains:
             hdr = []
             if has_fr:
-                o = self.origin_out(tr)
-                hdr.append(q(esc_txt(o)) if o else '_')
+                o, d = self.ends_of(tr)
+                hdr.append(q(esc_txt(o)) if (o, d) != (self.o0, self.d0) else '_')
             hdr.append(tr['no'])
             k = KIND.get(tr['type'], tr['type'])
-            hdr.append(q(vert(k)))
+            hdr.append(q(badge(k)))
             cells = self.cells(tr)
             ft = []
             if has_to:
-                d = self.dest_out(tr)
-                ft.append(q(esc_txt(d)) if d else '_')
+                o, d = self.ends_of(tr)
+                ft.append(q(esc_txt(d)) if (o, d) != (self.o0, self.d0) else '_')
             if has_day: ft.append(q(vert(tr['note'])) if tr['note'] else '_')
             line = ' '.join(hdr) + ' : ' + ' '.join(cells)
             if ft: line += ' : ' + ' '.join(ft)
@@ -309,6 +318,11 @@ class Table:
         L += notes
         return '\n'.join(L)
 
+    def ends_of(self, tr):
+        """실제 시발·종착역 (표 밖이어도). 자료에 없으면 표 안의 첫·끝 정차역"""
+        idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
+        return (clean_name(tr.get('from') or '') or self.st[idx[0]], clean_name(tr.get('to') or '') or self.st[idx[-1]])
+
     def origin_out(self, tr):
         """표 밖에서 오는 열차의 시발역 (없으면 '')"""
         f = clean_name(tr.get('from') or '')
@@ -327,7 +341,7 @@ class Table:
         T = tr['times']
         idx = [i for i, x in enumerate(T) if isinstance(x, int)]
         a, b = idx[0], idx[-1]
-        ends_here = not self.dest_out(tr)
+        ends_here = True   # 표 밖으로 이어 가는 열차도 이 표에서는 끝 표시 (종착역 행에 실제 종착역)
         out, bar = [], False
         for i, x in enumerate(T):
             sp = i in self.split
