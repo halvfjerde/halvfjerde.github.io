@@ -290,6 +290,7 @@ class FontInfo:
         return sum(cs) / len(cs) if cs else None
 
 SAMPLE_HANGUL = '가나다라마바사아자차카타파하서울부산경행역'
+SAMPLE_HANGUL_W = '서울부산경행역대전동구광명수원천안김천'   # 폭을 잴 한글: 받침 있는 글자가 많은 역 이름 같은 것
 SAMPLE_KANJI = '東西南北大田釜山駅京水原永登浦光明'
 SAMPLE_DIGIT = '0123456789'
 
@@ -320,7 +321,7 @@ VROT = {'︵': '(', '︶': ')', '︱': '―', '︹': '〔', '︺': '〕', '(': '
 
 class Metrics:
     """글꼴에서 잰 값: 기준 중심(명조 한자), 글꼴마다 옮길 양"""
-    def __init__(self, db, fonts, strength):
+    def __init__(self, db, fonts, strength, jp_scale='auto'):
         self.db, self.fonts, self.k = db, fonts, strength
         self.info = {role: db.get(name) for role, name in fonts.items() if isinstance(name, str)}
         ref = self.info.get('mincho')
@@ -336,8 +337,21 @@ class Metrics:
                 c = fi.center(SAMPLE_KANJI)
             self.shift[role] = (self.ref - c) * self.k if c is not None else 0.0
         self.missing = [n for r, n in fonts.items() if isinstance(n, str) and not self.info.get(r)]
+        # 한자·가나는 한글보다 커 보인다 (네모를 꽉 채우고 획이 많다). 짝이 되는 한글 글꼴의 한글 폭에 맞춰 줄인다
+        self.jscale = {}
+        for jp, ko in (('mincho', 'minchoKo'), ('gothic', 'gothicKo'), ('gothicBold', 'gothicKoBold')):
+            if isinstance(jp_scale, (int, float)): self.jscale[jp] = float(jp_scale); continue
+            fj, fk = self.info.get(jp), self.info.get(ko)
+            wj = fj and self._width(fj, SAMPLE_KANJI); wk = fk and self._width(fk, SAMPLE_HANGUL_W)
+            self.jscale[jp] = min(1.0, max(0.85, wk / wj)) if (wj and wk) else 1.0
+
+    @staticmethod
+    def _width(fi, chars):
+        bs = [fi.bbox(c) for c in chars]; bs = [b for b in bs if b]
+        return sum(b[2] - b[0] for b in bs) / len(bs) if bs else None
     def report(self):
-        return ', '.join('%s %+.3f' % (r, v) for r, v in sorted(self.shift.items()))
+        return ', '.join('%s %+.3f' % (r, v) for r, v in sorted(self.shift.items())) + \
+            ' | kanji scale ' + ', '.join('%s %.3f' % (r, v) for r, v in sorted(self.jscale.items()))
 
 class Inline:
     def __init__(self, fs, metrics=None):
@@ -379,8 +393,14 @@ class Inline:
         for k, chs in segs:
             t = ''.join(r'\ ' if ch == ' ' else esc(ch) for ch in chs)
             fam = KO_OF[ctx.font] if k in ('ko', 'kp') else ctx.font
-            body = '{' + self.font(ctx, fam) + t + '}'
+            c2 = ctx
             up = self.shift_for(k, ctx.font)
+            if k == 'jp' and self.m:
+                sc = self.m.jscale.get(JP_OF[ctx.font], 1.0)
+                if sc < 0.999:
+                    c2 = ctx.but(size=ctx.size * sc)
+                    up += (1 - sc) * self.c          # 작아진 글자의 가운데를 제자리에
+            body = '{' + self.font(c2, fam) + t + '}'
             if abs(up) > 0.002 and not (vertical and k == 'base'):
                 body = r'\raisebox{%.3fbp}{%s}' % (up * ctx.size * self.fs, body)
             out.append(body)
@@ -663,7 +683,7 @@ class Book:
         os.makedirs(os.path.join(HERE, 'build'), exist_ok=True)
         db = FontDB(self.font_dirs, os.path.join(HERE, 'build', 'fontdb.json'))
         self.fonts = dict(DEFAULT_FONTS, **cfg.get('fonts', {}))
-        self.metrics = Metrics(db, self.fonts, cfg.get('alignStrength', 0.85))
+        self.metrics = Metrics(db, self.fonts, cfg.get('alignStrength', 0.85), cfg.get('kanjiScale', 'auto'))
         global REF_C
         REF_C = self.metrics.ref
         self.inl = Inline(self.fs, self.metrics)
