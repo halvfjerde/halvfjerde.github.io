@@ -251,11 +251,11 @@ function snapCols(el, tb, cols, P) {
     const st = ids.find((i) => cols[i].st) ?? ids.reduce((a, i) => (w[i] > w[a] ? i : a), ids[0]);
     w[st] += up(e) - e;
   };
+  // 고정 칸 묶음이 없는 쪽의 틀(테두리·안쪽 여백)은 격자 밖에 둔다: 끝 열차 열을 그만큼 좁히지 않는다
+  // (좁힌 열에는 네 자리 시각이 뭉개져 들어가고, 비면 어중간한 띠로 남는다)
   if (L.length) widen(L, offL);
-  else if (T.length) { w[T[0]] -= offL; if (w[T[0]] < P * 0.5) w[T[0]] += P; }
-  let absorbRight = 0;
+  const absorbRight = 0;
   if (Rr.length) widen(Rr, offR);
-  else if (T.length) { w[T[T.length - 1]] -= offR; absorbRight = offR; }
   tb.querySelector('colgroup')?.remove();
   const cg = document.createElement('colgroup');
   for (const v of w) { const c = document.createElement('col'); c.style.width = `${v}px`; cg.appendChild(c); }
@@ -539,8 +539,8 @@ export async function planTable(srcWrap, box, opt, M) {
   // 가로 조각 i 의 판면 폭: 앞 표가 남긴 단의 오른쪽에 이어 실을 때(opt.firstW)는 첫 조각만 그 폭
   const wAt = (i) => (i === 0 && opt.firstW ? opt.firstW : opt.availW);
   const availFor = G
-    ? (side, i) => wAt(i) - (side !== 'R' ? gUp(M.trL + leftW + titleLine) : 0)
-      - (side !== 'L' && (t1 < g.ncol || side === 'R') ? gUp(M.trR + (t1 < g.ncol ? rightW : mirW)) : 0)
+    ? (side, i) => wAt(i) - (side !== 'R' ? gUp(M.trL + leftW + titleLine) : M.trR)
+      - (t1 < g.ncol || side === 'R' ? (side !== 'L' ? gUp(M.trR + (t1 < g.ncol ? rightW : mirW)) : M.trR) : M.trR)
     : (side, i) => wAt(i) - (side !== 'R' ? extraW + leftW + titleLine : extraW - titleW)
       - (side !== 'L' ? (t1 < g.ncol ? rightW : side === 'R' ? mirW : 0) : 0);
   const sideOf = (i) => (spread ? (i % 2 ? 'R' : 'L') : null);
@@ -1088,7 +1088,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
         holder.style.setProperty('--bk-fs', `${f.fs}pt`);
         const el = f.el.cloneNode(true);
         if (G && f.grid && lastOf.get(y) === pl) {
-          const k = Math.round((availW - x - f.w) / G.P);
+          const k = Math.floor((availW - x - f.w) / G.P + 0.02);   // 한 열이 다 들어갈 때만 빈 열을 더한다
           if (k >= 1) padTable(el, k, f.grid);
         }
         holder.appendChild(el);
