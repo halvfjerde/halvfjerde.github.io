@@ -1,5 +1,5 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=9';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=10';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
@@ -302,9 +302,11 @@ async function render() {
     await pool(need, 4, (it) => getDoc(it.title, it.oldid), (k, n) => { status.textContent = `자료를 불러오는 중… ${k} / ${n}`; });
     for (const el of [$('#sheets'), $('#measure')]) {
       el.classList.toggle('shaken', book.fonts === 'shaken');
+      for (const f of ['antique', 'tokumin']) el.classList.toggle(`f-${f}`, book.fonts === f);
       el.classList.toggle('mono', book.color === 'mono');
     }
     if (book.fonts === 'shaken') await typesquare();
+    await bookFonts(book.fonts);
     const r = await layoutBook(book, docs, $('#sheets'), $('#measure'), (t) => { status.textContent = `쪽을 짜는 중… ${t}`; });
     const marks = book.output.marks ? 30 : 0;
     $('#pagesize').textContent = `@page { size: ${r.size[0] + marks}mm ${r.size[1] + marks}mm; margin: 0; }`;
@@ -322,6 +324,21 @@ async function render() {
     busy = false;
     if (again) { again = false; render(); }
   }
+}
+
+/** 고른 글꼴 묶음만 받는다 (Google Fonts) */
+const FONT_SETS = {
+  antique: 'Shippori+Mincho+B1:wght@400;700&family=Zen+Kaku+Gothic+Antique:wght@400;700&family=Song+Myung',
+  tokumin: 'Kaisei+Tokumin:wght@400;700&family=Shippori+Antique+B1&family=Gowun+Batang:wght@400;700',
+};
+async function bookFonts(set) {
+  const q = FONT_SETS[set];
+  if (!q || document.querySelector(`link[data-set="${set}"]`)) return;
+  const l = document.createElement('link');
+  l.rel = 'stylesheet';
+  l.href = `https://fonts.googleapis.com/css2?family=${q}&display=swap`;
+  l.dataset.set = set;
+  await new Promise((res) => { l.onload = l.onerror = res; document.head.appendChild(l); });
 }
 
 let tsLoading = null;

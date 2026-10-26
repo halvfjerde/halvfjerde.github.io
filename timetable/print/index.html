@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/font/un/unbatang.css?v=1">
 <link rel="stylesheet" href="/font/un/undotum.css?v=1">
 <link rel="stylesheet" href="api.php?action=css">
-<link rel="stylesheet" href="print.css?v=9">
+<link rel="stylesheet" href="print.css?v=10">
 <style id="pagesize">@page { size: 182mm 257mm; margin: 0; }</style>
 </head>
 <body>
@@ -62,6 +62,8 @@
         <label>표 글자 (pt)<input id="fFs" type="number" min="4" max="14" step="0.25"></label>
         <label>글꼴<select id="fFonts">
           <option value="free">배포용 (Zen·은바탕·DiaPro)</option>
+          <option value="antique">옛 명조 (しっぽり明朝 B1·옛 가나 고딕·송명)</option>
+          <option value="tokumin">옛 특명조 (解星 特ミン·しっぽりアンチック·고운바탕)</option>
           <option value="shaken">손에 둘 것 (石井·TypeSquare)</option></select></label>
         <label>색<select id="fColor"><option value="color">색</option><option value="mono">흑백</option></select></label>
         <label>철<select id="fBinding" title="책을 어느 쪽으로 철하는가. 펼침면의 순서와 안쪽 여백, 머리글·쪽 번호의 바깥쪽이 따라 바뀐다">
@@ -118,6 +120,6 @@
 
 <div id="measure" class="book" aria-hidden="true"></div>
 
-<script type="module" src="app.js?v=10"></script>
+<script type="module" src="app.js?v=11"></script>
 </body>
 </html>

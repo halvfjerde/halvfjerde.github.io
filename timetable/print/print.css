@@ -126,6 +126,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
   --bk-fs: 8pt;
   --bk-ink: #000;
 }
+/* 옛 느낌의 배포용 글꼴들 (모두 OFL). 한글은 일본 글꼴에 없으므로 뒤의 한글 글꼴로 */
+.book.f-antique {
+  --bk-mincho: "Shippori Mincho B1", "Song Myung", "UnBatang", serif;
+  --bk-gothic: "Zen Kaku Gothic Antique", "UnDotum", sans-serif;
+}
+.book.f-tokumin {
+  --bk-mincho: "Kaisei Tokumin", "Gowun Batang", "UnBatang", serif;
+  --bk-gothic: "Shippori Antique B1", "UnDotum", sans-serif;
+}
 .book.shaken {
   --bk-mincho: "IshiiMincho Old R", "UnBatang", "Zen Old Mincho", serif;
   --bk-gothic: "IshiiGothic B", "UnDotum", "Zen Kaku Gothic New", sans-serif;

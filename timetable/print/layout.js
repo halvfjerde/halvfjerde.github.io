@@ -1331,9 +1331,11 @@ function colophon(book, docs, L) {
     const d = docs.get(k);
     used.push(`<li>${esc(shortTitle(it.title))} <span class="cl-rev">${esc(L.rev)} ${it.oldid}${d?.timestamp ? ` · ${fmtDate(d.timestamp, book.lang)}` : ''}</span></li>`);
   }
-  const fonts = book.fonts === 'shaken'
-    ? 'DiaPro (OFL) · 石井明朝·石井ゴシック (TypeSquare) · 은바탕·은돋움 (GPL)'
-    : 'DiaPro (OFL) · Zen Old Mincho·Zen Kaku Gothic New (OFL) · 은바탕·은돋움 (GPL)';
+  const fonts = {
+    shaken: 'DiaPro (OFL) · 石井明朝·石井ゴシック (TypeSquare) · 은바탕·은돋움 (GPL)',
+    antique: 'DiaPro · Shippori Mincho B1 · Zen Kaku Gothic Antique · Song Myung (OFL) · 은바탕·은돋움 (GPL)',
+    tokumin: 'DiaPro · Kaisei Tokumin · Shippori Antique B1 · Gowun Batang (OFL) · 은바탕·은돋움 (GPL)',
+  }[book.fonts] || 'DiaPro (OFL) · Zen Old Mincho·Zen Kaku Gothic New (OFL) · 은바탕·은돋움 (GPL)';
   const d = document.createElement('div');
   d.className = 'colophon';
   d.innerHTML = `<div class="cl-box">
