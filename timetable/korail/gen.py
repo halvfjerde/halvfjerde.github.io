@@ -123,7 +123,10 @@ class Table:
             a, b = idx[0], idx[-1]
             # 글자 칸(… 경유): 앞뒤 끝이면 지우고, 사이에 끼면 다른 선 경유(║)
             for i, x in enumerate(times):
-                if isinstance(x, str): times[i] = 'I' if a < i < b else None
+                if isinstance(x, str):
+                    if i < a: tr['via_in'], tr['via_in_at'] = x, i     # 표 밖 다른 선에서 들어옴 (…선 경유). 그 줄이 갈림역
+                    if i > b and 'via_out' not in tr: tr['via_out'], tr['via_out_at'] = x, i   # 표 밖 다른 선으로 나감
+                    times[i] = 'I' if a < i < b else None
             # 자정을 넘으면 1440을 더해 단조롭게
             prev, add = None, 0
             for i in idx:
@@ -377,15 +380,45 @@ class Table:
         return '' if self.st[idx[-1]] == t else t
 
     def cells(self, tr):
-        """역마다 한 토큰. 달리지 않는 칸은 ‥, 着発 역은 '착,발'"""
+        """역마다 한 토큰. 달리지 않는 칸은 ‥, 着発 역은 '착,발'.
+        표 밖 다른 선으로 나가거나 들어오는 열차는 남는 칸을 합쳐 세로 주석(어느 선 경유, 어디 몇 시 착·발)을 단다"""
         T = tr['times']
+        n = len(T)
         idx = [i for i, x in enumerate(T) if isinstance(x, int)]
         a, b = idx[0], idx[-1]
         o, d = self.ends_of(tr)
+        phys = lambda k: 2 if k in self.split else 1
         out, bar = [], False
+        # 아래쪽: 표 밖으로 나가는 열차의 주석
+        tail = None
+        tail_at = tr.get('via_out_at', b + 1)          # 갈림역 줄부터 주석. 그 앞 역들은 지나감
+        head_at = tr.get('via_in_at', a - 1)
+        if d != self.st[b] and b + 1 < n:
+            rows = sum(phys(k) for k in range(tail_at, n))
+            via = (tr.get('via_out') or '').replace(' ', '')
+            if rows >= 3 and tr.get('toT') is not None:
+                body = (via.replace('경유', ' 경유') + '/' if via else '') + f"{d} {hm(tr['toT'])}착"
+                tail = f'^{rows} va=t; VR{{{esc_txt(body)}}}'
+        head = None
+        if o != self.st[a] and a > 0:
+            rows = sum(phys(k) for k in range(0, head_at + 1))
+            via = (tr.get('via_in') or '').replace(' ', '')
+            if rows >= 3 and tr.get('fromT') is not None:
+                body = f"{o} {hm(tr['fromT'])}발" + ('/' + via.replace('경유', ' 경유') if via else '')
+                head = f'^{rows} va=b; VR{{{esc_txt(body)}}}'
         for i, x in enumerate(T):
             sp = i in self.split
-            if i < a or i > b + 1 or (i == b + 1 and bar):
+            if head and i <= head_at:
+                cell = q(head) if i == 0 else '!'
+                out.append(f'{cell},!' if sp else cell)
+            elif head and i < a:
+                out.append('v')
+            elif tail and i >= tail_at:
+                cell = q(tail) if i == tail_at else '!'
+                out.append(f'{cell},!' if sp else cell)
+            elif tail and i > b:
+                out.append('v')
+            elif i < a or i > b + 1 or (i == b + 1 and bar):
                 out.append('x')
             elif i == b + 1:                              # 마지막 정차역 다음 칸: 끝 표시
                 out.append('-,x' if sp else '-')
@@ -405,7 +438,7 @@ class Table:
                 out.append({'v': 'v', 'x': 'x', 'I': 'i'}[x])
         res = []
         for c in out:
-            if res and res[-1][0] == c and c in ('v', 'x', 'i'): res[-1][1] += 1
+            if res and res[-1][0] == c and c in ('v', 'x', 'i', '!'): res[-1][1] += 1
             else: res.append([c, 1])
         return [c if k == 1 else f'{c}*{k}' for c, k in res]
 
