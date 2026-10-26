@@ -118,6 +118,7 @@ input[type=color] { width: 28px; height: 22px; padding: 0; border: 1px solid var
 .brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; min-width: 0; }
 .brand h1 { font-size: var(--t-4); font-weight: 600; margin: 0; white-space: nowrap; }
 .brand .sub { color: var(--muted); font-size: var(--t-2); font-weight: 400; margin-left: 8px; }
+.brand a.sub { text-decoration: none; } .brand a.sub:hover { color: var(--ink); text-decoration: underline; }
 .grp { display: inline-flex; align-items: center; gap: 2px; flex-wrap: wrap; }
 .divider { width: 1px; height: 16px; background: var(--rule); }
 
@@ -998,7 +999,7 @@ table.jtt {
 
 <div class="app">
   <header class="bar">
-    <div class="brand"><h1>시각표 편집기</h1><span class="sub">Module:Timetable</span></div>
+    <div class="brand"><h1>시각표 편집기</h1><span class="sub">Module:Timetable</span><a class="sub" href="print/" title="위키의 시각표를 골라 책자로 엮어 인쇄한다">책으로 인쇄 →</a></div>
     <div class="grp">
       <button class="btn" id="btnImport" type="button" title="위키 문서의 시각표 문법을 붙여 넣어 엽니다">가져오기</button>
       <button class="btn" id="btnNew" type="button" title="빈 틀로 새로 시작합니다">새 문서</button>

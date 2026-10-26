@@ -110,7 +110,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   margin: 0 !important;
 }
 .book .jtt-scroll { overflow: visible !important; }
-.book .jtt .jtt-km, .book .jtt .jtt-mk, .book .jtt .jtt-st, .book .jtt .jtt-ad, .book .jtt .jtt-alt { position: static !important; }
+.book .jtt .jtt-km, .book .jtt .jtt-mk, .book .jtt .jtt-st, .book .jtt .jtt-ad, .book .jtt .jtt-alt { position: relative !important; left: auto !important; }
 
 .sheet { position: relative; background: #fff; color: var(--bk-ink); overflow: hidden; flex: none;
   -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -182,6 +182,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (max-width: 860px) {
   .app { grid-template-columns: 1fr; }
   .side { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--ui-line); }
+  .bar { position: static; }
   .pv-bar { top: 0; }
 }
 

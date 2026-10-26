@@ -1,5 +1,5 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=1';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=2';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
@@ -11,7 +11,7 @@ const DEFAULT = () => ({
   page: { size: 'B5', w: 182, h: 257, margin: { top: 14, bottom: 14, inner: 16, outer: 12 } },
   fs: 8, fonts: 'free', color: 'color',
   parts: { cover: true, toc: true, runhead: true, folio: true, colophon: true },
-  pack: true, pad4: false, output: { marks: false },
+  pack: true, alignBands: false, pad4: false, output: { marks: false },
   items: [],
 });
 
@@ -160,7 +160,7 @@ const FIELDS = [
 ];
 const CHECKS = [
   ['#pCover', 'parts.cover'], ['#pToc', 'parts.toc'], ['#pRunhead', 'parts.runhead'], ['#pFolio', 'parts.folio'],
-  ['#pColophon', 'parts.colophon'], ['#pPack', 'pack'], ['#pPad4', 'pad4'], ['#pMarks', 'output.marks'],
+  ['#pColophon', 'parts.colophon'], ['#pPack', 'pack'], ['#pAlign', 'alignBands'], ['#pPad4', 'pad4'], ['#pMarks', 'output.marks'],
 ];
 const getp = (o, path) => path.split('.').reduce((a, k) => a?.[k], o);
 const setp = (o, path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((a, k) => (a[k] ??= {}), o)[last] = v; };

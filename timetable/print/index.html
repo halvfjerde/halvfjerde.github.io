@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/font/un/unbatang.css?v=1">
 <link rel="stylesheet" href="/font/un/undotum.css?v=1">
 <link rel="stylesheet" href="api.php?action=css">
-<link rel="stylesheet" href="print.css?v=1">
+<link rel="stylesheet" href="print.css?v=2">
 <style id="pagesize">@page { size: 182mm 257mm; margin: 0; }</style>
 </head>
 <body>
@@ -69,6 +69,7 @@
         <label><input type="checkbox" id="pFolio">쪽 번호</label>
         <label><input type="checkbox" id="pColophon">판권</label>
         <label><input type="checkbox" id="pPack" title="작은 표는 한 쪽에 여러 개 싣는다">작은 표 모아 싣기</label>
+        <label><input type="checkbox" id="pAlign" title="긴 표를 여러 쪽으로 나눌 때 모든 쪽이 같은 역에서 끊기게 한다 (쪽 수는 늘 수 있다)">구간 맞추기</label>
         <label><input type="checkbox" id="pPad4" title="중철 제본용: 빈 쪽을 더해 4의 배수로">4의 배수로</label>
         <label><input type="checkbox" id="pMarks" title="입고용: 재단선과 도련 3mm">재단선</label>
       </div>
@@ -104,6 +105,6 @@
 
 <div id="measure" class="book" aria-hidden="true"></div>
 
-<script type="module" src="app.js?v=1"></script>
+<script type="module" src="app.js?v=2"></script>
 </body>
 </html>
