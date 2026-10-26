@@ -311,9 +311,10 @@ def char_kind(ch):
     return 'base'
 
 # 세로쓰기에서 돌려 쓸 글자 (세로쓰기 전용 글자 → 가로 글자)
-# 세로쓰기 약물 (가로 글자 → 세로쓰기 전용 글자)
-VFORM = {'(': '︵', '（': '︵', '︵': '︵', ')': '︶', '）': '︶', '︶': '︶',
-         '―': '︱', '—': '︱', '︱': '︱', '〔': '︹', '︹': '︹', '〕': '︺', '︺': '︺'}
+OPENING, CLOSING = set('（〔「『'), set('）〕」』')
+# 세로 제목에서 돌려 쓸 전각 가로 글자
+HFULL = {'(': '（', '（': '（', '︵': '（', ')': '）', '）': '）', '︶': '）',
+         '―': '―', '—': '―', '︱': '―', '〔': '〔', '︹': '〔', '〕': '〕', '︺': '〕'}
 VALT = {'―': ['—', '─', '－'], '(': ['（'], ')': ['）']}
 VROT = {'︵': '(', '︶': ')', '︱': '―', '︹': '〔', '︺': '〕', '(': '(', ')': ')', '（': '(', '）': ')', '―': '―', '—': '―'}
 
@@ -386,16 +387,28 @@ class Inline:
         return '{' + ''.join(out) + '}'
 
     def vform(self, ch, ctx, col_w):
-        """세로쓰기 약물(︵︶︱…): 한글 글꼴에 있으면 그것을, 없으면 일본 글꼴의 것을 한 글자 자리에 세운다.
-        둘 다 없으면 가로 글자를 돌린다 (vglyph)"""
-        v = VFORM.get(ch)
-        if not v or not self.m: return self.vglyph(ch, ctx, col_w)
+        """세로 제목의 괄호·줄표: 같은 한글 글꼴의 전각 가로 글자(（）―)를 돌려 쓴다.
+        전각 글자는 한 자 폭에 바깥쪽 여백을 품고 있어, 돌리기만 하면 앞뒤가 알맞게 빈다.
+        글자를 가로지르는 쪽은 잉크의 가운데를 열의 가운데에. 한글 글꼴에 없으면 일본 글꼴의 것을"""
+        h = HFULL.get(ch)
+        if not h or not self.m: return self.vglyph(ch, ctx, col_w)
         em = ctx.size * self.fs
         for fam, role in ((KO_OF[ctx.font], KO_ROLE[KO_OF[ctx.font]]), (ctx.font, JP_OF[ctx.font])):
             fi = self.m.info.get(role)
-            if fi and fi.has(v):
-                g = '{' + self.font(ctx, fam) + esc(v) + '}'
-                return r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (col_w, -0.12 * em, em, g), 1.0
+            bb = fi.bbox(h) if fi else None
+            if not bb: continue
+            x0, y0, x1, y1, adv = bb
+            yc = (y0 + y1) / 2
+            hh = max(y1 - yc, yc - y0) * em
+            g = '{' + self.font(ctx, fam) + esc(h) + '}'
+            # 글 방향(돌린 뒤 세로)의 자리: 한 자 폭. 여는 괄호는 잉크를 뒤 글자 쪽에, 닫는 괄호는 앞 글자 쪽에
+            slot, L, pad = adv * em, (x1 - x0) * em, 0.1 * em
+            if h in OPENING: start = slot - pad - L
+            elif h in CLOSING: start = pad
+            else: start = (slot - L) / 2
+            box = r'\rotatebox{-90}{\raisebox{%.3fbp}[%.3fbp][%.3fbp]{\hbox to %.3fbp{\kern%.3fbp%s\hss}}}' % (
+                -yc * em, hh, hh, slot, start - x0 * em, g)
+            return r'\hbox to %.3fbp{\hss %s\hss}' % (col_w, box), adv
         return self.vglyph(ch, ctx, col_w)
 
     def vglyph(self, ch, ctx, col_w):
