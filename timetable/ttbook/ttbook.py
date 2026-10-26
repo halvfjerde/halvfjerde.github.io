@@ -211,9 +211,9 @@ GOTHIC = {'DG', 'DGB', 'GB', 'G'}
 HANGUL_RUN = re.compile('[\u1100-\u11ff\u3130-\u318f\uac00-\ud7a3]+')
 
 class Inline:
-    def __init__(self, fs, hg_up=0.05):
+    def __init__(self, fs, hg_up=None):
         self.fs = fs          # 기준 글자 크기 (bp)
-        self.hg_up = hg_up    # 고딕 한글을 올리는 양 (em)
+        self.hg_up = hg_up or {}   # 한글(은 글꼴)을 올리는 양 (em): {'gothic': …, 'mincho': …}
 
     def font(self, ctx):
         s = ctx.size * self.fs
@@ -229,8 +229,9 @@ class Inline:
             else: out.append(esc(ch))
         t = ''.join(out)
         # 은돋움의 한글은 숫자·한자보다 낮게 앉는다 → 고딕의 한글만 조금 올린다 (가로쓰기에서만)
-        if not vertical and ctx.font in GOTHIC and self.hg_up:
-            t = HANGUL_RUN.sub(lambda m: r'\raisebox{%.3fem}{%s}' % (self.hg_up, m.group(0)), t)
+        up = self.hg_up.get('gothic' if ctx.font in GOTHIC else 'mincho', 0)
+        if not vertical and up:
+            t = HANGUL_RUN.sub(lambda m: r'\raisebox{%.3fem}{%s}' % (up, m.group(0)), t)
         return '{' + self.font(ctx) + t + '}'
 
     def lines(self, node, ctx):
@@ -448,7 +449,7 @@ class Book:
         self.P0 = cfg.get('colWidth', 2.3) * self.fs             # 열차 열 폭
         self.frame_w = self.rw[2]                                 # 틀 굵기
         self.frame_pad = cfg.get('framePad', 0.5) * MM            # 틀과 표 사이
-        self.inl = Inline(self.fs, cfg.get('hangulGothicUp', 0.05))
+        self.inl = Inline(self.fs, cfg.get('hangulUp', {'gothic': 0.05, 'mincho': 0.05}))
         self.pages = []                                           # [(side, [tex…], runhead)]
 
     # ── 칸의 괘선(위키 CSS 와 같은 셈) ──
@@ -878,7 +879,7 @@ class Book:
         Y = self.H - base_y
         rh = self.inl.run(runhead, Ctx('GB', 8.5 / fs))
         if part:
-            rh += r'\ {\fM\fontsize{8.5bp}{10bp}\selectfont (%s)}' % esc(part)
+            rh += r'\ ' + self.inl.run('(%s)' % part, Ctx('M', 8.5 / fs))
         fo = r'{\fGB\fontsize{13bp}{13bp}\selectfont %s}' % folio
         if recto:
             tex.append(r'\put(%.3f,%.3f){\makebox(0,0)[br]{%s}}' % (x0 + self.cw - 12 * MM, Y, rh))

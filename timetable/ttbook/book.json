@@ -39,5 +39,8 @@
       "fit": "spread"
     }
   ],
-  "hangulGothicUp": 0.05
+  "hangulUp": {
+    "gothic": 0.05,
+    "mincho": 0.05
+  }
 }
