@@ -10,7 +10,7 @@
   3. HTML 의 class·style 을 위키 CSS 와 같은 뜻으로 읽어, 칸의 자리·괘선을 직접 계산한다.
   4. 모든 것을 절대 위치(picture)로 내보낸다. 괘선은 PDF 사각형으로 — 굵기를 반올림하지 않는다.
 """
-import collections, json, math, os, re, subprocess, sys
+import collections, copy, json, math, os, re, subprocess, sys
 from html.parser import HTMLParser
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -270,6 +270,10 @@ class FontInfo:
         self.upm = self.f['head'].unitsPerEm
         self._bb = {}
     def has(self, ch): return ord(ch) in self.cmap
+    def adv(self, ch):
+        """전진폭 (em)"""
+        g = self.cmap.get(ord(ch))
+        return self.f['hmtx'][g][0] / self.upm if g else None
     def bbox(self, ch):
         """잉크 상자 (em) 와 전진폭"""
         if ch in self._bb: return self._bb[ch]
@@ -358,6 +362,7 @@ class Inline:
     def __init__(self, fs, metrics=None):
         self.fs = fs          # 기준 글자 크기 (bp)
         self.m = metrics
+        self.wc = {}          # run() 이 만든 TeX → 폭(기준 em). 띠를 몇 줄로 짤지 어림할 때
 
     @property
     def c(self):              # 글자 중심의 높이 (em) — 줄 높이의 가운데에 둘 곳
@@ -392,6 +397,7 @@ class Inline:
             if segs and segs[-1][0] == k: segs[-1][1].append(ch)
             else: segs.append([k, [ch]])
         out = []
+        wsum = 0.0
         for k, chs in segs:
             t = ''.join(r'\ ' if ch == ' ' else esc(ch) for ch in chs)
             fam = KO_OF[ctx.font] if k in ('ko', 'kp') else ctx.font
@@ -403,10 +409,36 @@ class Inline:
                     c2 = ctx.but(size=ctx.size * sc)
                     up += (1 - sc) * self.c          # 작아진 글자의 가운데를 제자리에
             body = '{' + self.font(c2, fam) + t + '}'
+            wsum += c2.size * sum(self.adv(ch, fam) for ch in chs)
             if abs(up) > 0.002 and not (vertical and k == 'base'):
                 body = r'\raisebox{%.3fbp}{%s}' % (up * ctx.size * self.fs, body)
             out.append(body)
-        return '{' + ''.join(out) + '}'
+        res = '{' + ''.join(out) + '}'
+        self.wc[res] = wsum
+        return res
+
+    def adv(self, ch, fam):
+        """글꼴 묶음 fam 에서 ch 의 폭 (em). 묶음의 글꼴을 차례로 보아 처음 가진 것의 폭"""
+        if ch in ' \u00a0': return 0.3
+        if not self.m: return 1.0 if not is_latin(ch) else 0.55
+        for role in FAMCHAIN.get(fam, []):
+            fi = self.m.info.get(role)
+            a = fi and fi.adv(ch)
+            if a:
+                if role in ('mincho', 'gothic', 'gothicBold'):
+                    a *= self.m.jscale.get(role, 1.0) if char_kind(ch) == 'jp' else 1.0
+                return a
+        return 1.0
+
+    def line_w(self, line):
+        """줄 하나의 폭 (기준 em)"""
+        w = 0.0
+        for it in line:
+            if it[0] == 'tex': w += self.wc.get(it[1], 1.0 * len(it[1]) / 20)
+            elif it[0] == 'just': w += sum(self.wc.get(x, 1.0) for x in it[1])
+            elif it[0] == 'obj': w += it[2]
+            elif it[0] == 'sq': w += 2.0 * it[3]
+        return w
 
     CHAIN = {'M': ['mincho', 'minchoKo', 'dia'], 'DM': ['dia', 'mincho', 'minchoKo'],
              'G': ['gothic', 'gothicKo', 'dia'], 'DG': ['dia', 'gothic', 'gothicKo'],
@@ -695,6 +727,9 @@ class Book:
         self.hang_title = cfg.get('titleInMargin', False)         # 세로 제목을 바깥 여백에 내어 달기
         self.page_title = cfg.get('pageTitle', False)              # 표마다의 세로 제목 대신, 쪽마다 노선 이름을 하나 크게 (바깥 여백)
         if self.page_title: self.hang_title = True
+        self.band_inset = cfg.get('bandInset', 0.9) * self.fs     # 띠의 왼쪽·오른쪽 글을 틀에서 띄우는 만큼
+        self.notes = cfg.get('notes', True)                        # false: 표 밑의 주기(공통 범례)를 싣지 않는다
+        self._bands = {}
         self.squeeze = cfg.get('squeeze', 0.93)                    # 열 폭을 좁혀도 되는 한도 (넘치는 한두 편을 싣기 위해)
         # 글꼴: 이름으로 찾고, 조판 전에 재어 둔다
         dirs = cfg.get('fontDirs') or DEFAULT_FONT_DIRS
@@ -903,16 +938,95 @@ class Book:
             T.cuts = {r for r in range(T.hEnd + 1, T.fStart) if r not in bad}
         return T.cuts
 
-    def piece_h(self, T, rows, notes):
+    def piece_h(self, T, rows, notes, bw=None):
+        """bw: 띠의 글줄 폭(bp). 좁은 조각은 띠가 여러 줄이 되어 높아진다"""
         fw, fp = self.frame_w, self.frame_pad
-        return 2 * (fw + fp) + self.headband_h(T) + sum(T.rowH[r] for r in rows) + (self.notes_h(T) if notes else 0)
+        return 2 * (fw + fp) + self.headband_h(T, bw) + sum(T.rowH[r] for r in rows) + (self.notes_h(T) if notes else 0)
 
-    def headband_h(self, T):
+    def band_w(self, outer):
+        """조각의 바깥 폭 → 띠 글줄 폭"""
+        return outer - 2 * (self.frame_w + self.frame_pad) - 2 * self.band_inset
+
+    def headband_h(self, T, bw=None, part=None):
         if T.head is None: return 0
-        px = T.head.style.get('height', '')
+        px = T.head.style.get('min-height') or T.head.style.get('height', '')
         m = re.match(r'([\d.]+)px', px)
         em = float(m.group(1)) / 14.4 if m else 1.5
-        return math.ceil(em * self.fs / self.R - 0.2) * self.R
+        base = math.ceil(em * self.fs / self.R - 0.2) * self.R
+        if bw is None: return base
+        plan = self.band_plan(T, bw, part or ('열넷째' if self.page_title else None))
+        need = (sum(p[3] for p in plan) + 0.3) * self.fs
+        return max(base, math.ceil(need / self.R - 1e-6) * self.R)
+
+    def band_plan(self, T, W, part=None):
+        """띠를 글줄 폭 W(bp) 안에 짠다 → 줄 목록 [(왼쪽, 가운데, 오른쪽, 높이 em)].
+        한 줄에 들면 한 줄. 아니면 위 줄에 왼쪽·오른쪽, 그 아래에 가운데를 「―」 뒤에서 나누어"""
+        key = (id(T), round(W, 1), part)
+        if key in self._bands: return self._bands[key]
+        hd = T.head
+        parts = [n for n in hd.kids if isinstance(n, Node)]
+        if not any(n.cls & {'jtt-hl', 'jtt-hm', 'jtt-hrt'} for n in parts):
+            parts = [Node('div', []), hd, Node('div', [])]       # 띠가 한 덩어리면 가운데에
+        color = None
+        col = hd.style.get('color')
+        if col and col.startswith('#'): color = col[1:].upper()
+        if len(color or '') == 3: color = ''.join(c * 2 for c in color)
+        ctx = Ctx('DM', 1.0, color)
+        fs = self.fs
+        def seg(node):
+            ls = self.inl.lines(node, ctx)
+            ln = ls[0] if ls and ls[0] else []
+            return (self.inl.flat(ln), self.inl.line_w(ln) * fs, line_height(ln) if ln else 0.0)
+        L, C = seg(parts[0]), seg(parts[1])
+        if part and self.page_title:          # 몇째 조각인지는 띠 오른쪽에
+            ln = [('tex', self.inl.run('(%s)' % part, Ctx('M', 1.0, color)), 1.0)]
+            R = (self.inl.flat(ln), self.inl.line_w(ln) * fs, line_height(ln))
+        else:
+            R = seg(parts[2])
+        gap = 1.0 * fs
+        if L[1] + C[1] + R[1] + 2 * gap <= W or not C[0]:
+            plan = [(L[0], C[0], R[0], max(L[2], C[2], R[2], 1.25))]
+        else:
+            plan = []
+            if L[0] or R[0]: plan.append((L[0], '', R[0], max(L[2], R[2], 1.25)))
+            for node in self.split_center(parts[1], W, ctx):
+                t = seg(node)
+                plan.append(('', t[0], '', max(t[2], 1.25)))
+        self._bands[key] = plan
+        return plan
+
+    def split_center(self, node, W, ctx):
+        """띠 가운데(주요 역을 「―」로 이은 것)를 폭 W 안에 드는 줄들로. 글이 한 토막일 때만 나눈다"""
+        holders = []
+        def find(n, path):
+            for i, k in enumerate(n.kids):
+                if isinstance(k, str):
+                    if k.strip(): holders.append(path + [i])
+                else: find(k, path + [i])
+        find(node, [])
+        if len(holders) != 1: return [node]
+        path = holders[0]
+        def at(n):
+            for i in path[:-1]: n = n.kids[i]
+            return n
+        text = at(node).kids[path[-1]]
+        toks = [t.strip(' \u00a0\n') for t in re.findall(r'[^―]+―?', text)]
+        toks = [t for t in toks if t]
+        if len(toks) <= 1: return [node]
+        def make(t):
+            n2 = copy.deepcopy(node)
+            at(n2).kids[path[-1]] = t
+            return n2
+        def width(t):
+            ls = self.inl.lines(make(t), ctx)
+            return self.inl.line_w(ls[0] if ls else []) * self.fs
+        out, cur = [], toks[0]
+        for t in toks[1:]:
+            cand = cur + ' ' + t
+            if width(cand) <= W: cur = cand
+            else: out.append(cur); cur = t
+        out.append(cur)
+        return [make(t) for t in out]
 
     def notes_h(self, T):
         if T.notes is None: return 0
@@ -920,7 +1034,7 @@ class Book:
         return (n * 1.35 * 0.8 + 0.5) * self.fs
 
     # ── 표 조각 하나를 쪽에 ──
-    def render_piece(self, T, ch, rows, x0, y0, with_notes, notes_room=True, line=None, part=None):
+    def render_piece(self, T, ch, rows, x0, y0, with_notes, notes_room=True, line=None, part=None, hb=None):
         """x0,y0: 조각 왼쪽 위 (쪽 좌표, 위에서 아래로). 그릴 것 목록과 크기를 돌려준다"""
         fs = self.fs
         tex, rects = [], []
@@ -946,7 +1060,7 @@ class Book:
         for w in widths: xs.append(xs[-1] + w)
         fx1 = xs[-1] + fp + fw
         # 행 y 위치
-        hb = self.headband_h(T)
+        hb = self.headband_h(T, xs[-1] - xs[0] - 2 * self.band_inset, part) if hb is None else hb
         ty = y0 + fw + fp
         ys = [ty + hb]
         for r in rows: ys.append(ys[-1] + T.rowH[r])
@@ -962,25 +1076,22 @@ class Book:
             tex.append(self.put_box(tx - TW if self.hang_title else x0, y0, TW - 0.3 * fs, ttlH, ttl, 'l', 't'))
         # 노선 머리띠
         if hb:
-            hd = T.head
-            parts = [n for n in hd.kids if isinstance(n, Node)]
-            if not any(n.cls & {'jtt-hl', 'jtt-hm', 'jtt-hrt'} for n in parts):
-                parts = [Node('div', []), hd, Node('div', [])]       # 띠가 한 덩어리면 가운데에
-            color = None
-            col = hd.style.get('color')
-            if col and col.startswith('#'): color = col[1:].upper()
-            if len(color or '') == 3: color = ''.join(c * 2 for c in color)
-            segs = []
-            for p, al in zip(parts, 'lcr'):
-                lines = self.inl.lines(p, Ctx('DM', 1.0, color))
-                if al == 'r' and part and self.page_title:          # 몇째 조각인지는 띠 오른쪽에
-                    lines = [[('tex', self.inl.run('(%s)' % part, Ctx('M', 1.0, color)), 1.0)]]
-                segs.append(self.inl.flat(lines[0]) if lines and lines[0] else '')
-            W = xs[-1] - xs[0] - 1.2 * fs
-            # 왼쪽(방향·노선)·가운데(주요 역)·오른쪽(몇째)을 한 줄에. 좁아도 겹치지 않게 사이를 늘이고 줄인다
-            band = r'\hbox to %.3fbp{%s%s\hskip 1em plus 1fill %s\hskip 1em plus 1fill %s}' % (W, strut(1.2, fs), segs[0], segs[1], segs[2])
+            W = xs[-1] - xs[0] - 2 * self.band_inset
+            plan = self.band_plan(T, W, part)
+            def row(l, c, r, h):
+                st = strut(h / 1.25, fs)
+                if c and not (l or r): return r'\hbox to %.3fbp{%s\hss %s\hss}' % (W, st, c)
+                if not c: return r'\hbox to %.3fbp{%s%s\hskip 1em plus 1fill %s}' % (W, st, l, r)
+                # 왼쪽(방향·노선)·가운데(주요 역)·오른쪽(몇째)을 한 줄에. 사이를 늘이고 줄여 가운데를 맞춘다
+                return r'\hbox to %.3fbp{%s%s\hskip 1em plus 1fill %s\hskip 1em plus 1fill %s}' % (W, st, l, c, r)
             # 틀 안쪽 끝에서 띠 아래 괘선까지의 가운데에 (틀과 표 사이 여백도 띠의 일부로 보인다)
-            tex.append(self.put_box(xs[0] + 0.6 * fs, y0 + fw, W, ty + hb - (y0 + fw), band, 'l', 'm'))
+            space = ty + hb - (y0 + fw)
+            if len(plan) == 1:
+                tex.append(self.put_box(xs[0] + self.band_inset, y0 + fw, W, space, row(*plan[0]), 'l', 'm'))
+            else:
+                tot = sum(p[3] for p in plan) * fs
+                box = r'\vbox{\offinterlineskip %s}' % ''.join(row(*p) for p in plan)
+                tex.append(self.put_box(xs[0] + self.band_inset, y0 + fw + (space - tot) / 2, W, tot, box, 'l', 't'))
             rects.append(self.hrule(xs[0], xs[-1], ty + hb, 1))
         # 칸
         rowpos = {r: i for i, r in enumerate(rows)}
@@ -1253,6 +1364,7 @@ class Book:
             T = build_table(wrap)
             self.prepare(T)
             T.line = item.get('line') or os.path.splitext(os.path.basename(src))[0]
+            if not self.notes: T.notes = None
             out.append(T)
         return out
 
@@ -1280,11 +1392,12 @@ class Book:
         cur = {'c': 0}
         def top(p): return ys[p] + gap if ys[p] > 0 else 0.0
         def side_of(p): return 'L' if p % 2 == 0 else 'R'
-        def put(T, p, trains, rows, y, notes, h, x=0.0, narrow=False, side=None):
+        def put(T, p, trains, rows, y, notes, h, x=0.0, narrow=False, side=None, bw=None):
             pg = page(p)
             side = side or side_of(p)
             pc = {'T': T, 'side': side, 'trains': trains, 'rows': rows, 'y': y, 'x': x, 'h': h, 'notes': notes,
-                  'narrow': narrow, 'nat': self.fixed_w(T, side) + len(trains) * self.P0}
+                  'narrow': narrow, 'nat': self.fixed_w(T, side) + len(trains) * self.P0,
+                  'hb': self.headband_h(T, bw if bw is not None else self.band_w(self.cw), '열넷째' if self.page_title else None)}
             pg['pieces'].append(pc)
             if T.line not in pg['lines']: pg['lines'].append(T.line)
             return pc
@@ -1293,9 +1406,10 @@ class Book:
             head = list(range(T.hEnd)); foot = list(range(T.fStart, T.nrow)); body = list(range(T.hEnd, T.fStart))
             cuts = self.cut_ok(T)
             TH = 0 if self.page_title else self.title_tex(T, part='열넷째')[1] + 0.5 * self.fs
-            def piece(b0, b1, with_foot, notes):
+            BWF = self.band_w(self.cw)
+            def piece(b0, b1, with_foot, notes, bw=BWF):
                 rows = head + body[b0:b1] + (foot if with_foot else [])
-                return rows, max(self.piece_h(T, rows, notes), TH)
+                return rows, max(self.piece_h(T, rows, notes, bw), TH)
             # 역 구간: 한 쪽에 들면 하나. 아니면 k 구간으로 고르게 (구획 선 자리를 먼저)
             secs = [(0, len(body))]
             if piece(0, len(body), True, True)[1] > PH + 0.01:
@@ -1349,6 +1463,11 @@ class Book:
                     trs = Tc[ti:ti + used]; ti += used
                     notes = last_sec and gi == len(groups) - 1
                     rows, h = piece(b0, b1, last_sec, notes)
+                    if gdef[0] == 'single':      # 좁은 표는 띠가 여러 줄이 될 수 있다
+                        natB = self.fixed_w(T, 'B') + used * self.P0
+                        narrowB = natB < self.cw * 0.62
+                        bwS = self.band_w(natB) if narrowB else self.band_w(self.cw)
+                        rows, h = piece(b0, b1, last_sec, notes, bwS)
                     for guard in range(200):
                         c = cur['c']
                         if gdef[0] == 'single':
@@ -1362,13 +1481,13 @@ class Book:
                                     x = prev['x'] + prev['nat'] + TWh + gapX
                                     nat = self.fixed_w(T, 'B') + k * self.P0
                                     if x + nat <= self.cw + 0.01 and prev['y'] + h <= PH + 0.01:
-                                        pieces.append(put(T, c, trs, rows, prev['y'], notes, h, x, True, 'B'))
+                                        pieces.append(put(T, c, trs, rows, prev['y'], notes, h, x, True, 'B', bwS))
                                         ys[c] = max(ys[c], prev['y'] + h)
                                         break
                             if sB >= k and top(c) + h <= PH + 0.01:
                                 y0 = top(c)
                                 narrow = self.fixed_w(T, 'B') + k * self.P0 < self.cw * 0.62
-                                pieces.append(put(T, c, trs, rows, y0, notes, h, 0.0, narrow, 'B'))
+                                pieces.append(put(T, c, trs, rows, y0, notes, h, 0.0, narrow, 'B', bwS))
                                 ys[c] = y0 + h
                                 break
                             cur['c'] = c + 1
@@ -1413,7 +1532,7 @@ class Book:
             tex, rects = [], []
             for pc in pg['pieces']:
                 t, r, w, h = self.render_piece(pc['T'], pc['ch'], pc['rows'], x0 + pc.get('x', 0), self.mt + pc['y'], pc['notes'],
-                                               line=pc['T'].line, part=pc['part'])
+                                               line=pc['T'].line, part=pc['part'], hb=pc['hb'])
                 tex += t; rects += r
             # 머리글은 노선 이름만 (책을 넘기며 찾는 자리). 몇째 조각인지는 표의 세로 제목 끝에
             if self.page_title:
@@ -1431,6 +1550,8 @@ class Book:
         }
         with open(out_tex, 'w', encoding='utf-8') as fo:
             fo.write(pre + '\n'.join(body) + '\n\\end{document}\n')
+
+FAMCHAIN = {cmd: [main] + fbs for cmd, main, fbs, _ in Book.FAMILIES}
 
 DEFAULT_FONT_DIRS = ['fonts', '/usr/share/fonts', '/usr/local/share/fonts',
                      '~/Library/Fonts', '/Library/Fonts', '/System/Library/Fonts']

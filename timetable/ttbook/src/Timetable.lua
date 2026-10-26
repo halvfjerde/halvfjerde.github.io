@@ -688,8 +688,9 @@ local function render_grid(frame, rows, H, L, F, title, opt)
     end
   end
 
-  -- sticky オフセット（CSS 変数）
+  -- sticky オフセット（CSS 変数）。estw: 表の幅の見積もり（基準文字。見出し帯を折り返すかどうかに使う）
   local vars, acc = {}, {}
+  local estw = 0
   for k = 1, #roles do
     local t = roles[k]
     -- 幅: 足した欄は width.名前（既定 3.6）、組み込みの欄も width.km などで CSS の既定を上書きできる。
@@ -699,6 +700,7 @@ local function render_grid(frame, rows, H, L, F, title, opt)
     local need = colneed[k]
     if need and need > (w or DEFAULT_W[t] or 0) + 0.05 then w = need end
     if w then vars[#vars + 1] = "--jtt-" .. t .. ":calc(" .. format("%.2f", w) .. " * var(--jtt-fs))" end
+    estw = estw + (w or DEFAULT_W[t] or 3.6)
     local off = (#acc == 0 and "0px") or (#acc == 1 and acc[1]) or ("calc(" .. concat(acc, " + ") .. ")")
     vars[#vars + 1] = "--jtt-o-" .. t .. ":" .. off
     acc[#acc + 1] = "var(--jtt-" .. t .. ")"
@@ -805,18 +807,31 @@ local function render_grid(frame, rows, H, L, F, title, opt)
 
   if opt.head then
     local hd = opt.head
-    local function part(s) if not s or s == "" then return "" end; return parse_cell("c; " .. s).html or "" end
+    local pw = {}
+    local function part(s, k)
+      if not s or s == "" then pw[k] = 0; return "" end
+      local pc = parse_cell("c; " .. s)
+      pw[k] = pc.w or 0
+      return pc.html or ""
+    end
+    local hl, hm, hr = part(hd.l, "l"), part(hd.c, "c"), part(hd.r, "r")
+    -- 表が狭くて 1 行に収まらないときは折り返す: 上の行に左・右、下の行に中央。中央は「―」の後ろで改行する
+    -- 表の幅の見積もり: 左右の欄 + 列車数 × 2.3（CSS の時刻欄の最小幅）
+    local tw = estw + (opt.T or 0) * 2.3
+    for _, r in ipairs(opt.R or {}) do tw = tw + (DEFAULT_W[r] or 3.6) end
+    local wrap = tw > 0 and (pw.l + pw.c + pw.r + 2 + 1.8 > tw)
+    if wrap then hm = gsub(hm, " ―", "\194\160―") end
     local sty = {}
-    if hd.ht and hd.ht ~= "" then sty[#sty + 1] = "height:" .. (match(hd.ht, "^%d+$") and (hd.ht .. "px") or hd.ht) end
+    if hd.ht and hd.ht ~= "" then sty[#sty + 1] = "min-height:" .. (match(hd.ht, "^%d+$") and (hd.ht .. "px") or hd.ht) end
     if hd.style and hd.style ~= "" then
       local pc = parse_cell(hd.style .. "; x")
       if pc.style then sty[#sty + 1] = pc.style end
       local va = match(" " .. hd.style .. " ", "%sva=(%a)%s")
       if va then sty[#sty + 1] = "align-items:" .. (({ t = "flex-start", b = "flex-end" })[va] or "center") end
     end
-    out[#out + 1] = '<div class="jtt-head jtt-head--x"' .. (#sty > 0 and (' style="' .. concat(sty, ";") .. '"') or "") .. '>'
-      .. '<div class="jtt-hl">' .. part(hd.l) .. '</div><div class="jtt-hm">' .. part(hd.c)
-      .. '</div><div class="jtt-hrt">' .. part(hd.r) .. '</div></div>'
+    out[#out + 1] = '<div class="jtt-head jtt-head--x' .. (wrap and " jtt-head--wrap" or "") .. '"' .. (#sty > 0 and (' style="' .. concat(sty, ";") .. '"') or "") .. '>'
+      .. '<div class="jtt-hl">' .. hl .. '</div><div class="jtt-hm">' .. hm
+      .. '</div><div class="jtt-hrt">' .. hr .. '</div></div>'
   end
   local dcols = ""
   if opt.cinfo then
