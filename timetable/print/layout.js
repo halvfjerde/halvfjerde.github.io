@@ -15,9 +15,9 @@ export const SIZES = {
 };
 
 const STR = {
-  ko: { toc: '차례', cont: '계속', colophon: '판권', issued: '펴낸 날', publisher: '펴낸 곳', data: '자료',
+  ko: { toc: '차례', cont: '계속', contd: ' (계속)', colophon: '판권', issued: '펴낸 날', publisher: '펴낸 곳', data: '자료',
         rev: '판', fonts: '글꼴', source: '쩌모위키 시각표 (w.halv.kr)' },
-  ja: { toc: '目次', cont: 'つづく', colophon: '奥付', issued: '発行日', publisher: '発行', data: '資料',
+  ja: { toc: '目次', cont: 'つづく', contd: '（つづき）', colophon: '奥付', issued: '発行日', publisher: '発行', data: '資料',
         rev: '版', fonts: '書体', source: '쩌모위키 時刻表 (w.halv.kr)' },
 };
 
@@ -528,6 +528,8 @@ export async function tableFragments(srcWrap, box, opt) {
           let b = r + 1;
           while (b < fStart && snapY(extraH + headH + rowSum(r, b + 1) + tail(b + 1)) <= room + 0.5) b++;
           cut = pickBreak(r, b, fStart, S.rowCost, Math.max(2, Math.floor((b - r) / 10)));
+          // 다음 쪽에 역 두세 개만 넘어가지 않게 (외톨이 줄): 남는 역이 넷보다 적으면 조금 앞에서 끊는다
+          if (cut < fStart && fStart - cut < 4 && fStart - 4 > r + 4) cut = pickBreak(r, fStart - 4, fStart, S.rowCost, 2);
         }
         let built = bandOf(r, cut);
         while (needOf(built, cut) > room + 0.5 && cut > r + 1) { cut = pickBreak(r, cut - 1, fStart, S.rowCost, 2); built = bandOf(r, cut); }
@@ -700,6 +702,15 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
     } else if (it.type === 'divider') {
       blocks.push({ kind: 'divider', item: it });
     } else if (it.type === 'text') {
+      // '빈 곳에 끼워 넣기': 囲み記事(お知らせ) 상자로 만들어, 표 쪽의 남는 아래쪽에 넣는다
+      if (it.float) {
+        box.innerHTML = '';
+        const nb = noteBox(it);
+        box.appendChild(nb);
+        await document.fonts.ready;
+        const h = rect(nb).height;
+        if (h < availH * 0.8) { blocks.push({ kind: 'note', item: it, html: nb.outerHTML, h }); continue; }
+      }
       blocks.push({ kind: 'text', item: it, pages: await textPages(it.text || '', box, availH) });
     }
   }
@@ -715,7 +726,33 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
     let cur = null;   // 지금 채우는 표 쪽
     // 다음 쪽이 hand('left'|'right') 면이 되게 한다 (아니면 빈 쪽을 하나 넣는다)
     const startOn = (hand) => { if ((hand === 'right') !== isRightHand(pages.length + 1)) pages.push({ kind: 'blank' }); };
+    // 囲み記事: 기다리다가, 표 쪽을 떠날 때 그 쪽 아래에 남은 자리에 들어가면 넣는다 (쪽 아래에 붙여서)
+    const pending = [];
+    const fitNotes = () => {
+      if (!cur || cur.side || cur.kind !== 'table' || !pending.length) return;
+      const tier = cur.tiers[cur.tiers.length - 1];
+      const y0 = tier ? snapY(tier.y + tier.h + gapY) : 0;
+      const take = [];
+      let tot = 0;
+      for (const n of pending) {
+        const add = snapY(n.h) + (take.length ? gapY : 0);
+        if (y0 + tot + add > availH + 0.5) break;
+        take.push(n);
+        tot += add;
+      }
+      if (!take.length) return;
+      let y = Math.max(y0, G ? Math.floor((availH - tot) / G.R + 1e-6) * G.R : availH - tot);
+      for (const n of take) {
+        cur.frags.push({ note: n, x: 0, y });
+        cur.tiers.push({ y, x: availW, h: snapY(n.h) });
+        if (n.item.toc) tocEntries.push({ text: n.item.toc, page: pages.indexOf(cur) + 1, level: 0 });
+        y = snapY(y + snapY(n.h) + gapY);
+      }
+      pending.splice(0, take.length);
+    };
+    const closePage = () => { fitNotes(); cur = null; };
     for (const b of blocks) {
+      if (b.kind === 'note') { pending.push(b); continue; }
       // 항목의 시작: 새 쪽 / 왼쪽·오른쪽 면 / 쪽 번호 다시 매기기 (번호만 주면 그 번호의 홀짝에 맞는 면에서)
       const it = b.item;
       const restart = it.folio === '' || it.folio == null || !Number.isFinite(+it.folio) ? null : Math.trunc(+it.folio);
@@ -723,7 +760,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
       let hand = it.start === 'left' || it.start === 'right' ? it.start : null;
       if (restart != null && !hand) hand = isRightHand(restart) ? 'right' : 'left';
       if (spreadItem) hand = null;   // 펼침면은 스스로 면을 정한다
-      if (hand || it.start === 'page' || restart != null || b.kind !== 'table') cur = null;
+      if (hand || it.start === 'page' || restart != null || b.kind !== 'table') closePage();
       if (hand) startOn(hand);
       const firstIdx = pages.length;
       const markRestart = () => {
@@ -732,14 +769,12 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
         if (k >= 0) pages[k].restart = restart;
       };
       if (b.kind === 'divider') {
-        cur = null;
         pages.push({ kind: 'divider', item: b.item });
         markRestart();
         tocEntries.push({ text: b.item.text || '', page: pages.length, level: 0 });
         continue;
       }
       if (b.kind === 'text') {
-        cur = null;
         b.pages.forEach((html, k) => {
           pages.push({ kind: 'text', html, item: b.item });
           if (k === 0 && b.item.toc) tocEntries.push({ text: b.item.toc, page: pages.length, level: 0 });
@@ -786,9 +821,9 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
         }
       }
       frags.forEach((f, k) => {
+        if (f.side) closePage();
         if (f.side && (f.side === 'R') !== isRightHand(pages.length + 1)) {   // 펼침면: L 은 왼쪽 면, R 은 오른쪽 면에
           pages.push({ kind: 'blank' });
-          cur = null;
         }
         const need = snapY(f.h + (f.cont ? contH : 0));
         const free = book.pack && cur && !f.side && !cur.side;
@@ -804,10 +839,11 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
           cur.frags.push({ f, x: 0, y });
           if (!cur.labels.includes(b.item.label)) cur.labels.push(b.item.label);
         } else {
+          fitNotes();
           // 펼침면 왼쪽 쪽의 표는 제본 쪽(오른쪽)에 붙인다 (격자에서는 빈 열로 판면 폭을 채우므로 같다)
           const x = f.side === 'L' && !G ? Math.max(0, availW - f.w) : 0;
           cur = { kind: 'table', tiers: [{ y: 0, x: x + f.w, h: need }], frags: [{ f, x, y: 0 }], labels: [b.item.label],
-                  lang: b.lang, runhead: b.item.label, side: f.side };
+                  lang: b.lang, side: f.side, contFirst: k > 0 && !(spreadItem && k % 2 === 1) };   // 펼침면의 맞은편 쪽은 '이어짐'이 아니다
           pages.push(cur);
         }
         if (k === 0) tocEntries.push({ text: b.item.label, page: pages.length, level: 1 });
@@ -815,6 +851,20 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
       });
       markRestart();
     }
+    // 남은 囲み記事는 마지막 표 쪽에, 그래도 남으면 새 쪽에 차례로
+    fitNotes();
+    while (pending.length) {
+      cur = { kind: 'table', tiers: [], frags: [], labels: [], lang: book.lang, side: null };
+      pages.push(cur);
+      let y = 0;
+      while (pending.length && (y === 0 || y + snapY(pending[0].h) <= availH + 0.5)) {
+        const n = pending.shift();
+        cur.frags.push({ note: n, x: 0, y });
+        if (n.item.toc) tocEntries.push({ text: n.item.toc, page: pages.length, level: 0 });
+        y = snapY(y + snapY(n.h) + gapY);
+      }
+    }
+    cur = null;
     if (book.parts.colophon) {
       const total = pages.length + 1;
       if (book.pad4 && total % 4) for (let k = 0; k < 4 - (total % 4); k++) pages.push({ kind: 'blank' });
@@ -835,24 +885,42 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
   pages.forEach((p, i) => folios.push(p.restart ?? (i ? folios[i - 1] + 1 : 1)));
   for (const e of tocEntries) e.page = folios[e.page - 1];
   const tocChunks = book.parts.toc ? await splitToc(tocEntries, box, availH, L) : [];
+  // 찾기 표(爪): 중표지마다 한 구역. 구역의 쪽들 바깥 가장자리에 구역 이름을 단다
+  let sec = null, secN = -1;
+  for (const p of pages) {
+    if (p.kind === 'divider') sec = { text: p.item.text || '', idx: ++secN };
+    if (sec && sec.text && ['divider', 'table', 'text'].includes(p.kind)) p.sec = sec;
+  }
   pages.forEach((p, i) => {
     const n = i + 1;
     const sheet = makeSheet(book, g, isRightHand(n));
+    if (book.parts.thumb !== false && p.sec) sheet.querySelector('.page').insertAdjacentHTML('beforeend', thumbTab(book, g, isRightHand(n), p.sec));
     const page = sheet.querySelector('.page');
     const content = page.querySelector('.content');
     let runhead = '', folio = String(folios[i]);
     if (p.kind === 'cover') { content.appendChild(cover(book)); folio = ''; page.classList.add('is-cover'); }
     else if (p.kind === 'toc') { content.appendChild(tocChunks[p.part] || document.createElement('div')); }
-    else if (p.kind === 'divider') { content.appendChild(divider(p.item)); folio = ''; }
+    else if (p.kind === 'divider') { content.appendChild(divider(p.item)); folio = ''; page.classList.add('is-blank'); }
     else if (p.kind === 'text') { const d = document.createElement('div'); d.className = 'textpage'; d.innerHTML = p.html; content.appendChild(d); runhead = p.item.toc || ''; }
-    else if (p.kind === 'blank') { folio = ''; }
-    else if (p.kind === 'colophon') { content.appendChild(colophon(book, docs, L)); runhead = ''; }
+    else if (p.kind === 'blank') { folio = ''; page.classList.add('is-blank'); }
+    else if (p.kind === 'colophon') { content.appendChild(colophon(book, docs, L)); runhead = ''; page.classList.add('is-blank'); }
     else if (p.kind === 'table') {
-      runhead = p.runhead || '';
+      // 머리글: 이 쪽에 실린 표 이름들 (같은 앞부분은 한 번만), 앞 쪽에서 이어지면 '(つづき)'
+      runhead = joinLabels(p.labels) + (p.contFirst ? (STR[p.lang] || L).contd : '');
       // 단마다 마지막 조각의 오른쪽을 빈 열로 판면 끝까지 채운다
       const lastOf = new Map();
-      for (const pl of p.frags) if (!lastOf.has(pl.y) || pl.x > lastOf.get(pl.y).x) lastOf.set(pl.y, pl);
+      for (const pl of p.frags) if (pl.f && (!lastOf.has(pl.y) || pl.x > lastOf.get(pl.y).x)) lastOf.set(pl.y, pl);
       p.frags.forEach((pl) => {
+        if (pl.note) {
+          const d = document.createElement('div');
+          d.className = 'frag';
+          d.style.left = `${pl.x}px`;
+          d.style.top = `${pl.y}px`;
+          d.style.width = `${availW}px`;
+          d.innerHTML = pl.note.html;
+          content.appendChild(d);
+          return;
+        }
         const { f, x, y } = pl;
         const holder = document.createElement('div');
         holder.className = 'frag';
@@ -880,6 +948,38 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
   });
   mroot.innerHTML = '';
   return { pages: pages.length, warnings, size: [W, H] };
+}
+
+/** 머리글: 'A B 下り' + 'A B 上り' → 'A B 下り・上り' */
+function joinLabels(labels) {
+  const ls = [...new Set((labels || []).filter(Boolean))];
+  if (ls.length <= 1) return ls[0] || '';
+  const toks = ls.map((l) => l.split(/\s+/));
+  let k = 0;
+  while (toks.every((t) => t.length > k + 1 && t[k] === toks[0][k])) k++;
+  if (!k) return ls.join(' · ');
+  return `${toks[0].slice(0, k).join(' ')} ${toks.map((t) => t.slice(k).join(' ')).join('・')}`;
+}
+
+/** 囲み記事 상자 */
+function noteBox(it) {
+  const d = document.createElement('div');
+  d.className = 'notebox';
+  d.innerHTML = mdLite(it.text || '');
+  return d;
+}
+
+/** 찾기 표(爪): 바깥 가장자리의 구역 표시. 재단선을 넣으면 도련까지 칠한다 */
+const TAB_COLORS = ['#1f3a6e', '#7c2230', '#24603a', '#6e4d12', '#46307a', '#14606a'];
+function thumbTab(book, g, recto, sec) {
+  const TH = 24, GAP = 2;
+  const slots = Math.max(1, Math.floor((g.ch - 10) / (TH + GAP)));
+  const top = g.top + 5 + (sec.idx % slots) * (TH + GAP);
+  const vis = Math.max(3.5, Math.min(7, g.outer - 2));
+  const bleed = book.output?.marks ? BLEED : 0;
+  const bg = book.color === 'mono' ? '#000' : TAB_COLORS[sec.idx % TAB_COLORS.length];
+  const side = recto ? `right:${-bleed}mm;padding-right:${bleed}mm` : `left:${-bleed}mm;padding-left:${bleed}mm`;
+  return `<div class="thumb" style="top:${top}mm;height:${TH}mm;width:${vis}mm;${side};background:${bg}">${esc(sec.text)}</div>`;
 }
 
 /* ── 쪽 틀 ─────────────────────────────────────────────────────────── */

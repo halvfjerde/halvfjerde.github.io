@@ -1,17 +1,17 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=5';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=6';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
 const API = 'api.php';
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}.`; };
-// 기본은 JTB 시각표처럼: 좁은 여백, 7pt, 쪽 번호는 위 바깥, 격자에 맞춰 쪽 끝까지 흘려 넣는다
+// 기본은 JTB 시각표처럼: 알맞은 여백, 7pt, 쪽 번호는 위 바깥, 격자에 맞춰 쪽 끝까지 흘려 넣는다
 const DEFAULT = () => ({
-  v: 2, title: '시각표', subtitle: '', edition: '', date: today(), publisher: '', lang: 'ko', colophonNote: '',
-  page: { size: 'B5', w: 182, h: 257, margin: { top: 11, bottom: 6, inner: 10, outer: 6 } },
+  v: 3, title: '시각표', subtitle: '', edition: '', date: today(), publisher: '', lang: 'ko', colophonNote: '',
+  page: { size: 'B5', w: 182, h: 257, margin: { top: 14, bottom: 9, inner: 13, outer: 9 } },
   fs: 7, fonts: 'free', color: 'color', binding: 'left', folioPos: 'top-outer',
-  parts: { cover: true, toc: true, runhead: true, folio: true, colophon: true },
+  parts: { cover: true, toc: true, runhead: true, folio: true, colophon: true, thumb: true },
   pack: true, grid: true, fill: true, alignBands: false, pad4: false, output: { marks: false },
   items: [],
 });
@@ -23,16 +23,19 @@ let pageList = [];               // 위키의 시각표 문서들
 const open = new Set();          // 펼친 문서
 
 function load() {
-  try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); return j && (j.v === 1 || j.v === 2) ? merge(DEFAULT(), upgrade(j)) : null; } catch (e) { return null; }
+  try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); return j && j.v >= 1 && j.v <= 3 ? merge(DEFAULT(), upgrade(j)) : null; } catch (e) { return null; }
 }
-/** 1판 설계도: 손대지 않은 옛 기본값(넓은 여백·8pt·아래 쪽 번호)은 JTB식 기본값으로 바꾼다 */
+/** 옛 설계도: 손대지 않은 옛 기본값(1판의 넓은 여백·8pt·아래 쪽 번호, 2판의 좁은 여백)은 지금 기본값으로 바꾼다 */
 function upgrade(j) {
-  if (j.v !== 1) return j;
   const m = j.page?.margin;
-  if (m && m.top === 14 && m.bottom === 14 && m.inner === 16 && m.outer === 12) delete j.page.margin;
-  if (j.fs === 8) delete j.fs;
-  if (j.folioPos === 'bottom-outer') delete j.folioPos;
-  j.v = 2;
+  const is = (t, b, i, o) => m && m.top === t && m.bottom === b && m.inner === i && m.outer === o;
+  if (j.v === 1) {
+    if (is(14, 14, 16, 12)) delete j.page.margin;
+    if (j.fs === 8) delete j.fs;
+    if (j.folioPos === 'bottom-outer') delete j.folioPos;
+  }
+  if (j.v === 2 && is(11, 6, 10, 6)) delete j.page.margin;
+  j.v = 3;
   return j;
 }
 function persist() { try { localStorage.setItem(KEY, JSON.stringify(book)); } catch (e) { /* 저장 불가 */ } }
@@ -136,18 +139,20 @@ function renderItems() {
         <input type="text" data-k="sub" value="${esc(it.sub || '')}" placeholder="작은 글 (없어도 됨)">`;
     } else {
       body.innerHTML = `<input type="text" data-k="toc" value="${esc(it.toc || '')}" placeholder="차례에 올릴 이름 (없으면 안 올림)">
-        <textarea data-k="text" rows="4" placeholder="빈 줄로 문단을 나눈다. '# '는 제목, '- '는 목록">${esc(it.text || '')}</textarea>`;
+        <textarea data-k="text" rows="4" placeholder="빈 줄로 문단을 나눈다. '# '는 제목, '- '는 목록">${esc(it.text || '')}</textarea>
+        <label class="chk" title="쪽을 따로 쓰지 않고, 표 쪽 아래에 남는 자리에 테두리 상자(囲み記事)로 넣는다"><input type="checkbox" data-k="float"${it.float ? ' checked' : ''}>빈 곳에 끼워 넣기 (알림 상자)</label>`;
     }
     // 시작할 면과 쪽 번호 (위키 문서에는 없는 것)
     const starts = it.type === 'table' ? START : [['', '새 쪽'], ...START.slice(2)];
-    body.insertAdjacentHTML('beforeend', `<div class="opts"><select data-k="start" title="이 항목을 어디서 시작할지">${starts.map(([v, t]) => `<option value="${v}"${(it.start || '') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
+    if (!(it.type === 'text' && it.float)) body.insertAdjacentHTML('beforeend', `<div class="opts"><select data-k="start" title="이 항목을 어디서 시작할지">${starts.map(([v, t]) => `<option value="${v}"${(it.start || '') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
       <input type="number" data-k="folio" step="1" value="${it.folio ?? ''}" placeholder="쪽 번호" title="이 항목의 첫 쪽 번호. 비우면 앞에서 이어 센다. 왼쪽·오른쪽 면을 고르지 않았으면 이 번호의 홀짝에 맞는 면에서 시작한다"></div>`);
     body.querySelectorAll('[data-k]').forEach((el) => {
       el.addEventListener('change', () => {
         const k = el.dataset.k;
-        it[k] = k === 'scale' ? Math.max(40, Math.min(150, +el.value || 100))
+        it[k] = el.type === 'checkbox' ? el.checked
+          : k === 'scale' ? Math.max(40, Math.min(150, +el.value || 100))
           : k === 'folio' ? (el.value === '' || !Number.isFinite(+el.value) ? '' : Math.trunc(+el.value)) : el.value;
-        changed(false);
+        changed(k === 'float');
       });
     });
     const ctl = document.createElement('div');
@@ -178,7 +183,7 @@ const FIELDS = [
 ];
 const CHECKS = [
   ['#pCover', 'parts.cover'], ['#pToc', 'parts.toc'], ['#pRunhead', 'parts.runhead'], ['#pFolio', 'parts.folio'],
-  ['#pColophon', 'parts.colophon'], ['#pPack', 'pack'], ['#pGrid', 'grid'], ['#pFill', 'fill'], ['#pAlign', 'alignBands'], ['#pPad4', 'pad4'], ['#pMarks', 'output.marks'],
+  ['#pColophon', 'parts.colophon'], ['#pThumb', 'parts.thumb'], ['#pPack', 'pack'], ['#pGrid', 'grid'], ['#pFill', 'fill'], ['#pAlign', 'alignBands'], ['#pPad4', 'pad4'], ['#pMarks', 'output.marks'],
 ];
 const getp = (o, path) => path.split('.').reduce((a, k) => a?.[k], o);
 const setp = (o, path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((a, k) => (a[k] ??= {}), o)[last] = v; };
@@ -279,7 +284,7 @@ $('#fileLoad').onchange = async (e) => {
   if (!f) return;
   try {
     const j = JSON.parse(await f.text());
-    if ((j.v !== 1 && j.v !== 2) || !Array.isArray(j.items)) throw new Error('설계도 파일이 아니다');
+    if (!(j.v >= 1 && j.v <= 3) || !Array.isArray(j.items)) throw new Error('설계도 파일이 아니다');
     book = merge(DEFAULT(), upgrade(j));
     fillForm();
     changed(true);
