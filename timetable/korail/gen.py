@@ -65,7 +65,6 @@ BRANCH = {
 
 # 착발을 나누지 않는 역: 연결선으로 애매하게 붙는 역
 NOSPLIT_ALL = {'행신'}
-NOSPLIT = {('ktx', '중앙선'): {'서울'}, ('ktx', '강릉선'): {'서울'}}
 
 LINE_HANJA = {'경부선': '京釜線', '호남선': '湖南線', '전라선': '全羅線', '경전선': '慶全線', '동해선': '東海線',
               '강릉선': '江陵線', '중앙선': '中央線', '중부내륙선': '中部內陸線', '장항선': '長項線', '서해선': '西海線',
@@ -278,12 +277,24 @@ class Table:
             idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
             for i in idx[1:-1]: thru[i] += 1
         self.split = {i for i in major if 0 < i < n - 1 and ends[i] >= max(2, 0.05 * N) and thru[i] >= 1}
-        # 표의 첫 역·끝 역은 그 역에서 떠나거나 닿는 열차가 많을 때만 (행신·중앙선 서울처럼 몇 대만 붙는 역은 한 줄)
+        # 표의 첫 역·끝 역: 그 역에서 떠나거나 닿는 열차가 여럿이면 나눈다
         first_n = sum(1 for tr in self.trains if next(i for i, x in enumerate(tr['times']) if isinstance(x, int)) == 0)
         last_n = sum(1 for tr in self.trains if max(i for i, x in enumerate(tr['times']) if isinstance(x, int)) == n - 1)
-        if o0 == 0 and first_n >= 0.3 * N: self.split.add(0)
-        if d0 == n - 1 and last_n >= 0.3 * N: self.split.add(n - 1)
-        self.split -= {i for i, s in enumerate(self.st) if s in NOSPLIT.get((self.cat, self.line), set()) | NOSPLIT_ALL}
+        if first_n >= max(2, 0.1 * N): self.split.add(0)
+        if last_n >= max(2, 0.1 * N): self.split.add(n - 1)
+        # 연결선으로 붙는 역(중앙선·강릉선 KTX의 서울 등): 그 역에서 떠난 열차가 바로 다음에 서는 역(닿는 열차는 바로 앞 역)이
+        # 착발을 나눈 역이면, 붙는 역은 한 줄로 둔다. 연결선 끝 역이 나뉘지 않았으면(부전·광주송정 등) 그대로 나눈다
+        def junction(c):
+            nxt = collections.Counter()
+            for tr in self.trains:
+                idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
+                if idx[0] == c and len(idx) > 1: nxt[idx[1]] += 1
+                if idx[-1] == c and len(idx) > 1: nxt[idx[-2]] += 1
+            return nxt.most_common(1)[0][0] if nxt else None
+        for c in sorted(self.split, key=lambda i: min(i, n - 1 - i)):
+            j = junction(c)
+            if j is not None and j in self.split and j != c: self.split.discard(c)
+        self.split -= {i for i, s in enumerate(self.st) if s in NOSPLIT_ALL}
         L.append('[stations]')
         rules = set()
         for alt in BRANCH.get((self.cat, self.line), []):
