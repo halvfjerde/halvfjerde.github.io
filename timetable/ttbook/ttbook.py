@@ -94,10 +94,10 @@ class Table:
     pass
 
 class Ghost:
-    """빈 열의 칸: 마지막 열차 열의 칸과 같은 괘선, 내용은 없음"""
-    def __init__(self, ref):
+    """빈 열의 칸: 마지막 열차 열의 칸과 같은 괘선. 역 행에는 ‥ (달리는 열차 없음)"""
+    def __init__(self, ref, r):
         self.ref = ref
-        self.r, self.c, self.rs, self.cs = ref.r, ref.c, ref.rs, ref.cs
+        self.r, self.c, self.rs, self.cs = r, ref.c, 1, ref.cs
         self.cls = ref.cls - {'jtt-t1'}
         self.style = {k: v for k, v in ref.style.items() if k.startswith('border')}
         self.lines = []
@@ -106,9 +106,9 @@ def cell_of(T, r, j):
     if isinstance(j, tuple):
         ref = T.occ.get((r, j[1]))
         if ref is None: return None
-        key = (id(ref), j[2])
+        key = (r, j[2])
         g = T.ghosts.get(key)
-        if g is None: g = T.ghosts[key] = Ghost(ref)
+        if g is None: g = T.ghosts[key] = Ghost(ref, r)
         return g
     return T.occ.get((r, j))
 
@@ -316,6 +316,7 @@ OPENING, CLOSING = set('（〔「『'), set('）〕」』')
 # 세로 제목에서 돌려 쓸 전각 가로 글자
 HFULL = {'(': '（', '（': '（', '︵': '（', ')': '）', '）': '）', '︶': '）',
          '―': '―', '—': '―', '︱': '―', '〔': '〔', '︹': '〔', '〕': '〕', '︺': '〕'}
+SUBST = {'∼': ['～', '〜', '~'], '～': ['〜', '∼', '~'], '〜': ['～', '∼', '~'], '―': ['—', '─'], '—': ['―', '─'], '・': ['·'], '·': ['・']}
 VALT = {'―': ['—', '─', '－'], '(': ['（'], ')': ['）']}
 VROT = {'︵': '(', '︶': ')', '︱': '―', '︹': '〔', '︺': '〕', '(': '(', ')': ')', '（': '(', '）': ')', '―': '―', '—': '―'}
 
@@ -378,6 +379,7 @@ class Inline:
         """글자들을 글꼴별 토막으로: 한글·문장 부호는 한글 글꼴, 한자·가나는 일본 글꼴, 나머지(숫자·로마자·기호)는 그대로.
         가로쓰기에서는 글꼴마다 잰 만큼 위아래를 맞춘다"""
         if not s: return ''
+        s = self.cover(s, ctx.font)
         segs = []
         for ch in s:
             k = char_kind(ch)
@@ -405,6 +407,21 @@ class Inline:
                 body = r'\raisebox{%.3fbp}{%s}' % (up * ctx.size * self.fs, body)
             out.append(body)
         return '{' + ''.join(out) + '}'
+
+    CHAIN = {'M': ['mincho', 'minchoKo', 'dia'], 'DM': ['dia', 'mincho', 'minchoKo'],
+             'G': ['gothic', 'gothicKo', 'dia'], 'DG': ['dia', 'gothic', 'gothicKo'],
+             'GB': ['gothicBold', 'gothicKoBold', 'dia'], 'DGB': ['dia', 'gothicBold', 'gothicKoBold']}
+    def cover(self, s, fam):
+        """이 글꼴 묶음 어디에도 없는 글자는 비슷한 글자로 바꾼다 (∼ → ～ 〜 ~, ― → — ─ …)"""
+        if not self.m: return s
+        fonts = [self.m.info.get(r) for r in self.CHAIN.get(fam, []) + [KO_ROLE[KO_OF[fam]]]]
+        fonts = [f for f in fonts if f]
+        out = []
+        for ch in s:
+            if ch in SUBST and not any(f.has(ch) for f in fonts):
+                ch = next((a for a in SUBST[ch] if any(f.has(a) for f in fonts)), ch)
+            out.append(ch)
+        return ''.join(out)
 
     def vform(self, ch, ctx, col_w):
         """세로 제목의 괄호·줄표: 같은 한글 글꼴의 전각 가로 글자(（）―)를 돌려 쓴다.
@@ -965,7 +982,15 @@ class Book:
         for r in rows:
             for j in cols:
                 cell = cell_of(T, r, j)
-                if cell is None or id(cell) in seen or isinstance(cell, Ghost): continue
+                if cell is None or id(cell) in seen: continue
+                if isinstance(cell, Ghost):
+                    seen.add(id(cell))
+                    if T.hEnd <= r < T.fStart and r in rowpos:     # 빈 열의 역 행: ‥
+                        ci = colpos[j]; ri = rowpos[r]
+                        g = self.inl.run('‥', Ctx('DM'))
+                        tex.append(self.put_box(xs[ci], ys[ri], xs[ci + 1] - xs[ci], ys[ri + 1] - ys[ri],
+                                                r'\hbox to %.3fbp{%s\hss %s\hss}' % (xs[ci + 1] - xs[ci], strut(1.0, fs), g), 'l', 'm'))
+                    continue
                 seen.add(id(cell))
                 rr = [x for x in range(cell.r, cell.r + cell.rs) if x in rowpos]
                 cc = [x for x in range(cell.c, cell.c + cell.cs) if x in colpos]
@@ -1204,18 +1229,19 @@ class Book:
         return out
 
     # ── 짜기: 쪽을 차례로 위에서부터 채운다 ──
-    #  · 열차 무리: 한 면 폭에 드는 표는 한 면(single), 넓은 표는 이어지는 두 쪽에 나눠 싣는 짝(pair).
-    #    짝이 왼쪽 면에서 시작하면 펼침면 두 쪽에 같은 높이로(행이 맞는다), 오른쪽 면에서 시작하면 넘겨서 다음 왼쪽 면으로.
+    #  · 표 조각은 언제나 '열차 무리 × 역 구간' 하나를 통째로. 남은 자리를 채우려고 역 중간에서 자르지 않는다
+    #    (한 단에는 늘 그 구간의 역이 처음부터 끝까지 다 있다. 같은 표의 다음 무리는 그 밑 단이나 다음 쪽에)
+    #  · 한 쪽에 들지 않을 만큼 역이 많은 표만 역 구간으로 나눈다. 고르게, 구획 선(---) 자리에서.
+    #    그때는 구간 먼저: 첫 구간의 모든 열차 → 다음 구간의 모든 열차 (실제 시각표처럼)
+    #  · 열차 무리: 한 면 폭에 드는 것은 한 면(single), 넓은 것은 이어지는 두 쪽에 나눠 싣는 짝(pair).
+    #    짝이 왼쪽 면에서 시작하면 펼침면 두 쪽에(높이가 비슷하면 같은 높이로, 행이 맞는다),
+    #    왼쪽 면이 찼고 오른쪽 면이 비었으면 오른쪽 면에서 시작해 넘겨 다음 왼쪽 면으로.
     #    끝에 몇 편만 남으면 열 폭을 조금(squeeze) 좁혀 앞 무리에 싣는다
-    #  · 높은 표는 역(행)으로 자른다. 머리 행은 띠마다, 꼬리 행(종착역·운행일)은 열차 무리의 마지막 띠에, 주기는 표의 끝에.
-    #    쪽에 남은 높이가 넉넉하면(splitMin) 잘라서 채우고, 모자라면 새 쪽에서. 자투리 띠(minBandRows 역 미만)는 만들지 않는다
-    #  · 좁은 표(한 면을 다 채우지 않는 single 통째)는 앞의 좁은 표 옆에 나란히 (하행 | 상행)
-    #  · 읽는 차례를 지킨다: 한 쪽을 위→아래로 다 읽은 뒤 다음 쪽 (앞 쪽의 빈자리로 되돌아가 채우지 않는다)
+    #  · 좁은 표(한 면을 다 채우지 않는 것)는 앞의 좁은 표 옆에 나란히 (하행 | 상행)
+    #  · 읽는 차례를 지킨다: 앞 쪽의 빈자리로 되돌아가 채우지 않는다
     def layout(self, tables):
         PH = self.ch
         gap = self.R * self.cfg.get('tierGap', 1.0)
-        MINB = self.cfg.get('minBandRows', 6)
-        split_min = self.cfg.get('splitMin', 0.25) * PH
         gapX = self.cfg.get('sideGap', 1.5) * MM
         TWh = self.title_tex(tables[0])[2] if tables else 0
         pages = []
@@ -1226,11 +1252,11 @@ class Book:
         cur = {'c': 0}
         def top(p): return ys[p] + gap if ys[p] > 0 else 0.0
         def side_of(p): return 'L' if p % 2 == 0 else 'R'
-        def put(T, p, trains, rows, y, notes, h, x=0.0, narrow=False, whole=False):
+        def put(T, p, trains, rows, y, notes, h, x=0.0, narrow=False):
             pg = page(p)
             side = side_of(p)
             pc = {'T': T, 'side': side, 'trains': trains, 'rows': rows, 'y': y, 'x': x, 'h': h, 'notes': notes,
-                  'narrow': narrow, 'whole': whole, 'nat': self.fixed_w(T, side) + len(trains) * self.P0}
+                  'narrow': narrow, 'nat': self.fixed_w(T, side) + len(trains) * self.P0}
             pg['pieces'].append(pc)
             if T.line not in pg['lines']: pg['lines'].append(T.line)
             return pc
@@ -1239,29 +1265,30 @@ class Book:
             head = list(range(T.hEnd)); foot = list(range(T.fStart, T.nrow)); body = list(range(T.hEnd, T.fStart))
             cuts = self.cut_ok(T)
             TH = self.title_tex(T, part='열넷째')[1] + 0.5 * self.fs
-            pieces = []
-            def hgt(bi, e, last_group):
-                fin = e == len(body)
-                rows = head + body[bi:e] + (foot if fin else [])
-                return rows, max(self.piece_h(T, rows, fin and last_group), TH)
-            def band_end(bi, room, last_group, at_top):
-                whole = hgt(bi, len(body), last_group)[1]
-                if whole <= room + 0.01: return len(body)
-                if not at_top and whole <= PH + 0.01 and room < split_min: return None
-                best = None
-                for e in range(bi + 1, len(body)):
-                    if body[e] not in cuts: continue
-                    if hgt(bi, e, last_group)[1] > room + 0.01: break
-                    best = e
-                if best is None: return None
-                if len(body) - best < MINB:
-                    alt = [e for e in range(bi + MINB, best) if body[e] in cuts and len(body) - e >= MINB]
-                    best = alt[-1] if alt else None
-                    if best is None: return None
-                lns = [e for e in range(max(bi + MINB, best - 3), best + 1) if body[e] in cuts and 'jtt-ln' in T.rowcls[body[e]]]
-                if lns: best = lns[-1]
-                if best - bi < MINB and not at_top: return None
-                return best
+            def piece(b0, b1, with_foot, notes):
+                rows = head + body[b0:b1] + (foot if with_foot else [])
+                return rows, max(self.piece_h(T, rows, notes), TH)
+            # 역 구간: 한 쪽에 들면 하나. 아니면 k 구간으로 고르게 (구획 선 자리를 먼저)
+            secs = [(0, len(body))]
+            if piece(0, len(body), True, True)[1] > PH + 0.01:
+                for k in range(2, 8):
+                    total = sum(T.rowH[r] for r in body)
+                    bounds = [0]
+                    for j in range(1, k):
+                        target = total * j / k
+                        acc, best, bd = 0, None, 1e9
+                        for e in range(bounds[-1] + 1, len(body)):
+                            acc = sum(T.rowH[r] for r in body[:e])
+                            if body[e] not in cuts: continue
+                            d = abs(acc - target) - (3 * self.R if 'jtt-ln' in T.rowcls[body[e]] else 0)
+                            if d < bd: bd, best = d, e
+                        if best is None: break
+                        bounds.append(best)
+                    bounds.append(len(body))
+                    cand = list(zip(bounds, bounds[1:]))
+                    if all(piece(a, b, i == len(cand) - 1, i == len(cand) - 1)[1] <= PH + 0.01 for i, (a, b) in enumerate(cand)):
+                        secs = cand; break
+            # 열차 무리
             capL, capR = self.cap(T, 'L'), self.cap(T, 'R')
             sL, sR = self.cap(T, 'L', True), self.cap(T, 'R', True)
             n = len(Tc)
@@ -1277,86 +1304,66 @@ class Book:
                     if r:
                         if full >= 1 and r <= max(sL, sR): groups.append(('single', r))
                         else:
-                            kA = -(-r // 2)                      # 두 쪽에 고르게
-                            groups.append(('pair', kA, r - kA))
+                            kA = -(-r // 2); groups.append(('pair', kA, r - kA))
                 else:
                     base, ex = divmod(n, G)
                     groups = []
                     for g in range(G):
                         k = base + (1 if g < ex else 0)
                         kA = -(-k // 2); groups.append(('pair', kA, k - kA))
-            ti = 0
-            for gdef in groups:
-                used = gdef[1] if gdef[0] == 'single' else gdef[1] + gdef[2]
-                last_group = ti + used >= n
-                trs = Tc[ti:ti + used]
-                bi, guard = 0, 0
-                while bi < len(body) and guard < 400:
-                    guard += 1
-                    c = cur['c']
-                    if gdef[0] == 'single':
-                        k = used
-                        # 1) 앞의 좁은 표 옆에 나란히
-                        if bi == 0 and page(c)['pieces']:
-                            prev = page(c)['pieces'][-1]
-                            if prev['whole'] and prev['narrow'] and prev['y'] + 0.01 >= max(q['y'] for q in page(c)['pieces']):
-                                x = prev['x'] + prev['nat'] + TWh + gapX
-                                rows, h = hgt(0, len(body), last_group)
-                                nat = self.fixed_w(T, side_of(c)) + k * self.P0
-                                if x + nat <= self.cw + 0.01 and prev['y'] + h <= PH + 0.01:
-                                    pieces.append(put(T, c, trs, rows, prev['y'], last_group, h, x, True, True))
-                                    ys[c] = max(ys[c], prev['y'] + h)
-                                    bi = len(body); continue
-                        # 2) 이 쪽에서 위→아래로. 자리가 없으면 다음 쪽
-                        if (sL if c % 2 == 0 else sR) >= k:
-                            y0 = top(c)
-                            e = band_end(bi, PH - y0, last_group, y0 == 0)
-                            if e is not None:
-                                rows, h = hgt(bi, e, last_group)
-                                fin = e == len(body)
+            pieces = []
+            for si, (b0, b1) in enumerate(secs):
+                last_sec = si == len(secs) - 1
+                ti = 0
+                for gi, gdef in enumerate(groups):
+                    used = gdef[1] if gdef[0] == 'single' else gdef[1] + gdef[2]
+                    trs = Tc[ti:ti + used]; ti += used
+                    notes = last_sec and gi == len(groups) - 1
+                    rows, h = piece(b0, b1, last_sec, notes)
+                    for guard in range(200):
+                        c = cur['c']
+                        if gdef[0] == 'single':
+                            k = used
+                            # 앞의 좁은 표 옆에 나란히
+                            pg = page(c)
+                            if pg['pieces']:
+                                prev = pg['pieces'][-1]
+                                low = max(q['y'] for q in pg['pieces'])
+                                if prev['narrow'] and abs(prev['y'] - low) < 0.01:
+                                    x = prev['x'] + prev['nat'] + TWh + gapX
+                                    nat = self.fixed_w(T, side_of(c)) + k * self.P0
+                                    if x + nat <= self.cw + 0.01 and prev['y'] + h <= PH + 0.01:
+                                        pieces.append(put(T, c, trs, rows, prev['y'], notes, h, x, True))
+                                        ys[c] = max(ys[c], prev['y'] + h)
+                                        break
+                            if (sL if c % 2 == 0 else sR) >= k and top(c) + h <= PH + 0.01:
+                                y0 = top(c)
                                 narrow = self.fixed_w(T, side_of(c)) + k * self.P0 < self.cw * 0.62
-                                pieces.append(put(T, c, trs, rows, y0, fin and last_group, h, 0.0, narrow, bi == 0 and fin))
+                                pieces.append(put(T, c, trs, rows, y0, notes, h, 0.0, narrow))
                                 ys[c] = y0 + h
-                                bi = e; continue
-                        cur['c'] = c + 1
-                    else:
-                        kA, kB = gdef[1], gdef[2]
-                        if c % 2 == 0:
-                            ya, yb = top(c), top(c + 1)
-                            ra, rb = PH - ya, PH - yb
-                            whole_h = hgt(bi, len(body), last_group)[1]
-                            # 왼쪽 면이 훨씬 찼고 오른쪽 면에 이 무리가 통째로 들면: 오른쪽 면에서 시작해 넘겨 잇는다
-                            if bi == 0 and ra < rb - 0.25 * PH and whole_h <= rb + 0.01:
-                                cur['c'] = c + 1; continue
-                            # 펼침면 두 쪽에: 높이가 비슷하면 같은 높이로(행이 맞는다), 아니면 각 쪽의 자리에서
-                            if abs(ya - yb) < 10 * MM: ya = yb = max(ya, yb)
-                            e = band_end(bi, min(PH - ya, PH - yb), last_group, max(ya, yb) == 0)
-                            if e is None:
-                                if ys[c + 1] == 0 and bi == 0: cur['c'] = c + 1
-                                else: cur['c'] = c + 2
-                                continue
-                            rows, h = hgt(bi, e, last_group)
-                            fin = e == len(body)
-                            pieces.append(put(T, c, trs[:kA], rows, ya, False, h))
-                            pieces.append(put(T, c + 1, trs[kA:], rows, yb, fin and last_group, h))
-                            ys[c] = ya + h; ys[c + 1] = yb + h
-                            bi = e
-                            if not fin: cur['c'] = c + 2          # 다음 띠는 다음 펼침면
-                        else:
-                            # 오른쪽 면에서 시작: 넘겨서 다음 왼쪽 면으로 (두 쪽 행은 같다)
-                            y1, y2 = top(c), top(c + 1)
-                            room = min(PH - y1, PH - y2)
-                            e = band_end(bi, room, last_group, y1 == 0)
-                            if e is None:
-                                cur['c'] = c + 1; continue
-                            rows, h = hgt(bi, e, last_group)
-                            fin = e == len(body)
-                            pieces.append(put(T, c, trs[:kA], rows, y1, False, h))
-                            pieces.append(put(T, c + 1, trs[kA:], rows, y2, fin and last_group, h))
-                            ys[c] = y1 + h; ys[c + 1] = y2 + h
-                            bi = e
+                                break
                             cur['c'] = c + 1
-                ti += used
+                        else:
+                            kA = gdef[1]
+                            if c % 2 == 0:
+                                ya, yb = top(c), top(c + 1)
+                                if abs(ya - yb) < 10 * MM: ya = yb = max(ya, yb)
+                                if ya + h <= PH + 0.01 and yb + h <= PH + 0.01:
+                                    pieces.append(put(T, c, trs[:kA], rows, ya, False, h))
+                                    pieces.append(put(T, c + 1, trs[kA:], rows, yb, notes, h))
+                                    ys[c] = ya + h; ys[c + 1] = yb + h
+                                    break
+                                # 왼쪽 면에 자리가 없고 오른쪽 면이 비었으면 오른쪽 면에서 시작해 넘겨 잇는다
+                                cur['c'] = c + 1 if (ys[c + 1] == 0 and h <= PH + 0.01) else c + 2
+                            else:
+                                y1, y2 = top(c), top(c + 1)
+                                if y1 + h <= PH + 0.01 and y2 + h <= PH + 0.01:
+                                    pieces.append(put(T, c, trs[:kA], rows, y1, False, h))
+                                    pieces.append(put(T, c + 1, trs[kA:], rows, y2, notes, h))
+                                    ys[c] = y1 + h; ys[c + 1] = y2 + h
+                                    cur['c'] = c + 1
+                                    break
+                                cur['c'] = c + 1
             for k, pc in enumerate(pieces):
                 pc['part'] = (ORD_KO[k] if k < len(ORD_KO) else '%d째' % (k + 1)) if len(pieces) > 1 else ''
         # 단(같은 높이)마다 맨 오른쪽 조각만 빈 열로 판면 끝까지 채운다
