@@ -10,6 +10,21 @@
  * GitHub Pages(halv.kr/timetable/print/)에서는 PHP 가 돌지 않으므로 t.halv.kr 에서만 쓴다.
  */
 const BACKEND = 'http://127.0.0.1:3001/api.php';
+// 파싱 결과 저장소: 판 번호가 같으면 HTML 도 같다 (모듈:Timetable 판이 바뀌면 키가 바뀐다). php-fpm 의 /tmp 라 재시작하면 비워진다
+define('CACHE_DIR', sys_get_temp_dir() . '/ttprint');
+
+function cache_get(string $key, int $ttl = 0): ?string {
+    $f = CACHE_DIR . '/' . $key;
+    if (!is_file($f) || ($ttl && filemtime($f) < time() - $ttl)) return null;
+    $s = @file_get_contents($f);
+    return $s === false ? null : $s;
+}
+
+function cache_put(string $key, string $data): void {
+    if (!is_dir(CACHE_DIR)) @mkdir(CACHE_DIR, 0700, true);
+    $tmp = CACHE_DIR . '/.' . $key . '.' . getmypid();
+    if (@file_put_contents($tmp, $data) !== false) @rename($tmp, CACHE_DIR . '/' . $key);
+}
 const WIKI_HOST = 'w.halv.kr';
 const MODULE = '모듈:Timetable';
 
@@ -46,8 +61,10 @@ function out($data, string $cache = 'no-store') {
     exit;
 }
 
-/** 모듈:Timetable 을 쓰는 문서들: [title => [ns, pageid, revid, timestamp, displaytitle]] */
+/** 모듈:Timetable 을 쓰는 문서들: [title => [ns, pageid, revid, timestamp, displaytitle]] (1분 저장) */
 function timetable_pages(): array {
+    $c = cache_get('list.json', 60);
+    if ($c !== null && is_array($j = json_decode($c, true))) return $j;
     $pages = [];
     $cont = [];
     do {
@@ -65,7 +82,18 @@ function timetable_pages(): array {
         }
         $cont = $j['continue'] ?? [];
     } while ($cont);
+    cache_put('list.json', json_encode($pages, JSON_UNESCAPED_UNICODE));
     return $pages;
+}
+
+/** 모듈:Timetable 의 최신 판 번호 (1분 저장) */
+function module_rev(): int {
+    $c = cache_get('module.txt', 60);
+    if ($c !== null) return (int)$c;
+    $j = mw(['action' => 'query', 'prop' => 'revisions', 'titles' => MODULE, 'rvprop' => 'ids']);
+    $rev = (int)($j['query']['pages'][0]['revisions'][0]['revid'] ?? 0);
+    cache_put('module.txt', (string)$rev);
+    return $rev;
 }
 
 /** CSS 를 최상위 규칙 단위로 나눈다 (주석·문자열 안의 괄호는 건너뛴다) */
@@ -129,19 +157,31 @@ if ($action === 'page') {
     $oldid = isset($_GET['oldid']) && ctype_digit((string)$_GET['oldid']) ? (int)$_GET['oldid'] : 0;
     $pages = timetable_pages();
     if (!isset($pages[$title])) fail(404, 'not a timetable page');
+    // 판을 안 주면 최신 판. 어느 쪽이든 판 번호로 저장해 두었다가 그대로 낸다
+    $rev = $oldid ?: (int)$pages[$title]['revid'];
+    $key = 'p-' . sha1($title) . '-' . $rev . '-m' . module_rev() . '.json';
+    $hit = $rev ? cache_get($key) : null;
+    if ($hit !== null) {
+        $d = json_decode($hit, true);
+        $d['latest'] = $pages[$title]['revid'];
+        out($d, $oldid ? 'public, max-age=86400' : 'no-store');
+    }
     $q = ['action' => 'parse', 'prop' => 'text|revid|displaytitle', 'disableeditsection' => 1, 'disablelimitreport' => 1];
     if ($oldid) $q['oldid'] = $oldid; else $q['page'] = $title;
     $p = mw($q)['parse'];
     if ($p['title'] !== $title) fail(400, 'oldid does not belong to this page');
     $r = mw(['action' => 'query', 'revids' => $p['revid'], 'prop' => 'revisions', 'rvprop' => 'ids|timestamp']);
     $ts = $r['query']['pages'][0]['revisions'][0]['timestamp'] ?? null;
-    out([
+    $d = [
         'title' => $title, 'ns' => $pages[$title]['ns'],
         'displaytitle' => strip_tags($p['displaytitle'] ?? $title),
         'revid' => $p['revid'], 'timestamp' => $ts,
         'latest' => $pages[$title]['revid'],
         'html' => $p['text'],
-    ], $oldid ? 'public, max-age=31536000, immutable' : 'no-store');
+    ];
+    if ($rev && (int)$p['revid'] === $rev) cache_put($key, json_encode($d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    // 판을 고정해도 모듈이 바뀌면 HTML 이 바뀔 수 있으니 영구 저장(immutable)은 하지 않는다
+    out($d, $oldid ? 'public, max-age=86400' : 'no-store');
 }
 
 if ($action === 'css') {

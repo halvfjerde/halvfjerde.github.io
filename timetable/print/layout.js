@@ -15,9 +15,9 @@ export const SIZES = {
 };
 
 const STR = {
-  ko: { toc: '차례', cont: '계속', contd: ' (계속)', colophon: '판권', issued: '펴낸 날', publisher: '펴낸 곳', data: '자료',
+  ko: { toc: '차례', cont: '계속', contd: ' (계속)', more: '외', colophon: '판권', issued: '펴낸 날', publisher: '펴낸 곳', data: '자료',
         rev: '판', fonts: '글꼴', source: '쩌모위키 시각표 (w.halv.kr)' },
-  ja: { toc: '目次', cont: 'つづく', contd: '（つづき）', colophon: '奥付', issued: '発行日', publisher: '発行', data: '資料',
+  ja: { toc: '目次', cont: 'つづく', contd: '（つづき）', more: '他', colophon: '奥付', issued: '発行日', publisher: '発行', data: '資料',
         rev: '版', fonts: '書体', source: '쩌모위키 時刻表 (w.halv.kr)' },
 };
 
@@ -121,34 +121,37 @@ function cutsFor(start, end, fits, cost, balance, maxShrink) {
  * 표를 잘라 낸 사본. keepRows[r], keepCols[c] 가 참인 행·열만 남긴다.
  * 걸친 칸은 남는 만큼만 걸치게 줄이고, 첫 행이 잘려 나간 칸은 남는 첫 행으로 옮긴다.
  */
-export function clipTable(src, keepRows, keepCols, t0) {
-  const t = src.cloneNode(true);
-  const g = grid(t);
+export function clipTable(src, keepRows, keepCols, t0, g = grid(src)) {
+  // 남길 칸만 복제해 새 표를 짓는다 (큰 표를 통째로 복제하지 않는다)
+  const t = src.cloneNode(false);
+  const body = document.createElement('tbody');
+  t.appendChild(body);
   const firstCol = keepCols.findIndex(Boolean);
   let firstTrain = -1;
   for (let j = t0; j < keepCols.length; j++) if (keepCols[j]) { firstTrain = j; break; }
-  const moves = [];
-  const kept = [];
+  const byRow = new Map();
   for (const x of g.cells) {
     let cs = 0, rs = 0, firstRow = -1;
     for (let j = x.c; j < x.c + x.cs; j++) if (keepCols[j]) cs++;
+    if (!cs) continue;
     for (let i = x.r; i < x.r + x.rs; i++) if (keepRows[i]) { rs++; if (firstRow < 0) firstRow = i; }
-    if (!cs || !rs) { x.td.remove(); continue; }
-    if (cs !== x.cs) x.td.colSpan = cs;
-    if (rs !== x.rs) x.td.rowSpan = rs;
-    x.td.classList.remove('jtt-t1', 'jtt-c1');
+    if (!rs) continue;
+    const td = x.td.cloneNode(true);
+    if (cs !== x.cs) td.colSpan = cs;
+    if (rs !== x.rs) td.rowSpan = rs;
+    td.classList.remove('jtt-t1', 'jtt-c1');
     const covers = (j) => j >= 0 && x.c <= j && j < x.c + x.cs;
-    if (covers(firstCol)) x.td.classList.add('jtt-c1');
-    if (covers(firstTrain) && x.td.classList.contains('jtt-t')) x.td.classList.add('jtt-t1');
-    kept.push(x);
-    if (firstRow !== x.r) moves.push({ x, firstRow });
+    if (covers(firstCol)) td.classList.add('jtt-c1');
+    if (covers(firstTrain) && td.classList.contains('jtt-t')) td.classList.add('jtt-t1');
+    if (!byRow.has(firstRow)) byRow.set(firstRow, []);
+    byRow.get(firstRow).push({ c: x.c, td });
   }
-  for (const { x, firstRow } of moves) {
-    const tr = g.rows[firstRow];
-    const after = kept.find((y) => y.r === firstRow && y.td.parentNode === tr && y.c > x.c);
-    tr.insertBefore(x.td, after ? after.td : null);
-  }
-  g.rows.forEach((tr, i) => { if (!keepRows[i]) tr.remove(); });
+  g.rows.forEach((tr, i) => {
+    if (!keepRows[i]) return;
+    const nr = tr.cloneNode(false);
+    for (const { td } of (byRow.get(i) || []).sort((a, b) => a.c - b.c)) nr.appendChild(td);
+    body.appendChild(nr);
+  });
   return t;
 }
 
@@ -186,26 +189,6 @@ function place(box, el, fs) {
  *   · 단(段)은 R 의 배수 높이에서 시작하고, 단의 남는 폭은 괘선만 있는 빈 열로 채운다 (쪽에 놓을 때).
  * 판면 폭이 P 의 정수배이고 위 여백이 앞뒤 쪽에서 같으므로, 종이가 비쳐도 앞뒤 괘선이 겹친다.
  */
-
-/** 책의 격자: 실린 표들의 열차 열 폭(9할이 들어가는 폭)과 줄 높이에서 */
-function gridSpec(box, availW, fsPt) {
-  const ws = [];
-  for (const t of box.querySelectorAll('table.jtt')) {
-    for (const td of t.querySelectorAll('td.jtt-t')) {
-      if (td.colSpan === 1 && !td.classList.contains('jtt-t1')) ws.push(rect(td).width);
-    }
-  }
-  const td = box.querySelector('table.jtt td');
-  if (!ws.length || !td) return null;
-  ws.sort((a, b) => a - b);
-  const pNat = ws[Math.min(ws.length - 1, Math.floor(ws.length * 0.9))];
-  const N = Math.max(4, Math.floor(availW / (pNat * 0.97)));   // 3% 까지는 좁혀도 글자가 들어간다
-  const lh = parseFloat(getComputedStyle(td).lineHeight) || fsPt * 1.25 * 96 / 72;
-  // 가로 괘선은 틀 윗변에서 틀의 테두리·안쪽 여백(T0)만큼 내려온 곳부터 R 간격
-  const fcs = getComputedStyle(td.closest('.jtt-frame'));
-  const T0 = parseFloat(fcs.borderTopWidth) + parseFloat(fcs.paddingTop) || 0;
-  return { P: availW / N, N, R: Math.ceil(lh * 8) / 8, T0 };   // R: 한 줄 높이. 괘선이 든 행은 줄 간격을 좁혀 맞춘다
-}
 
 /** 행 높이를 R 의 배수로: 행의 아래 괘선이 조각 윗변에서 T0 + R 의 배수 거리에 오게 */
 function snapRows(el, tb, R, T0) {
@@ -367,46 +350,32 @@ function padTable(wrapEl, k, gi) {
 
 /**
  * 표 하나를 조각들로. 조각: { el, w, h, side: 'L'|'R'|null, last: 마지막 가로 조각인가 }
- * opt: { fit: 'split'|'shrink'|'spread', scale, fs, availW, availH, lang }
+ * opt: { fit: 'split'|'shrink'|'spread', scale, fs, availW, availH, grid, fill, startY, tierH, firstW, firstH, … }
  */
-export async function tableFragments(srcWrap, box, opt) {
-  const hasTrains = !!srcWrap.querySelector('table.jtt td.jtt-t');
-  const G = opt.grid && hasTrains ? opt.grid : null;   // 격자를 쓰면 글자 크기는 책 전체가 같다
-  let fs = opt.fs * (G ? 1 : (opt.scale || 1));
-  let holder = place(box, srcWrap.cloneNode(true), fs);
+export async function tableFragments(srcWrap, box, opt, pre) {
+  const plan = await planTable(srcWrap, box, opt, pre);
+  if (!plan || Array.isArray(plan)) return plan;
+  return plan.cut(opt.startY || 0, opt.tierH || 0);
+}
+
+/**
+ * 표 하나를 그려 놓고 잴 것을 다 잰다 (판형과 상관없는 것만: 열 폭, 행, 긴 주기 칸, 표 제목, 줄 높이).
+ * 같은 표·같은 글자 크기면 다시 잴 필요가 없으므로 layoutBook 이 붙잡아 둔다.
+ */
+export async function measureTable(srcWrap, box, fs) {
+  const holder = place(box, srcWrap.cloneNode(true), fs);
   rect(holder);
   await document.fonts.ready;
-  let wrap = holder.firstChild;
-  let wr = rect(wrap);
-  const contH = opt.contH ?? (G ? Math.ceil(5 * MM / G.R) * G.R : 5 * MM);   // '계속' 표시 몫
-  const RR = opt.grid?.R;
-  const snapY = (v) => (RR ? Math.ceil(v / RR - 1e-3) * RR : v);
-  const gapY = opt.gapY ?? 0;
-
-  if (!G && opt.fit === 'shrink') {
-    const s = Math.min(1, opt.availW / wr.width, opt.availH / wr.height);
-    if (s < 0.999) {
-      fs = Math.max(fs * s, opt.fs * (opt.minScale || 0.7));
-      holder = place(box, srcWrap.cloneNode(true), fs);
-      await document.fonts.ready;
-      wrap = holder.firstChild;
-      wr = rect(wrap);
-    }
-  }
-  if (!G && wr.width <= opt.availW + 0.5 && wr.height <= opt.availH + 0.5) {
-    return [{ el: wrap, w: wr.width, h: wr.height, side: null, last: true, fs }];
-  }
-
+  const wrap = holder.firstChild;
+  const wr = rect(wrap);
   const table = wrap.querySelector('table.jtt');
-  if (!table) return [{ el: wrap, w: wr.width, h: wr.height, side: null, last: true, fs, overflow: true }];
+  const M = { fs, wrap, wr: { width: wr.width, height: wr.height }, table };
+  if (!table) return M;
   const S = shape(table);
-  const { g, t0, t1, hEnd, fStart } = S;
-  const nrow = g.rows.length;
+  const { g, t0, t1, hEnd } = S;
   const tr = rect(table);
   const titleEl = wrap.querySelector('.jtt-title');
-  const titleW = titleEl && getComputedStyle(titleEl).writingMode.startsWith('vertical') ? rect(titleEl).width : 0;
-  const extraW = wr.width - tr.width;
-
+  const vertical = titleEl && getComputedStyle(titleEl).writingMode.startsWith('vertical');
   // 열 폭: 한 칸짜리 칸에서 잰다
   const colW = new Array(g.ncol).fill(0);
   for (const x of g.cells) if (x.cs === 1) colW[x.c] = Math.max(colW[x.c], rect(x.td).width);
@@ -419,15 +388,91 @@ export async function tableFragments(srcWrap, box, opt) {
       for (let j = x.c; j < x.c + x.cs; j++) if (!colW[j]) colW[j] = rest;
     }
   }
-  const sum = (arr, a, b) => arr.slice(a, b).reduce((p, q) => p + q, 0);
-  const leftW = sum(colW, 0, t0), rightW = sum(colW, t1, g.ncol);
   // 열차 칸의 긴 세로 주기처럼 걸친 행을 내용으로 다 쓰는 칸은, 가르면 남은 행들이 늘어난다 → 고정 칸처럼 가르지 않는다
+  // 또 잘린 조각의 높이를 미리 셈할 수 있게, 여러 행에 걸친 열차 칸의 내용 높이를 적어 둔다
+  const tallCells = [];
   for (const x of g.cells) {
     if (x.rs < 2 || !x.td.classList.contains('jtt-t')) continue;
-    let need = 0;
-    for (const c of x.td.children) need = Math.max(need, rect(c).height);
+    // 내용 전체(글자·괄호·<br>로 쌓인 줄)의 높이: 칸 안 내용을 감싸는 범위의 높이
+    const rg = document.createRange();
+    rg.selectNodeContents(x.td);
+    const need = x.td.childNodes.length ? rg.getBoundingClientRect().height : 0;
     if (need > rect(x.td).height * 0.5) for (let i = x.r + 1; i < x.r + x.rs; i++) S.rowCost[i] += 99;
+    if (need > 0 && x.r >= hEnd) tallCells.push({ r0: x.r, r1: x.r + x.rs, c0: x.c, c1: x.c + x.cs, need: need + 2 });
   }
+  const td = table.querySelector('td');
+  const fcs = getComputedStyle(table.closest('.jtt-frame') || table);
+  // 격자를 정할 때 쓰는 열차 열 폭 (첫 열차 열은 왼쪽 줄이 없어 1px 좁으므로 뺀다)
+  const trainW = [];
+  for (let j = t0 + 1; j < t1; j++) if (colW[j]) trainW.push(colW[j]);
+  Object.assign(M, {
+    S, colW, tallCells, trainW,
+    trL: tr.left - wr.left, trR: wr.right - tr.right, tableW: tr.width,
+    titleW: vertical ? rect(titleEl).width : 0,
+    titleH0: titleEl ? rect(titleEl).height : 0,
+    titleFont: titleEl ? parseFloat(getComputedStyle(titleEl).fontSize) : 0,
+    lh: td ? parseFloat(getComputedStyle(td).lineHeight) : 0,
+    T0: (parseFloat(fcs.borderTopWidth) + parseFloat(fcs.paddingTop)) || 0,
+    hasNotes: !!wrap.querySelector('.jtt-notes'),
+  });
+  return M;
+}
+
+/** 실린 표들의 잰 값으로 책의 격자를 정한다 (열차 열 폭은 9할이 들어가는 폭) */
+function gridFromMeasures(measures, availW, fsPt) {
+  const ws = [];
+  let lh = 0, T0 = 0;
+  for (const M of measures) {
+    if (!M?.table) continue;
+    ws.push(...M.trainW);
+    if (!lh && M.lh) { lh = M.lh; T0 = M.T0; }
+  }
+  if (!ws.length) return null;
+  ws.sort((a, b) => a - b);
+  const pNat = ws[Math.min(ws.length - 1, Math.floor(ws.length * 0.9))];
+  const N = Math.max(4, Math.floor(availW / (pNat * 0.97)));   // 3% 까지는 좁혀도 글자가 들어간다
+  lh ||= fsPt * 1.25 * 96 / 72;
+  return { P: availW / N, N, R: Math.ceil(lh * 8) / 8, T0 };   // R: 한 줄 높이. 괘선이 든 행은 줄 간격을 좁혀 맞춘다
+}
+
+/**
+ * 표를 재고 가로 조각(열차 묶음)까지 정해 둔다. 세로 띠는 cut(startY, tierH) 로 — 쪽의 어디서 시작하느냐에 따라 다르므로.
+ * 돌려주는 것: 조각 배열(나눌 것 없음) | null(이어 싣기 불가) | { cut, hChunks, spread, w0 }
+ * M: measureTable 의 결과. 글자 크기가 같으면 다시 재지 않고 쓴다
+ */
+export async function planTable(srcWrap, box, opt, M) {
+  const hasTrains = !!srcWrap.querySelector('table.jtt td.jtt-t');
+  const G = opt.grid && hasTrains ? opt.grid : null;   // 격자를 쓰면 글자 크기는 책 전체가 같다
+  let fs = opt.fs * (G ? 1 : (opt.scale || 1));
+  if (!M || M.fs !== fs) M = await measureTable(srcWrap, box, fs);
+  let wrap = M.wrap;
+  let wr = M.wr;
+  const contH = opt.contH ?? (G ? Math.ceil(5 * MM / G.R) * G.R : 5 * MM);   // '계속' 표시 몫
+  const RR = opt.grid?.R;
+  const snapY = (v) => (RR ? Math.ceil(v / RR - 1e-3) * RR : v);
+  const gapY = opt.gapY ?? 0;
+
+  if (!G && opt.fit === 'shrink') {
+    const s = Math.min(1, opt.availW / wr.width, opt.availH / wr.height);
+    if (s < 0.999) {
+      fs = Math.max(fs * s, opt.fs * (opt.minScale || 0.7));
+      M = await measureTable(srcWrap, box, fs);
+      wrap = M.wrap;
+      wr = M.wr;
+    }
+  }
+  if (!G && wr.width <= opt.availW + 0.5 && wr.height <= opt.availH + 0.5) {
+    return [{ el: wrap, w: wr.width, h: wr.height, side: null, last: true, fs }];
+  }
+
+  const table = M.table;
+  if (!table) return [{ el: wrap, w: wr.width, h: wr.height, side: null, last: true, fs, overflow: true }];
+  const { S, colW, tallCells, titleW, titleH0 } = M;
+  const { g, t0, t1, hEnd, fStart } = S;
+  const nrow = g.rows.length;
+  const extraW = wr.width - M.tableW;
+  const sum = (arr, a, b) => arr.slice(a, b).reduce((p, q) => p + q, 0);
+  const leftW = sum(colW, 0, t0), rightW = sum(colW, t1, g.ncol);
   // 격자: 열차 열은 P 의 배수로
   const gw = colW.map((v, j) => (G && j >= t0 && j < t1 ? Math.max(1, Math.ceil(v / G.P - 0.1)) * G.P : v));
   const isSt = new Array(g.ncol).fill(false);
@@ -447,12 +492,16 @@ export async function tableFragments(srcWrap, box, opt) {
     return [...cols.slice(nL), ...cols.slice(0, nL).reverse().map((c) => ({ ...c, kind: 'R' }))];
   };
 
+  // 조각의 껍데기(제목·틀·주기): 표 자리만 비워 두고 한 번만 복제해 둔다
+  const shell = srcWrap.cloneNode(true);
+  { const ph = document.createElement('table'); ph.className = 'jtt-ph'; shell.querySelector('table.jtt').replaceWith(ph); }
+
   /** 잘라 낸 조각을 놓아 보고, 지워지기 전에 크기를 다 재 둔다 */
   const build = (keepRows, keepCols, { notes, title, mirror }) => {
-    const w = srcWrap.cloneNode(true);
-    const clipped = clipTable(table, keepRows, keepCols, t0);
+    const w = shell.cloneNode(true);
+    const clipped = clipTable(table, keepRows, keepCols, t0, g);
     if (mirror) mirrorBlock(clipped, keepCols.slice(0, t0).filter(Boolean).length);
-    w.querySelector('table.jtt').replaceWith(clipped);
+    w.querySelector('table.jtt-ph').replaceWith(clipped);
     if (!notes) w.querySelectorAll('.jtt-notes').forEach((n) => n.remove());
     if (!title) w.querySelectorAll('.jtt-title').forEach((n) => n.remove());
     const el = place(box, w, fs).firstChild;
@@ -485,14 +534,13 @@ export async function tableFragments(srcWrap, box, opt) {
   /* 1. 가로 조각: 열차(열)로 자른다. 펼침면이면 왼쪽(L)·오른쪽(R) 쪽을 번갈아 */
   const spread = opt.fit === 'spread' && wr.width > opt.availW + 0.5;
   // 제목이 판면 높이보다 길면 조각마다 한 줄 더 꺾일 수 있으니 그만큼 비워 둔다
-  const titleH0 = titleEl ? rect(titleEl).height : 0;
-  const titleLine = titleEl && titleW && rect(titleEl).height > opt.availH * (opt.fill ? 0.3 : 0.6) ? parseFloat(getComputedStyle(titleEl).fontSize) * 1.4 : 0;
+  const titleLine = titleW && titleH0 > opt.availH * (opt.fill ? 0.3 : 0.6) ? M.titleFont * 1.4 : 0;
   const gUp = (v) => Math.ceil(v / G.P - 1e-3) * G.P;
   // 가로 조각 i 의 판면 폭: 앞 표가 남긴 단의 오른쪽에 이어 실을 때(opt.firstW)는 첫 조각만 그 폭
   const wAt = (i) => (i === 0 && opt.firstW ? opt.firstW : opt.availW);
   const availFor = G
-    ? (side, i) => wAt(i) - (side !== 'R' ? gUp(tr.left - wr.left + leftW + titleLine) : 0)
-      - (side !== 'L' && (t1 < g.ncol || side === 'R') ? gUp(wr.right - tr.right + (t1 < g.ncol ? rightW : mirW)) : 0)
+    ? (side, i) => wAt(i) - (side !== 'R' ? gUp(M.trL + leftW + titleLine) : 0)
+      - (side !== 'L' && (t1 < g.ncol || side === 'R') ? gUp(M.trR + (t1 < g.ncol ? rightW : mirW)) : 0)
     : (side, i) => wAt(i) - (side !== 'R' ? extraW + leftW + titleLine : extraW - titleW)
       - (side !== 'L' ? (t1 < g.ncol ? rightW : side === 'R' ? mirW : 0) : 0);
   const sideOf = (i) => (spread ? (i % 2 ? 'R' : 'L') : null);
@@ -544,19 +592,29 @@ export async function tableFragments(srcWrap, box, opt) {
   const groups = [];
   if (opt.align) groups.push(chunks);
   else for (let i = 0; i < chunks.length; i += spread ? 2 : 1) groups.push(chunks.slice(i, i + (spread ? 2 : 1)));
-  const frags = [];
   const lastNotesH = notesHeight();
   // 쪽 꽉 채우기(JTB식): 띠를 고르게 나누지 않고, 쪽에 남은 높이만큼 흘려 넣는다.
   // y 는 다음 띠가 놓일 높이 (쪽에 놓는 쪽과 같은 셈법: 단 높이는 R 의 배수, 단 사이 gapY)
   const fillMode = opt.fill && !opt.align;
-  let y = opt.startY || 0;
+  const cut = (startY, tierH0) => {
+  const frags = [];
+  let y = startY || 0;
   groups.forEach((grp, gi) => {
     const lastGroup = gi === groups.length - 1;
     const rowH = Array.from({ length: nrow }, (_, i) => Math.max(...grp.map((ch) => ch.tall.rowH[i] || 0)));
     const extraH = Math.max(...grp.map((ch) => ch.tall.h - ch.tall.tableH));
     const headH = sum(rowH, 0, hEnd), footH = sum(rowH, fStart, nrow);
     const notesH = lastGroup ? lastNotesH : 0;
-    const rowSum = (a, b) => sum(rowH, a, b);
+    // 띠 [a, b) 의 행 높이 합. 띠 끝에서 잘리는 긴 주기 칸은 남은 행에 내용을 다 담아야 하므로 그만큼 늘려 셈한다
+    const gCells = tallCells.filter((tc) => grp.some((ch) => ch.keepCols.slice(tc.c0, tc.c1).some(Boolean)));
+    const rowSum = (a, b) => {
+      let base = sum(rowH, a, b), defic = 0;
+      for (const tc of gCells) {
+        if (tc.r1 <= a || tc.r0 >= b || (tc.r0 >= a && tc.r1 <= b)) continue;
+        defic = Math.max(defic, tc.need - sum(rowH, Math.max(a, tc.r0), Math.min(b, tc.r1)));
+      }
+      return base + defic;
+    };
     const bandOf = (r, cut) => {
       const lastBand = cut >= fStart;
       const keepRows = Array.from({ length: nrow }, (_, i) => i < hEnd || (i >= r && i < cut) || (lastBand && i >= fStart));
@@ -593,7 +651,7 @@ export async function tableFragments(srcWrap, box, opt) {
         while (needOf(built, cut) > room + 0.5 && cut > r + 1) { cut = pickBreak(r, cut - 1, fStart, S.rowCost, 2); built = bandOf(r, cut); }
         if (needOf(built, cut) > room + 0.5 && y > 0) { y = 0; continue; }   // 남은 높이에 한 줄도 안 들어가면 새 쪽
         bands.push({ r, cut, built });
-        const tierH = gi === 0 && bands.length === 1 && opt.firstW ? opt.tierH || 0 : 0;   // 옆에 이어 실은 첫 조각은 그 단의 높이를 따른다
+        const tierH = gi === 0 && bands.length === 1 && opt.firstW ? tierH0 || 0 : 0;   // 옆에 이어 실은 첫 조각은 그 단의 높이를 따른다
         y = snapY(y + Math.max(needOf(built, cut), tierH) + gapY);
         if (y >= opt.availH - 0.5) y = 0;
         if (cut >= fStart) break;
@@ -642,11 +700,12 @@ export async function tableFragments(srcWrap, box, opt) {
       });
     });
   });
-  frags.hChunks = chunks.length;   // 가로로 몇 조각인가 (이어 싣기는 어차피 나뉘는 표만)
   return frags;
+  };
+  return { cut, hChunks: chunks.length, spread: chunks.some((ch) => ch.side), w0: chunks[0].tall.w };
 
   function notesHeight() {
-    if (!wrap.querySelector('.jtt-notes')) return 0;
+    if (!M.hasNotes) return 0;
     const t = build(allRows, chunks[chunks.length - 1].keepCols, { notes: true, title: true });
     return t.notesH;
   }
@@ -694,39 +753,54 @@ const langOf = (s) => (/[぀-ヿ]/.test(s) ? 'ja' : /[가-힣]/.test(s) ? 'ko' :
 
 /* ── 책 한 권을 쪽들로 ─────────────────────────────────────────────── */
 
-const FRAG_CACHE = new Map();
+const FRAG_CACHE = new Map();   // [표·조건·자리] → 조각들 (다시 그릴 때 그대로 쓴다)
+const INFO_CACHE = new Map();   // [표·조건] → 가로 조각 수·펼침면인가·첫 조각 폭
+const MEASURE = new WeakMap();  // 표 → ('글자 크기|글꼴' → 잰 값)
 
 /**
  * book: 설계도, docs: Map('title@oldid' → { title, revid, timestamp, tables: extractTables(...) })
  * out: 쪽들을 넣을 곳, mroot: 재기 상자를 둘 곳
  */
 export async function layoutBook(book, docs, out, mroot, onProgress) {
+
   const P = book.page;
   const [W, H] = P.size === 'custom' ? [P.w, P.h] : SIZES[P.size];
   const g = { W, H, ...P.margin };
   g.cw = W - g.inner - g.outer;
   g.ch = H - g.top - g.bottom;
   const L = STR[book.lang] || STR.ko;
+  const T0 = performance.now(); const lap = (k) => globalThis.__ttlog?.push(k + ' ' + Math.round(performance.now() - T0));
   const box = measurer(mroot, g);
+  // 표지·차례 글자의 글꼴을 미리 받아 둘 곳
+  const warmBox = document.createElement('div');
+  warmBox.className = 'm-box';
+  warmBox.style.width = `${g.cw}mm`;
+  mroot.appendChild(warmBox);
   const availW = g.cw * MM, availH = g.ch * MM;
-  const warnings = [];
+  const warnings = new Set();
 
-  /* 0. 글꼴을 미리 다 받아 둔다 (CJK 글꼴은 글자 묶음마다 따로 받으므로, 쓰일 글자를 한 번 그려 본다) */
-  box.innerHTML = '';
-  for (const it of book.items) {
-    if (it.type !== 'table') continue;
-    const t = docs.get(`${it.title}@${it.oldid}`)?.tables[it.idx];
-    if (t) {
-      const h = document.createElement('div');
-      h.className = 'm-free';
-      h.style.setProperty('--bk-fs', `${book.fs}pt`);
-      h.appendChild(t.el.cloneNode(true));
-      box.appendChild(h);
+  /* 0. 표마다 한 번 그려 재 둔다 (글꼴도 이때 받는다). 같은 표·같은 글자 크기·같은 글꼴이면 지난번 잰 것을 쓴다.
+        그 값으로 책의 격자를 정한다 */
+  const tabs = book.items.filter((it) => it.type === 'table')
+    .map((it) => ({ it, t: docs.get(`${it.title}@${it.oldid}`)?.tables[it.idx] })).filter((x) => x.t);
+  const mkey = `${book.fs}|${book.fonts}`;
+  const measures = new Map();   // 표 → 잰 값
+  warmBox.insertAdjacentHTML('beforeend', `<div class="m-free">${esc([book.title, book.subtitle, book.edition, book.publisher, book.date, L.toc].join(' '))}</div>`);
+  for (let i = 0; i < tabs.length; i++) {
+    const { t } = tabs[i];
+    if (measures.has(t.el)) continue;
+    let m = MEASURE.get(t.el)?.get(mkey);
+    if (!m) {
+      onProgress?.(`재는 중 ${i + 1} / ${tabs.length}`);
+      m = await measureTable(t.el, box, book.fs);
+      if (!MEASURE.has(t.el)) MEASURE.set(t.el, new Map());
+      MEASURE.get(t.el).set(mkey, m);
     }
+    measures.set(t.el, m);
   }
-  box.insertAdjacentHTML('beforeend', `<div class="m-free">${esc([book.title, book.subtitle, book.publisher, book.date, L.toc].join(' '))}</div>`);
-  for (let k = 0; k < 3; k++) { rect(box); await document.fonts.ready; await new Promise(requestAnimationFrame); }
-  const G = book.grid === false ? null : gridSpec(box, availW, book.fs);
+  await document.fonts.ready;
+  const G = book.grid === false ? null : gridFromMeasures(measures.values(), availW, book.fs);
+  lap('grid');
   const rightBound = book.binding === 'right';
   const isRightHand = (n) => (n % 2 === 1) !== rightBound;   // n 쪽이 펼쳤을 때 오른쪽 면인가
   const snapY = (v) => (G ? Math.ceil(v / G.R - 1e-3) * G.R : v);
@@ -734,29 +808,48 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
   const gapY = fillMode ? snapY(G ? G.R : 3 * MM) : snapY(G ? 4 * MM : 7 * MM);
   const contH = fillMode ? 0 : snapY(5 * MM);
 
+  // 표의 계획(재기·가로 조각)은 이번 그리기 동안 붙잡아 두고, 쪽의 자리마다 세로 띠만 새로 자른다
+  const plans = new Map();
+  const planFor = async (b, ex) => {
+    const pk = JSON.stringify([b.ck, Math.round(ex.firstW || 0), Math.round(ex.firstH || 0)]);
+    if (!plans.has(pk)) plans.set(pk, await planTable(b.src, box, { ...b.fopt, ...ex }, measures.get(b.src)));
+    return plans.get(pk);
+  };
+  const fragsFor = async (b, ex) => {
+    const fk = JSON.stringify([b.ck, Math.round(ex.firstW || 0), Math.round(ex.firstH || 0), Math.round(ex.startY || 0), Math.round(ex.tierH || 0)]);
+    if (FRAG_CACHE.has(fk)) return FRAG_CACHE.get(fk);
+    const plan = await planFor(b, ex);
+    const fr = !plan || Array.isArray(plan) ? plan : plan.cut(ex.startY || 0, ex.tierH || 0);
+    FRAG_CACHE.set(fk, fr);
+    if (FRAG_CACHE.size > 400) FRAG_CACHE.delete(FRAG_CACHE.keys().next().value);
+    if (fr?.some((f) => f.overflow)) warnings.add(`판면을 넘침: ${b.item.label}`);
+    return fr;
+  };
+
   /* 1. 본문 조각들 */
   const blocks = [];   // { kind, item, frags | html }
   for (let i = 0; i < book.items.length; i++) {
     const it = book.items[i];
-    onProgress?.(`${i + 1} / ${book.items.length}`);
+    onProgress?.(`나누는 중 ${i + 1} / ${book.items.length}`);
     if (it.type === 'table') {
       const d = docs.get(`${it.title}@${it.oldid}`);
       const t = d?.tables[it.idx];
-      if (!t) { warnings.push(`표를 찾지 못함: ${it.label || it.title}`); continue; }
+      if (!t) { warnings.add(`표를 찾지 못함: ${it.label || it.title}`); continue; }
       const fopt = {
         fit: it.fit || 'split', scale: (it.scale || 100) / 100, fs: book.fs, align: !!book.alignBands,
         minScale: 0.7, availW, availH, grid: G, fill: fillMode, gapY, contH,
       };
-      // 같은 표·같은 조건이면 지난번에 자른 것을 다시 쓴다 (제목만 고쳤을 때 등)
+      // 가로 조각까지만 정해 둔다 (세로 띠는 쪽에 놓을 때 그 자리에 맞춰). 같은 표·같은 조건이면 지난번 것을 다시 쓴다
       const ck = JSON.stringify([it.title, it.oldid, it.idx, fopt, book.fonts]);
-      let frags = FRAG_CACHE.get(ck);
-      if (!frags) {
-        frags = await tableFragments(t.el, box, fopt);
-        FRAG_CACHE.set(ck, frags);
-        if (FRAG_CACHE.size > 200) FRAG_CACHE.delete(FRAG_CACHE.keys().next().value);
+      const b = { kind: 'table', item: it, lang: langOf(t.titleText + it.title), src: t.el, fopt, ck };
+      b.info = INFO_CACHE.get(ck);
+      if (!b.info) {
+        const plan = await planFor(b, {});
+        b.info = !plan || Array.isArray(plan) ? { hChunks: 1, spread: false, w0: plan?.[0]?.w || 0 } : { hChunks: plan.hChunks, spread: plan.spread, w0: plan.w0 };
+        INFO_CACHE.set(ck, b.info);
+        if (INFO_CACHE.size > 400) INFO_CACHE.delete(INFO_CACHE.keys().next().value);
       }
-      if (frags.some((f) => f.overflow)) warnings.push(`판면을 넘침: ${it.label}`);
-      blocks.push({ kind: 'table', item: it, frags, lang: langOf(t.titleText + it.title), src: t.el, fopt, ck });
+      blocks.push(b);
     } else if (it.type === 'divider') {
       blocks.push({ kind: 'divider', item: it });
     } else if (it.type === 'text') {
@@ -773,12 +866,15 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
     }
   }
 
+  lap('plans');
   /* 2. 쪽 배치 (차례 쪽 수를 맞출 때까지 되풀이) */
   let tocPages = book.parts.toc ? 1 : 0;
-  let pages, tocEntries;
+  let pages, tocEntries, secMarks;
   for (let round = 0; round < 4; round++) {
     pages = [];
     tocEntries = [];
+    secMarks = new Map();   // 쪽 없는 구역: 그 구역이 시작하는 쪽(차례 번호) → 이름
+    let deferred = null;    // 쪽 없는 구역에 준 쪽 번호: 다음에 생기는 쪽에 단다
     if (book.parts.cover) pages.push({ kind: 'cover' });
     for (let k = 0; k < tocPages; k++) pages.push({ kind: 'toc', part: k });
     let cur = null;   // 지금 채우는 표 쪽
@@ -814,7 +910,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
       // 항목의 시작: 새 쪽 / 왼쪽·오른쪽 면 / 쪽 번호 다시 매기기 (번호만 주면 그 번호의 홀짝에 맞는 면에서)
       const it = b.item;
       const restart = it.folio === '' || it.folio == null || !Number.isFinite(+it.folio) ? null : Math.trunc(+it.folio);
-      const spreadItem = b.kind === 'table' && b.frags.some((f) => f.side);
+      const spreadItem = b.kind === 'table' && b.info.spread;
       let hand = it.start === 'left' || it.start === 'right' ? it.start : null;
       if (restart != null && !hand) hand = isRightHand(restart) ? 'right' : 'left';
       if (spreadItem) hand = null;   // 펼침면은 스스로 면을 정한다
@@ -826,6 +922,12 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
         const k = pages.findIndex((pg, i) => i >= firstIdx && pg.kind !== 'blank');
         if (k >= 0) pages[k].restart = restart;
       };
+      if (b.kind === 'divider' && b.item.inline) {   // 쪽 없이 구역만: 다음 쪽부터 새 구역
+        secMarks.set(pages.length, b.item.text || '');
+        tocEntries.push({ text: b.item.text || '', page: pages.length + 1, level: 0, sec: true });
+        if (restart != null) deferred = { restart, firstIdx };
+        continue;
+      }
       if (b.kind === 'divider') {
         pages.push({ kind: 'divider', item: b.item });
         markRestart();
@@ -842,40 +944,26 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
       }
       // 표: 쪽은 단(段)들로 채운다. 조각은 지금 단의 오른쪽에 들어가면 나란히, 아니면 아래에 새 단, 그도 안 되면 새 쪽.
       // 격자에서는 단의 오른쪽이 넉넉히 남았는데 표가 거기 다 들어가지 않으면, 실제 시각표처럼 첫 열차들을 거기에 이어 싣는다.
-      let frags = b.frags;
+      let frags = null;
+      const tier0 = book.pack && cur && !cur.side && !spreadItem ? cur.tiers[cur.tiers.length - 1] : null;
+      if (G && tier0) {
+        const remW = availW - tier0.x;
+        const remH = Math.floor(availH / G.R + 1e-6) * G.R - tier0.y;
+        if (b.info.hChunks > 1 && b.info.w0 > remW + 0.5 && remW >= 4 * G.P - 0.5 && remH > availH * 0.15) {
+          frags = await fragsFor(b, { firstW: remW, firstH: remH, startY: tier0.y, tierH: tier0.h });
+        }
+      }
+      // 쪽 꽉 채우기: 이 쪽의 남은 높이에서부터 띠를 자른다
+      if (!frags) {
+        let startY = fillMode && tier0 && !b.fopt.align ? snapY(tier0.y + tier0.h + gapY) : 0;
+        if (startY >= availH - 0.5) startY = 0;
+        frags = await fragsFor(b, { startY });
+      }
       // 오른쪽 철에서는 펼침면의 오른쪽 면이 먼저 온다: 짝(L, R)을 (R, L)로
       if (rightBound && spreadItem) {
         frags = frags.slice();
         for (let i = 0; i + 1 < frags.length; i++) {
           if (frags[i].side === 'L' && frags[i + 1].side === 'R') { [frags[i], frags[i + 1]] = [frags[i + 1], frags[i]]; i++; }
-        }
-      }
-      if (G && book.pack && cur && !cur.side && !frags[0].side) {
-        const tier = cur.tiers[cur.tiers.length - 1];
-        const remW = availW - tier.x;
-        const remH = Math.floor(availH / G.R + 1e-6) * G.R - tier.y;
-        if (frags.hChunks > 1 && frags[0].w > remW + 0.5 && remW >= 4 * G.P - 0.5 && remH > availH * 0.15) {
-          const fk = JSON.stringify([b.ck, Math.round(remW), Math.round(remH)]);
-          let ff = FRAG_CACHE.get(fk);
-          if (ff === undefined) {
-            ff = await tableFragments(b.src, box, { ...b.fopt, firstW: remW, firstH: remH, startY: tier.y, tierH: tier.h });
-            FRAG_CACHE.set(fk, ff);
-          }
-          if (ff) frags = ff;
-        }
-      }
-      // 쪽 꽉 채우기: 이 쪽의 남은 높이에서부터 띠를 자른다
-      if (fillMode && frags === b.frags && book.pack && cur && !cur.side && !frags[0].side && !b.fopt.align) {
-        const tier = cur.tiers[cur.tiers.length - 1];
-        const startY = snapY(tier.y + tier.h + gapY);
-        if (startY < availH - 0.5) {
-          const fk = JSON.stringify([b.ck, 'y', Math.round(startY)]);
-          let ff = FRAG_CACHE.get(fk);
-          if (ff === undefined) {
-            ff = await tableFragments(b.src, box, { ...b.fopt, startY });
-            FRAG_CACHE.set(fk, ff);
-          }
-          if (ff) frags = ff;
         }
       }
       frags.forEach((f, k) => {
@@ -908,6 +996,10 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
         if (f.side) cur = null;   // 펼침면 쪽에는 더 싣지 않는다
       });
       markRestart();
+      if (deferred && pages.length > deferred.firstIdx) {
+        const k = pages.findIndex((pg, i) => i >= deferred.firstIdx && pg.kind !== 'blank');
+        if (k >= 0) { pages[k].restart = deferred.restart; deferred = null; }
+      }
     }
     // 남은 囲み記事는 마지막 표 쪽에, 그래도 남으면 새 쪽에 차례로
     fitNotes();
@@ -936,6 +1028,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
     tocPages = need;
   }
 
+  lap('placed');
   /* 3. 그리기 */
   out.innerHTML = '';
   // 찍히는 쪽 번호: 표지부터 1, 2, … 다시 매기라는 쪽에서 그 수로
@@ -948,10 +1041,11 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
   const tocChunks = book.parts.toc ? await splitToc(tocEntries, box, availH, L) : [];
   // 찾기 표(爪): 중표지마다 한 구역. 구역의 쪽들 바깥 가장자리에 구역 이름을 단다
   let sec = null, secN = -1;
-  for (const p of pages) {
+  pages.forEach((p, i) => {
+    if (secMarks.has(i)) sec = { text: secMarks.get(i), idx: ++secN };
     if (p.kind === 'divider') sec = { text: p.item.text || '', idx: ++secN };
     if (sec && sec.text && ['divider', 'table', 'text'].includes(p.kind)) p.sec = sec;
-  }
+  });
   pages.forEach((p, i) => {
     const n = i + 1;
     const sheet = makeSheet(book, g, isRightHand(n));
@@ -971,7 +1065,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
     else if (p.kind === 'colophon') { content.appendChild(colophon(book, docs, L)); runhead = ''; page.classList.add('is-blank'); }
     else if (p.kind === 'table') {
       // 머리글: 이 쪽에 실린 표 이름들 (같은 앞부분은 한 번만), 앞 쪽에서 이어지면 '(つづき)'
-      runhead = joinLabels(p.labels) + (p.contFirst ? (STR[p.lang] || L).contd : '');
+      runhead = joinLabels(p.labels, (STR[p.lang] || L).more) + (p.contFirst ? (STR[p.lang] || L).contd : '');
       // 단마다 마지막 조각의 오른쪽을 빈 열로 판면 끝까지 채운다
       const lastOf = new Map();
       for (const pl of p.frags) if (pl.f && (!lastOf.has(pl.y) || pl.x > lastOf.get(pl.y).x)) lastOf.set(pl.y, pl);
@@ -1011,19 +1105,22 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
     if (book.parts.folio && folio) page.querySelector('.folio').textContent = folio;
     out.appendChild(sheet);
   });
+  lap('drawn');
   mroot.innerHTML = '';
-  return { pages: pages.length, warnings, size: [W, H] };
+  return { pages: pages.length, warnings: [...warnings], size: [W, H] };
 }
 
-/** 머리글: 'A B 下り' + 'A B 上り' → 'A B 下り・上り' */
-function joinLabels(labels) {
-  const ls = [...new Set((labels || []).filter(Boolean))];
+/** 머리글: 'A B 下り' + 'A B 上り' → 'A B 下り・上り'. 셋보다 많으면 앞의 둘과 '외 n'(他 n) */
+function joinLabels(labels, more = '외') {
+  let ls = [...new Set((labels || []).filter(Boolean))];
   if (ls.length <= 1) return ls[0] || '';
+  const rest = ls.length > 3 ? ls.length - 2 : 0;
+  if (rest) ls = ls.slice(0, 2);
   const toks = ls.map((l) => l.split(/\s+/));
   let k = 0;
   while (toks.every((t) => t.length > k + 1 && t[k] === toks[0][k])) k++;
-  if (!k) return ls.join(' · ');
-  return `${toks[0].slice(0, k).join(' ')} ${toks.map((t) => t.slice(k).join(' ')).join('・')}`;
+  const body = k ? `${toks[0].slice(0, k).join(' ')} ${toks.map((t) => t.slice(k).join(' ')).join('・')}` : ls.join(' · ');
+  return rest ? `${body} ${more} ${rest}` : body;
 }
 
 /** 囲み記事 상자 */

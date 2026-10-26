@@ -1,5 +1,5 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=8';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=9';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
@@ -83,15 +83,40 @@ async function api(params) {
   return j;
 }
 
+const inflight = new Map();      // 같은 문서를 동시에 두 번 받지 않는다
 async function getDoc(title, oldid) {
   const key = `${title}@${oldid || 'latest'}`;
   if (docs.has(key)) return docs.get(key);
-  const j = await api(oldid ? { action: 'page', title, oldid } : { action: 'page', title });
-  const d = { title: j.title, revid: j.revid, timestamp: j.timestamp, latest: j.latest, tables: extractTables(j.html) };
-  docs.set(`${title}@${j.revid}`, d);
-  if (!oldid) docs.set(key, d);
-  return d;
+  if (inflight.has(key)) return inflight.get(key);
+  const p = (async () => {
+    const j = await api(oldid ? { action: 'page', title, oldid } : { action: 'page', title });
+    const d = { title: j.title, revid: j.revid, timestamp: j.timestamp, latest: j.latest, tables: extractTables(j.html) };
+    docs.set(`${title}@${j.revid}`, d);
+    if (!oldid) docs.set(key, d);
+    return d;
+  })();
+  inflight.set(key, p);
+  try { return await p; } finally { inflight.delete(key); }
 }
+
+/** 많은 일을 n 개씩만 동시에 (위키 서버가 한꺼번에 파싱하느라 막히지 않게) */
+async function pool(list, n, fn, onEach) {
+  let i = 0, done = 0;
+  const out = new Array(list.length);
+  await Promise.all(Array.from({ length: Math.min(n, list.length) }, async () => {
+    while (i < list.length) {
+      const k = i++;
+      try { out[k] = await fn(list[k]); } catch (e) { console.warn(e); }
+      onEach?.(++done, list.length);
+    }
+  }));
+  return out;
+}
+
+/** 노선·해 차례: '시각표:경춘선/2010년' → ['경춘선', '2010년'] 을 숫자까지 자연스럽게 */
+const collator = new Intl.Collator(['ko', 'ja'], { numeric: true });
+const lineOf = (title) => shortTitle(title).split(' ')[0];
+const byTitle = (a, b) => collator.compare(lineOf(a), lineOf(b)) || collator.compare(a, b);
 
 /* ── 자료 목록 ── */
 const NS_ORDER = { 3006: 0 };
@@ -101,7 +126,7 @@ function renderSources() {
   ul.innerHTML = '';
   const list = pageList
     .filter((p) => !q || p.title.toLowerCase().includes(q) || p.displaytitle.toLowerCase().includes(q))
-    .sort((a, b) => (NS_ORDER[a.ns] ?? 9) - (NS_ORDER[b.ns] ?? 9) || a.title.localeCompare(b.title, 'ko'));
+    .sort((a, b) => (NS_ORDER[a.ns] ?? 9) - (NS_ORDER[b.ns] ?? 9) || byTitle(a.title, b.title));
   for (const p of list) {
     const li = document.createElement('li');
     const ns = p.title.includes(':') ? p.title.split(':')[0] : '';
@@ -143,6 +168,7 @@ function addTable(title, oldid, idx, label) {
 }
 
 /* ── 싣는 차례 ── */
+let dragFrom = -1;
 const FIT = [['split', '나누기'], ['shrink', '줄여 맞추기'], ['spread', '펼침면']];
 const START = [['', '이어서'], ['page', '새 쪽'], ['left', '왼쪽 면에서'], ['right', '오른쪽 면에서']];
 function renderItems() {
@@ -151,8 +177,30 @@ function renderItems() {
   $('#itemCount').textContent = book.items.length ? `${book.items.length}개` : '자료에서 표를 더한다';
   const latest = new Map(pageList.map((p) => [p.title, p.revid]));
   const grid = book.grid !== false;
+  let inSec = false;
   book.items.forEach((it, i) => {
     const li = document.createElement('li');
+    if (it.type === 'divider') { li.classList.add('sec'); inSec = true; } else if (inSec) li.classList.add('in-sec');
+    // 끌어서 옮기기 (번호를 잡고)
+    li.draggable = true;
+    li.addEventListener('dragstart', (e) => {
+      if (e.target.closest('input, textarea, select')) { e.preventDefault(); return; }
+      dragFrom = i;
+      li.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    li.addEventListener('dragend', () => li.classList.remove('dragging'));
+    li.addEventListener('dragover', (e) => { if (dragFrom < 0) return; e.preventDefault(); li.classList.add('drop-before'); });
+    li.addEventListener('dragleave', () => li.classList.remove('drop-before'));
+    li.addEventListener('drop', (e) => {
+      e.preventDefault();
+      li.classList.remove('drop-before');
+      if (dragFrom < 0 || dragFrom === i) return;
+      const [x] = book.items.splice(dragFrom, 1);
+      book.items.splice(dragFrom < i ? i - 1 : i, 0, x);
+      dragFrom = -1;
+      changed(true);
+    });
     const body = document.createElement('div');
     body.className = 'body';
     if (it.type === 'table') {
@@ -162,8 +210,9 @@ function renderItems() {
         <div class="opts"><select data-k="fit">${FIT.filter(([v]) => !(grid && v === 'shrink') || it.fit === v).map(([v, t]) => `<option value="${v}"${it.fit === v ? ' selected' : ''}>${t}${grid && v === 'shrink' ? ' (격자에서는 나누기)' : ''}</option>`).join('')}</select>
         <input type="number" data-k="scale" min="40" max="150" step="5" value="${it.scale || 100}"${grid ? ' disabled title="격자에 맞출 때는 책 전체가 같은 글자 크기"' : ' title="글자 크기 (%)"'}></div>`;
     } else if (it.type === 'divider') {
-      body.innerHTML = `<input type="text" data-k="text" value="${esc(it.text || '')}" placeholder="중표지 제목">
-        <input type="text" data-k="sub" value="${esc(it.sub || '')}" placeholder="작은 글 (없어도 됨)">`;
+      body.innerHTML = `<input type="text" data-k="text" value="${esc(it.text || '')}" placeholder="구역 이름 (중표지 제목)">
+        ${it.inline ? '' : `<input type="text" data-k="sub" value="${esc(it.sub || '')}" placeholder="작은 글 (없어도 됨)">`}
+        <label class="chk" title="중표지 쪽을 따로 두지 않고, 새 쪽에서 구역(찾기 표·차례의 구역)만 시작한다"><input type="checkbox" data-k="inline"${it.inline ? ' checked' : ''}>쪽 없이 구역만</label>`;
     } else {
       body.innerHTML = `<input type="text" data-k="toc" value="${esc(it.toc || '')}" placeholder="차례에 올릴 이름 (없으면 안 올림)">
         <textarea data-k="text" rows="4" placeholder="빈 줄로 문단을 나눈다. '# '는 제목, '- '는 목록">${esc(it.text || '')}</textarea>
@@ -179,7 +228,7 @@ function renderItems() {
         it[k] = el.type === 'checkbox' ? el.checked
           : k === 'scale' ? Math.max(40, Math.min(150, +el.value || 100))
           : k === 'folio' ? (el.value === '' || !Number.isFinite(+el.value) ? '' : Math.trunc(+el.value)) : el.value;
-        changed(k === 'float');
+        changed(k === 'float' || k === 'inline');
       });
     });
     const ctl = document.createElement('div');
@@ -248,9 +297,9 @@ async function render() {
   busy = true;
   const status = $('#status');
   try {
-    const need = book.items.filter((it) => it.type === 'table');
+    const need = [...new Map(book.items.filter((it) => it.type === 'table').map((it) => [`${it.title}@${it.oldid}`, it])).values()];
     status.textContent = '자료를 불러오는 중…';
-    await Promise.all(need.map((it) => getDoc(it.title, it.oldid).catch((e) => { console.warn(e); })));
+    await pool(need, 4, (it) => getDoc(it.title, it.oldid), (k, n) => { status.textContent = `자료를 불러오는 중… ${k} / ${n}`; });
     for (const el of [$('#sheets'), $('#measure')]) {
       el.classList.toggle('shaken', book.fonts === 'shaken');
       el.classList.toggle('mono', book.color === 'mono');
@@ -399,6 +448,41 @@ $('#btnNew').onclick = () => {
 };
 $('#addDivider').onclick = () => { book.items.push({ type: 'divider', text: '', sub: '' }); changed(true); };
 $('#addText').onclick = () => { book.items.push({ type: 'text', toc: '', text: '' }); changed(true); };
+// 구역(중표지) 안의 표들을 노선·해·문서 안 차례로. 중표지와 글 쪽은 제자리
+$('#sortItems').onclick = () => {
+  const out = [];
+  let run = [];
+  const flush = () => { run.sort((a, b) => byTitle(a.title, b.title) || a.idx - b.idx); out.push(...run); run = []; };
+  for (const it of book.items) {
+    if (it.type === 'table') run.push(it);
+    else { flush(); out.push(it); }
+  }
+  flush();
+  book.items = out;
+  changed(true);
+};
+// 찾은 시각표 문서의 표를 모두: 노선마다 쪽 없는 구역 하나, 노선·해 차례로
+$('#addAll').onclick = async () => {
+  const q = $('#srcFind').value.trim().toLowerCase();
+  const list = pageList.filter((p) => p.ns === 3006 && (!q || p.title.toLowerCase().includes(q) || p.displaytitle.toLowerCase().includes(q)))
+    .sort((a, b) => byTitle(a.title, b.title));
+  if (!list.length) return;
+  if (list.length > 5 && !confirm(`시각표 문서 ${list.length}개의 표를 모두 싣는다. 할까?`)) return;
+  const status = $('#status');
+  const got = await pool(list, 4, (p) => getDoc(p.title), (k, n) => { status.textContent = `문서를 받는 중… ${k} / ${n}`; });
+  let line = null;
+  const have = new Set(book.items.filter((it) => it.type === 'table').map((it) => `${it.title}#${it.idx}`));
+  list.forEach((p, k) => {
+    const d = got[k];
+    if (!d || !d.tables.length) return;
+    if (lineOf(p.title) !== line) {
+      line = lineOf(p.title);
+      book.items.push({ type: 'divider', text: line, sub: '', inline: true });
+    }
+    for (const t of d.tables) if (!have.has(`${p.title}#${t.idx}`)) book.items.push({ type: 'table', title: p.title, oldid: d.revid, idx: t.idx, label: defaultLabel(p.title, t), fit: 'split', scale: 100 });
+  });
+  changed(true);
+};
 $('#srcFind').addEventListener('input', renderSources);
 $('#pvZoom').addEventListener('change', fitZoom);
 addEventListener('resize', () => { clearTimeout(fitZoom.t); fitZoom.t = setTimeout(fitZoom, 150); });

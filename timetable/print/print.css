@@ -63,6 +63,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .items { list-style: none; margin: 0; padding: 0; counter-reset: it; }
 .items > li { border-top: 1px solid var(--ui-line); padding: 6px 0; display: grid; grid-template-columns: 1.6em 1fr auto; gap: 4px 6px; align-items: start; }
+.items > li.sec { background: #f7f6f3; }
+.items > li.in-sec .body { border-left: 2px solid var(--ui-line); padding-left: 6px; }
+.items > li.dragging { opacity: .4; }
+.items > li.drop-before { box-shadow: inset 0 2px 0 var(--ui-accent); }
+.items > li[draggable=true]::before { cursor: grab; }
+.findrow { display: flex; gap: 6px; }
+.findrow .find { flex: 1; min-width: 0; }
+.findrow button { border: 1px solid var(--ui-line); background: var(--ui-bg); border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px; white-space: nowrap; }
 .items > li::before { counter-increment: it; content: counter(it); color: var(--ui-faint); font-size: 12px; padding-top: 5px; text-align: right; }
 .items .body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .items .meta { font-size: 11px; color: var(--ui-faint); }

@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/font/un/unbatang.css?v=1">
 <link rel="stylesheet" href="/font/un/undotum.css?v=1">
 <link rel="stylesheet" href="api.php?action=css">
-<link rel="stylesheet" href="print.css?v=8">
+<link rel="stylesheet" href="print.css?v=9">
 <style id="pagesize">@page { size: 182mm 257mm; margin: 0; }</style>
 </head>
 <body>
@@ -85,7 +85,8 @@
 
     <details open>
       <summary>자료 <span class="hint">문서를 눌러 표를 고른다</span></summary>
-      <input id="srcFind" type="search" placeholder="문서 찾기" class="find">
+      <div class="findrow"><input id="srcFind" type="search" placeholder="문서 찾기 (노선·해·지역)" class="find">
+        <button type="button" id="addAll" title="찾은 시각표 문서의 표를 모두 싣는다. 노선마다 구역(쪽 없는 중표지)을 하나씩 세우고, 노선·해 차례로 늘어놓는다">찾은 것 모두 싣기</button></div>
       <ul id="srcList" class="src"></ul>
     </details>
 
@@ -95,6 +96,7 @@
       <div class="add">
         <button type="button" id="addDivider">+ 중표지</button>
         <button type="button" id="addText">+ 글 쪽</button>
+        <button type="button" id="sortItems" title="구역(중표지) 안의 표들을 노선·해·문서 안의 차례로 늘어놓는다">구역 안 정렬</button>
       </div>
     </details>
   </aside>
@@ -115,6 +117,6 @@
 
 <div id="measure" class="book" aria-hidden="true"></div>
 
-<script type="module" src="app.js?v=8"></script>
+<script type="module" src="app.js?v=9"></script>
 </body>
 </html>
