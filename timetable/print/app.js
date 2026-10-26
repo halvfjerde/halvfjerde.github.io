@@ -404,6 +404,11 @@ $('#btnShare').onclick = async () => {
   const url = `${location.origin}${location.pathname}#read=${await packBook(book)}`;
   try { await navigator.clipboard.writeText(url); $('#status').textContent = '읽기 링크를 복사했다'; } catch (e) { prompt('읽기 링크', url); }
 };
+$('#btnPdf').onclick = async () => {
+  const w = window.open('', '_blank');
+  const url = `pdf.php?b=${await packBook(book)}`;
+  if (w) w.location = url; else location.href = url;
+};
 $('#btnEdit').onclick = () => {
   if (!confirm('이 책을 편집기로 가져올까? 지금 편집 중이던 책은 바뀐다.')) return;
   reading = false;
