@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/font/un/unbatang.css?v=1">
 <link rel="stylesheet" href="/font/un/undotum.css?v=1">
 <link rel="stylesheet" href="api.php?action=css">
-<link rel="stylesheet" href="print.css?v=2">
+<link rel="stylesheet" href="print.css?v=3">
 <style id="pagesize">@page { size: 182mm 257mm; margin: 0; }</style>
 </head>
 <body>
@@ -68,7 +68,8 @@
         <label><input type="checkbox" id="pRunhead">머리글</label>
         <label><input type="checkbox" id="pFolio">쪽 번호</label>
         <label><input type="checkbox" id="pColophon">판권</label>
-        <label><input type="checkbox" id="pPack" title="작은 표는 한 쪽에 여러 개 싣는다">작은 표 모아 싣기</label>
+        <label><input type="checkbox" id="pGrid" title="실제 시각표처럼 모든 쪽이 같은 열 폭·행 높이를 쓰고, 남는 폭은 괘선만 있는 빈 열로 채운다. 앞뒤 쪽 괘선도 겹친다">격자에 맞추기</label>
+        <label><input type="checkbox" id="pPack" title="작은 표·조각은 한 쪽에 나란히 또는 위아래로 여러 개 싣는다">모아 싣기</label>
         <label><input type="checkbox" id="pAlign" title="긴 표를 여러 쪽으로 나눌 때 모든 쪽이 같은 역에서 끊기게 한다 (쪽 수는 늘 수 있다)">구간 맞추기</label>
         <label><input type="checkbox" id="pPad4" title="중철 제본용: 빈 쪽을 더해 4의 배수로">4의 배수로</label>
         <label><input type="checkbox" id="pMarks" title="입고용: 재단선과 도련 3mm">재단선</label>
@@ -105,6 +106,6 @@
 
 <div id="measure" class="book" aria-hidden="true"></div>
 
-<script type="module" src="app.js?v=2"></script>
+<script type="module" src="app.js?v=3"></script>
 </body>
 </html>

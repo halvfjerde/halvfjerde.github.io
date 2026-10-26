@@ -1,5 +1,5 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=2';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=3';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
@@ -11,7 +11,7 @@ const DEFAULT = () => ({
   page: { size: 'B5', w: 182, h: 257, margin: { top: 14, bottom: 14, inner: 16, outer: 12 } },
   fs: 8, fonts: 'free', color: 'color',
   parts: { cover: true, toc: true, runhead: true, folio: true, colophon: true },
-  pack: true, alignBands: false, pad4: false, output: { marks: false },
+  pack: true, grid: true, alignBands: false, pad4: false, output: { marks: false },
   items: [],
 });
 
@@ -108,6 +108,7 @@ function renderItems() {
   ol.innerHTML = '';
   $('#itemCount').textContent = book.items.length ? `${book.items.length}개` : '자료에서 표를 더한다';
   const latest = new Map(pageList.map((p) => [p.title, p.revid]));
+  const grid = book.grid !== false;
   book.items.forEach((it, i) => {
     const li = document.createElement('li');
     const body = document.createElement('div');
@@ -116,8 +117,8 @@ function renderItems() {
       const old = latest.get(it.title) && latest.get(it.title) > it.oldid;
       body.innerHTML = `<input type="text" data-k="label" value="${esc(it.label)}" title="차례와 머리글에 쓰는 이름">
         <div class="meta">${esc(shortTitle(it.title))} · 판 ${it.oldid}${old ? ' <span class="old">· 더 새 판 있음</span>' : ''}</div>
-        <div class="opts"><select data-k="fit">${FIT.map(([v, t]) => `<option value="${v}"${it.fit === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
-        <input type="number" data-k="scale" min="40" max="150" step="5" value="${it.scale || 100}" title="글자 크기 (%)"></div>`;
+        <div class="opts"><select data-k="fit">${FIT.filter(([v]) => !(grid && v === 'shrink') || it.fit === v).map(([v, t]) => `<option value="${v}"${it.fit === v ? ' selected' : ''}>${t}${grid && v === 'shrink' ? ' (격자에서는 나누기)' : ''}</option>`).join('')}</select>
+        <input type="number" data-k="scale" min="40" max="150" step="5" value="${it.scale || 100}"${grid ? ' disabled title="격자에 맞출 때는 책 전체가 같은 글자 크기"' : ' title="글자 크기 (%)"'}></div>`;
     } else if (it.type === 'divider') {
       body.innerHTML = `<input type="text" data-k="text" value="${esc(it.text || '')}" placeholder="중표지 제목">
         <input type="text" data-k="sub" value="${esc(it.sub || '')}" placeholder="작은 글 (없어도 됨)">`;
@@ -160,7 +161,7 @@ const FIELDS = [
 ];
 const CHECKS = [
   ['#pCover', 'parts.cover'], ['#pToc', 'parts.toc'], ['#pRunhead', 'parts.runhead'], ['#pFolio', 'parts.folio'],
-  ['#pColophon', 'parts.colophon'], ['#pPack', 'pack'], ['#pAlign', 'alignBands'], ['#pPad4', 'pad4'], ['#pMarks', 'output.marks'],
+  ['#pColophon', 'parts.colophon'], ['#pPack', 'pack'], ['#pGrid', 'grid'], ['#pAlign', 'alignBands'], ['#pPad4', 'pad4'], ['#pMarks', 'output.marks'],
 ];
 const getp = (o, path) => path.split('.').reduce((a, k) => a?.[k], o);
 const setp = (o, path, v) => { const ks = path.split('.'); const last = ks.pop(); ks.reduce((a, k) => (a[k] ??= {}), o)[last] = v; };
@@ -181,7 +182,7 @@ function bindForm() {
       changed(false);
     });
   }
-  for (const [sel, path] of CHECKS) $(sel).addEventListener('change', (e) => { setp(book, path, e.target.checked); changed(false); });
+  for (const [sel, path] of CHECKS) $(sel).addEventListener('change', (e) => { setp(book, path, e.target.checked); changed(path === 'grid'); });
 }
 
 /* ── 그리기 ── */

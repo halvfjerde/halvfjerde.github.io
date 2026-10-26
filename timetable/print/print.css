@@ -124,8 +124,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .marks { position: absolute; left: 0; top: 0; }
 .marks line { stroke: #000; stroke-width: .1; }
 
-.frag { width: max-content; max-width: none; }
-.frag-l { margin-left: auto; }
+.frag { position: absolute; width: max-content; max-width: none; }
 .frag .cont { text-align: right; font: 7pt/1 var(--bk-gothic); margin-top: 1.5mm; }
 
 /* 흑백: 빨강 글씨는 먹으로, 나머지는 회색조로 */
