@@ -141,6 +141,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .book.f-shippori {
   --bk-mincho: "Shippori Mincho", "UnBatang", "Zen Old Mincho", serif;
 }
+/* SM 세명조·태고딕 (손에 둔 것, 이 컴퓨터에 설치). 한글·한자 모두 SM 글꼴, 가나·기호는 뒤의 글꼴로 */
+.book.f-sm {
+  --bk-mincho: "SM SEMyungJo Std", "Zen Old Mincho", "UnBatang", serif;
+  --bk-gothic: "SM TGothic Std", "Zen Kaku Gothic New", "UnDotum", sans-serif;
+}
 .book.shaken {
   --bk-mincho: "IshiiMincho Old R", "UnBatang", "Zen Old Mincho", serif;
   --bk-gothic: "IshiiGothic B", "UnDotum", "Zen Kaku Gothic New", sans-serif;
@@ -156,6 +161,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   margin: 0 !important;
 }
 .book .jtt-scroll { overflow: visible !important; }
+/* 지면에서는 행을 아주 조금 높게 (위키 1.2 → 1.26): 선 두께 몫으로 머리 행이 격자 한 줄을 넘기지 않게, 숨 쉴 틈 */
+.book .jtt-wrap { line-height: 1.26 !important; }
 /* 지면에서는 위키의 줄 상자 잡이(JttStrut)를 쓰지 않는다: 지면 글꼴(명조·고딕)이 줄 상자를 정한다 */
 .book .jtt-wrap .jtt-k, .book .jtt-wrap .jtt-b, .book .jtt-wrap .jtt-bd, .book .jtt-wrap .jtt-bh,
 .book .jtt-wrap .jtt-dmk { font-family: "DiaPro", var(--jtt-sans) !important; }

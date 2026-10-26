@@ -1369,6 +1369,7 @@ function colophon(book, docs, L) {
     antique: 'DiaPro · Shippori Mincho B1 · Zen Kaku Gothic Antique · Song Myung (OFL) · 은바탕·은돋움 (GPL)',
     shippori: 'DiaPro · Shippori Mincho · Zen Kaku Gothic New (OFL) · 은바탕·은돋움 (GPL)',
     tokumin: 'DiaPro · Kaisei Tokumin · Shippori Antique B1 · Gowun Batang (OFL) · 은바탕·은돋움 (GPL)',
+    sm: 'DiaPro (OFL) · SM 세명조·SM 태고딕',
     local: `DiaPro (OFL) · ${[book.localMincho, book.localGothic].filter(Boolean).join('·') || 'Zen'} · 은바탕·은돋움 (GPL)`,
   }[book.fonts] || 'DiaPro (OFL) · Zen Old Mincho·Zen Kaku Gothic New (OFL) · 은바탕·은돋움 (GPL)';
   const d = document.createElement('div');
