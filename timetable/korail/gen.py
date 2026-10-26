@@ -265,22 +265,23 @@ class Table:
         self.o0, self.d0 = self.st[o0], self.st[d0]
         has_fr = has_to = True
         # 등급(KTX는 차종) 표지 바로 밑에 열차번호, 두 행은 이름 칸을 합쳐 사이 선 없이. 그 밑에 시발역
-        L.append(f'kind {lbl("no")} style=va=b')
+        L.append(f'kind {lbl("no")} style=va=b r={LBL["no"][1]}')
         L.append(f'no   ^ fmt=N{{*}} style=va=t')
-        if has_fr: L.append(f'fr   {lbl("fr")}')
+        if has_fr: L.append(f'fr   {lbl("fr")} r={LBL["fr"][1]}')
         L.append('')
         L.append('[footer]')
-        if has_to: L.append(f'to   {lbl("to")}')
+        if has_to: L.append(f'to   {lbl("to")} r={LBL["to"][1]}')
         has_day = any(tr['note'] for tr in self.trains)
         days = {tr['note'] for tr in self.trains if tr['note']}
         self.daysym = {'월화수목금': '◆', '토일': '◇'} if days and days <= {'월화수목금', '토일'} else None
-        if has_day: L.append(f'day  {lbl("day")}' + ('' if self.daysym_pre() else ' style=va=t'))
+        if has_day: L.append(f'day  {lbl("day")} r={LBL["day"][1]}' + ('' if self.daysym_pre() else ' style=va=t'))
         L.append('')
         thru = collections.Counter()
         for tr in self.trains:
             idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
             for i in idx[1:-1]: thru[i] += 1
-        self.split = {i for i in major if 0 < i < n - 1 and ends[i] >= max(2, 0.05 * N) and thru[i] >= 1}
+        # 중간에서 떠나거나 끝나는 열차가 하나라도 있고 지나가며 서는 열차도 있는 역은 모두 착발을 나눈다
+        self.split = {i for i in range(1, n - 1) if ends[i] >= 1 and thru[i] >= 1}
         # 표의 첫 역·끝 역: 그 역에서 떠나거나 닿는 열차가 여럿이면 나눈다
         first_n = sum(1 for tr in self.trains if next(i for i, x in enumerate(tr['times']) if isinstance(x, int)) == 0)
         last_n = sum(1 for tr in self.trains if max(i for i, x in enumerate(tr['times']) if isinstance(x, int)) == n - 1)
@@ -464,12 +465,7 @@ def share(ts):
     score = collections.Counter()
     for t in ts:
         for s, v in t.cand.items(): score[s] += v
-    # 착발역끼리도 바로 이웃하면 점수 높은 쪽만 (경주·서경주 등)
-    split = set()
-    for s in sorted(set().union(*(t.split_names for t in ts)), key=lambda s: -score[s]):
-        k = pos.get(s)
-        if k is not None and any(0 <= k + dk < len(order) and order[k + dk] in split for dk in (-1, 1)): continue
-        split.add(s)
+    split = set().union(*(t.split_names for t in ts))
     fixed = set(split)
     chosen = set(fixed)
     for s, v in score.most_common():
