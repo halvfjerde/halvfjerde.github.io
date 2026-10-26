@@ -4,7 +4,7 @@
     "w": 148,
     "h": 210,
     "margin": {
-      "top": 15,
+      "top": 13.5,
       "bottom": 11,
       "inner": 14,
       "outer": 9
@@ -40,5 +40,6 @@
     }
   ],
   "alignStrength": 0.85,
-  "titleInMargin": true
+  "titleInMargin": true,
+  "headGap": 2.0
 }

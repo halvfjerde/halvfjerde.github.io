@@ -1151,7 +1151,7 @@ class Book:
         fs = self.fs
         tex = []
         x0 = self.mi if recto else self.mo
-        base_y = self.mt - 3.5 * MM
+        base_y = self.mt - self.cfg.get('headGap', 3.5) * MM     # 머리글·쪽 번호의 글줄 ~ 판면 위 끝
         Y = self.H - base_y
         rh = self.inl.run(runhead, Ctx('GB', 8.5 / fs))
         if part:
