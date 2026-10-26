@@ -199,9 +199,12 @@ function snapRows(el, tb, R, T0) {
   const TOL = 4.5;   // 한 줄짜리로 보아 R 로 줄이는 한도 (이중선 3px 등)
   const set = [];
   let y = top0;
+  // 머리 행·꼬리 행(열차번호·시발역·종착역 등)은 격자를 조금 넘쳐도(행의 0.4까지) 한 줄을 더 잡지 않는다. 글줄 간격을 조금 줄여 맞춘다
+  const loose = (tr) => /\bjtt-(hr|f1|fr)\b/.test(tr.className);
   rows.forEach((tr, i) => {
     const h = nat[i];
-    let end = Math.ceil((y + h - T0 - (h <= R + TOL ? TOL : 0.5)) / R - 1e-6) * R + T0;
+    const tol = loose(tr) ? Math.max(TOL, R * 0.4) : (h <= R + TOL ? TOL : 0.5);
+    let end = Math.ceil((y + h - T0 - tol) / R - 1e-6) * R + T0;
     if (end - y < R * 0.5) end += R;
     const nh = end - y;
     tr.style.height = `${nh}px`;
@@ -566,17 +569,18 @@ export async function planTable(srcWrap, box, opt, M) {
   for (let c = t0, i = 0, pi = 0; c < t1; i++, pi++) {
     const side = sideOf(i);
     const withLeft = side !== 'R', withRight = side !== 'L';
+    const withTitle = withLeft || side === 'R';   // 펼침면 오른쪽 면에도 세로 제목(상하행 표지·행선)을 — 그리는 쪽에서 바깥(오른쪽)으로 옮긴다
     const mirror = side === 'R' && t1 >= g.ncol;
     const planned = plan[pi] ?? t1;
     let cut = planned, keepCols, tall;
     for (;;) {   // 실제로 놓아 보고 폭이 넘치면 한 열씩 줄인다
       const cc = cut, cs = c;
       keepCols = Array.from({ length: g.ncol }, (_, j) => (j < t0 && (withLeft || (mirror && mirCols.includes(j)))) || (j >= cs && j < cc) || (j >= t1 && withRight));
-      tall = build(allRows, keepCols, { notes: false, title: withLeft, mirror });
+      tall = build(allRows, keepCols, { notes: false, title: withTitle, mirror });
       if (tall.w <= wAt(i) + 0.5 || cut <= c + 1) break;
       cut--;
     }
-    chunks.push({ keepCols, tall, withLeft, side, mirror, overW: tall.w > wAt(i) + 0.5 });
+    chunks.push({ keepCols, tall, withLeft, withTitle, side, mirror, overW: tall.w > wAt(i) + 0.5 });
     c = cut;
     if (cut !== planned) { plan = greedyCols(c, i + 1); pi = -1; }
   }
@@ -618,7 +622,7 @@ export async function planTable(srcWrap, box, opt, M) {
     const bandOf = (r, cut) => {
       const lastBand = cut >= fStart;
       const keepRows = Array.from({ length: nrow }, (_, i) => i < hEnd || (i >= r && i < cut) || (lastBand && i >= fStart));
-      const built = grp.map((ch, k) => build(keepRows, ch.keepCols, { notes: lastGroup && lastBand && k === grp.length - 1, title: ch.withLeft, mirror: ch.mirror }));
+      const built = grp.map((ch, k) => build(keepRows, ch.keepCols, { notes: lastGroup && lastBand && k === grp.length - 1, title: ch.withTitle, mirror: ch.mirror }));
       if (built.length > 1) equalizeRows(built);   // 펼침면(과 구간 맞추기)의 조각들은 행 높이를 같게: 왼쪽·오른쪽 면의 줄이 맞는다
       return built;
     };
@@ -985,16 +989,19 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
           tier.x += f.w;
           tier.h = Math.max(tier.h, need);
           if (!cur.labels.includes(b.item.label)) cur.labels.push(b.item.label);
+          addPart(cur, b.item.label, k, frags.length);
         } else if (free && (y = snapY(tier.y + tier.h + gapY)) + need <= availH + 0.5) {
           cur.tiers.push({ y, x: f.w, h: need });
           cur.frags.push({ f, x: 0, y });
           if (!cur.labels.includes(b.item.label)) cur.labels.push(b.item.label);
+          addPart(cur, b.item.label, k, frags.length);
         } else {
           fitNotes();
           // 펼침면 왼쪽 쪽의 표는 제본 쪽(오른쪽)에 붙인다 (격자에서는 빈 열로 판면 폭을 채우므로 같다)
           const x = f.side === 'L' && !G ? Math.max(0, availW - f.w) : 0;
           cur = { kind: 'table', tiers: [{ y: 0, x: x + f.w, h: need }], frags: [{ f, x, y: 0 }], labels: [b.item.label],
                   lang: b.lang, side: f.side, contFirst: k > 0 && !(spreadItem && k % 2 === 1) };   // 펼침면의 맞은편 쪽은 '이어짐'이 아니다
+          addPart(cur, b.item.label, k, frags.length);
           pages.push(cur);
         }
         if (k === 0) tocEntries.push({ text: b.item.label, page: pages.length, level: 1 });
@@ -1070,7 +1077,12 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
     else if (p.kind === 'colophon') { content.appendChild(colophon(book, docs, L)); runhead = ''; page.classList.add('is-blank'); }
     else if (p.kind === 'table') {
       // 머리글: 이 쪽에 실린 표 이름들 (같은 앞부분은 한 번만), 앞 쪽에서 이어지면 '(つづき)'
-      runhead = joinLabels(p.labels, (STR[p.lang] || L).more) + (p.contFirst ? (STR[p.lang] || L).contd : '');
+      runhead = joinLabels(p.labels, (STR[p.lang] || L).more);
+      // 여러 조각으로 나뉜 표는 몇째 조각인지 (명조로): 경부선 KTX 하행 (셋째)
+      const parts = [...(p.parts || new Map()).entries()].filter(([, v]) => v.total > 1);
+      runhead = esc(runhead) + (parts.length
+        ? ' ' + parts.map(([, v]) => `<span class="part">(${[...v.ks].sort((a, b) => a - b).map((k) => ordinal(k + 1, p.lang)).join('·')})</span>`).join(' ')
+        : (p.contFirst ? esc((STR[p.lang] || L).contd) : ''));
       // 단마다 마지막 조각의 오른쪽을 빈 열로 판면 끝까지 채운다
       const lastOf = new Map();
       for (const pl of p.frags) if (pl.f && (!lastOf.has(pl.y) || pl.x > lastOf.get(pl.y).x)) lastOf.set(pl.y, pl);
@@ -1092,6 +1104,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
         holder.style.top = `${y}px`;
         holder.style.setProperty('--bk-fs', `${f.fs}pt`);
         const el = f.el.cloneNode(true);
+        if (isRightHand(n)) (el.matches?.('.jtt-wrap') ? [el] : [...el.querySelectorAll('.jtt-wrap')]).forEach((w) => w.classList.add('jtt-wrap--tr'));
         if (G && f.grid && lastOf.get(y) === pl) {
           const k = Math.floor((availW - x - f.w) / G.P + 0.02);   // 한 열이 다 들어갈 때만 빈 열을 더한다
           if (k >= 1) padTable(el, k, f.grid);
@@ -1106,7 +1119,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
         content.appendChild(holder);
       });
     }
-    if (book.parts.runhead && runhead) page.querySelector('.runhead').textContent = runhead;
+    if (book.parts.runhead && runhead) page.querySelector('.runhead').innerHTML = p.kind === 'table' ? runhead : esc(runhead);
     if (book.parts.folio && folio) page.querySelector('.folio').textContent = folio;
     out.appendChild(sheet);
   });
@@ -1116,6 +1129,21 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
 }
 
 /** 머리글: 'A B 下り' + 'A B 上り' → 'A B 下り・上り'. 셋보다 많으면 앞의 둘과 '외 n'(他 n) */
+function addPart(pg, label, k, total) {
+  if (!pg.parts) pg.parts = new Map();
+  const v = pg.parts.get(label) || { ks: new Set(), total };
+  v.ks.add(k); v.total = total;
+  pg.parts.set(label, v);
+}
+const ORD_KO = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째', '일곱째', '여덟째', '아홉째', '열째'];
+function ordinal(n, lang) {
+  if (lang === 'ja') return `その${n}`;
+  if (n <= 10) return ORD_KO[n - 1];
+  const tens = ['', '열', '스물', '서른', '마흔'][Math.floor(n / 10)] || String(Math.floor(n / 10) * 10);
+  const ones = ['', '한', '두', '셋', '넷', '다섯', '여섯', '일곱', '여덟', '아홉'][n % 10];
+  return n % 10 ? `${tens}${ones}째` : `${n === 20 ? '스무' : tens}째`;
+}
+
 function joinLabels(labels, more = '외') {
   let ls = [...new Set((labels || []).filter(Boolean))];
   if (ls.length <= 1) return ls[0] || '';

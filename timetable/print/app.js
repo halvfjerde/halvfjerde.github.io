@@ -1,5 +1,5 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=15';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=16';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
@@ -11,7 +11,7 @@ const DEFAULT = () => ({
   v: 3, title: '시각표', subtitle: '', edition: '', date: today(), publisher: '', lang: 'ko', colophonNote: '',
   page: { size: 'B5', w: 182, h: 257, margin: { top: 14, bottom: 9, inner: 13, outer: 9 } },
   fs: 7, fonts: 'free', color: 'color', binding: 'left', folioPos: 'top-outer',
-  parts: { cover: true, toc: true, runhead: true, folio: true, colophon: true, thumb: true },
+  parts: { cover: true, toc: true, runhead: true, folio: true, colophon: true, thumb: false },
   pack: true, grid: true, fill: true, alignBands: false, pad4: false, output: { marks: false },
   items: [],
 });

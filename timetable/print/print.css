@@ -156,6 +156,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
   margin: 0 !important;
 }
 .book .jtt-scroll { overflow: visible !important; }
+/* 지면에서는 위키의 줄 상자 잡이(JttStrut)를 쓰지 않는다: 지면 글꼴(명조·고딕)이 줄 상자를 정한다 */
+.book .jtt-wrap .jtt-k, .book .jtt-wrap .jtt-b, .book .jtt-wrap .jtt-bd, .book .jtt-wrap .jtt-bh,
+.book .jtt-wrap .jtt-dmk { font-family: "DiaPro", var(--jtt-sans) !important; }
+.book .jtt-wrap .jtt-notes, .book .jtt-wrap .jtt-lh, .book .jtt-wrap .jtt-legend { font-family: "DiaPro", var(--jtt-text) !important; }
 .book .jtt .jtt-km, .book .jtt .jtt-mk, .book .jtt .jtt-st, .book .jtt .jtt-ad, .book .jtt .jtt-alt { position: relative !important; left: auto !important; }
 /* 펼침면 오른쪽 면: 거울로 옮긴 역 이름 칸 (열차 열과의 경계는 굵게) */
 .book table.jtt-mirror td.jtt-mir { border-right: 0 !important; border-left: 1px solid var(--jtt-fg) !important; }
@@ -173,6 +177,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
    위 바깥은 JTB 시각표처럼: 굵은 고딕의 큰 쪽 번호가 바깥 모서리, 그 옆에 굵은 노선 이름, 아래에 굵은 괘선 */
 .page.fol-bottom-center .folio { text-align: center; }
 .page.fol-top-outer .runhead { font: 700 8.5pt/1.2 var(--bk-gothic); color: #000; border-bottom: 0; padding-bottom: .8mm; }
+/* 몇째 조각인지: 명조 */
+.page .runhead .part { font-family: var(--bk-mincho); font-weight: 400; }
 .page.recto.fol-top-outer .runhead { padding-right: 12mm; }
 .page.verso.fol-top-outer .runhead { padding-left: 12mm; }
 .page.fol-top-outer .folio { font: 700 13pt/1 var(--bk-gothic); }
