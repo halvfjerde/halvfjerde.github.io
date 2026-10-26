@@ -727,7 +727,8 @@ class Book:
         self.hang_title = cfg.get('titleInMargin', False)         # 세로 제목을 바깥 여백에 내어 달기
         self.page_title = cfg.get('pageTitle', False)              # 표마다의 세로 제목 대신, 쪽마다 노선 이름을 하나 크게 (바깥 여백)
         if self.page_title: self.hang_title = True
-        self.band_inset = cfg.get('bandInset', 0.9) * self.fs     # 띠의 왼쪽·오른쪽 글을 틀에서 띄우는 만큼
+        self.band_inset = cfg.get('bandInset', 1.1) * self.fs
+        self.vband_w = cfg.get('leftBandWidth', 1.8) * self.fs      # 띠를 표 왼쪽 끝에 세로로 둘 때의 폭     # 띠의 왼쪽·오른쪽 글을 틀에서 띄우는 만큼
         self.notes = cfg.get('notes', True)                        # false: 표 밑의 주기(공통 범례)를 싣지 않는다
         self._bands = {}
         self.squeeze = cfg.get('squeeze', 0.93)                    # 열 폭을 좁혀도 되는 한도 (넘치는 한두 편을 싣기 위해)
@@ -906,7 +907,7 @@ class Book:
         TW = 0 if self.hang_title else self.title_tex(T)[2]
         fw = self.frame_w + self.frame_pad
         blk = sum(T.colW[j] for j in (L if side == 'L' else R if side == 'R' else L + R))
-        return TW + 2 * fw + blk
+        return TW + 2 * fw + blk + (self.vband_w if getattr(T, 'band_left', False) else 0)
 
     def cap(self, T, side, squeeze=False):
         """그 면에 실을 수 있는 열차 수. squeeze: 열 폭을 조금(squeeze 비율까지) 좁혀서"""
@@ -948,7 +949,7 @@ class Book:
         return outer - 2 * (self.frame_w + self.frame_pad) - 2 * self.band_inset
 
     def headband_h(self, T, bw=None, part=None):
-        if T.head is None: return 0
+        if T.head is None or getattr(T, 'band_left', False): return 0
         px = T.head.style.get('min-height') or T.head.style.get('height', '')
         m = re.match(r'([\d.]+)px', px)
         em = float(m.group(1)) / 14.4 if m else 1.5
@@ -964,14 +965,7 @@ class Book:
         한 줄에 들면 한 줄. 아니면 위 줄에 왼쪽·오른쪽, 그 아래에 가운데를 「―」 뒤에서 나누어"""
         key = (id(T), round(W, 1), part)
         if key in self._bands: return self._bands[key]
-        hd = T.head
-        parts = [n for n in hd.kids if isinstance(n, Node)]
-        if not any(n.cls & {'jtt-hl', 'jtt-hm', 'jtt-hrt'} for n in parts):
-            parts = [Node('div', []), hd, Node('div', [])]       # 띠가 한 덩어리면 가운데에
-        color = None
-        col = hd.style.get('color')
-        if col and col.startswith('#'): color = col[1:].upper()
-        if len(color or '') == 3: color = ''.join(c * 2 for c in color)
+        parts, color = self.band_nodes(T)                  # 띠가 한 덩어리면 가운데에
         ctx = Ctx('DM', 1.0, color)
         fs = self.fs
         def seg(node):
@@ -995,6 +989,65 @@ class Book:
                 plan.append(('', t[0], '', max(t[2], 1.25)))
         self._bands[key] = plan
         return plan
+
+    def band_nodes(self, T):
+        hd = T.head
+        parts = [n for n in hd.kids if isinstance(n, Node)]
+        if not any(n.cls & {'jtt-hl', 'jtt-hm', 'jtt-hrt'} for n in parts):
+            parts = [Node('div', []), hd, Node('div', [])]
+        color = None
+        col = hd.style.get('color')
+        if col and col.startswith('#'): color = col[1:].upper()
+        if len(color or '') == 3: color = ''.join(c * 2 for c in color)
+        return parts, color
+
+    def vband(self, T, part, H):
+        """띠를 세로로: 위에 방향·노선, 가운데에 주요 역, 아래에 몇째. (tex, 필요한 길이 bp)"""
+        fs = self.fs
+        parts, color = self.band_nodes(T)
+        colw = self.vband_w
+        def segs(node, ctx, out):
+            for k in node.kids:
+                if isinstance(k, str):
+                    t = k.replace('\n', '')
+                    if t: out.append((t, ctx))
+                    continue
+                if k.tag == 'br': out.append((' ', ctx)); continue
+                c2 = ctx
+                if 'jtt-b' in k.cls: c2 = c2.but(font='GB', size=c2.size * 1.2)
+                elif 'jtt-k' in k.cls: c2 = c2.but(font='GB')
+                if 'jtt-lit' in k.cls and c2.font != 'GB': c2 = c2.but(font='M')
+                segs(k, c2, out)
+            return out
+        def stack(sg):
+            items, L = [], 0.0
+            for text, c in sg:
+                em = c.size * fs
+                i = 0
+                while i < len(text):
+                    ch = text[i]
+                    if ch in ' \u00a0　':
+                        items.append(r'\kern%.3fbp' % (0.3 * em)); L += 0.3 * em; i += 1; continue
+                    if ch in VROT:
+                        t, l = self.inl.vform(ch, c, colw)
+                        items.append(t); L += l * em; i += 1; continue
+                    if is_latin(ch):
+                        j = i
+                        while j < len(text) and is_latin(text[j]): j += 1
+                        run = text[i:j]
+                        items.append(r'\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (colw, self.inl.run(run, c)))
+                        L += sum(0.62 if x.isupper() else 0.5 for x in run) * em; i = j; continue
+                    items.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (colw, -0.12 * em, em, self.inl.run(ch, c, True)))
+                    L += em; i += 1
+            return ''.join(items), L
+        base = Ctx('DM', 1.0, color)
+        a, la = stack(segs(parts[0], base, []))
+        b, lb = stack(segs(parts[1], base, []))
+        if part: c, lc = stack([('(%s)' % part, Ctx('M', 1.0, color))])
+        else: c, lc = stack(segs(parts[2], base, []))
+        need = la + lb + lc + 2 * fs
+        tex = r'\vbox to %.3fbp{\offinterlineskip %s\vfil %s\vfil %s}' % (H, a, b, c)
+        return tex, need
 
     def split_center(self, node, W, ctx):
         """띠 가운데(주요 역을 「―」로 이은 것)를 폭 W 안에 드는 줄들로. 글이 한 토막일 때만 나눈다"""
@@ -1057,9 +1110,10 @@ class Book:
         if self.hang_title: tx = x0           # 제목은 판면 밖(바깥 여백)에
         else: tx = x0 + (TW if side != 'R' else 0)
         fx0 = tx
-        xs = [tx + fw + fp]
+        VB = self.vband_w if getattr(T, 'band_left', False) else 0     # 세로 띠 (오른쪽 면 조각은 바깥쪽인 오른쪽 끝에)
+        xs = [tx + fw + fp + (VB if side != 'R' else 0)]
         for w in widths: xs.append(xs[-1] + w)
-        fx1 = xs[-1] + fp + fw
+        fx1 = xs[-1] + (VB if side == 'R' else 0) + fp + fw
         # 행 y 위치
         hb = self.headband_h(T, xs[-1] - xs[0] - 2 * self.band_inset, part) if hb is None else hb
         ty = y0 + fw + fp
@@ -1075,6 +1129,12 @@ class Book:
             tex.append(self.put_box(fx1 + 0.3 * fs, y0, TW - 0.3 * fs, ttlH, ttl, 'l', 't'))
         else:
             tex.append(self.put_box(tx - TW if self.hang_title else x0, y0, TW - 0.3 * fs, ttlH, ttl, 'l', 't'))
+        # 세로 띠
+        if VB:
+            bx = xs[0] - VB if side != 'R' else xs[-1]
+            vt, _ = self.vband(T, part, ys[-1] - ty - 0.6 * fs)
+            tex.append(self.put_box(bx, ty + 0.3 * fs, VB, ys[-1] - ty - 0.6 * fs, vt, 'c', 't'))
+            rects.append(('v', xs[0] if side != 'R' else xs[-1], ty, ys[-1], 1))
         # 노선 머리띠
         if hb:
             W = xs[-1] - xs[0] - 2 * self.band_inset
@@ -1556,6 +1616,18 @@ class Book:
                 bunches[-1].append(T)
             else:
                 bunches.append([T])
+        # 띠 자리: bandPos top | left | auto (auto: 왼쪽 세로 띠로 해야 한 쪽에 두 단이 들어가는 표만 왼쪽으로)
+        mode = self.cfg.get('bandPos', 'top')
+        for T in tables:
+            T.band_left = False
+            if T.head is None or mode == 'top': continue
+            jt = self.jobs_of(T)
+            T.band_left = True
+            jl = self.jobs_of(T)
+            ht, hl = max(j['h'] for j in jt), max(j['h'] for j in jl)
+            fits = all(self.vband(T, '열넷째' if len(jl) > 1 else None, 100)[1] <= j['h'] - 2 * (fw + self.frame_pad) - 0.6 * self.fs for j in jl)
+            if mode == 'left': T.band_left = fits
+            else: T.band_left = fits and len(jl) <= len(jt) and 2 * hl - fw <= PH + 0.01 < 2 * ht - fw
         for bunch in bunches:
             pend = [collections.deque(self.jobs_of(T)) for T in bunch]
             whole = [len(q) == 1 for q in pend]          # 한 번에 다 실리는 표만 당겨 올 수 있다
