@@ -723,6 +723,16 @@ export async function planTable(srcWrap, box, opt, M) {
 /* ── 문서에서 표 꺼내기 ────────────────────────────────────────────── */
 
 /** 위키 HTML 에서 표(.jtt-wrap)들을 차례대로. 앞선 제목(h2…h4)과 표 제목을 함께 */
+/** 지면용으로 칸에 직접 적힌 선(위키 모듈의 bt=2 등)을 가늘게: 글자 획보다 굵지 않게 (print.css 의 .book 규칙과 같은 비율) */
+const THIN = { 1: 0.5, 1.5: 0.7, 2: 1, 3: 1.5 };
+function thinRules(root) {
+  for (const e of root.querySelectorAll('[style*="px "]')) {
+    const s = e.getAttribute('style');
+    const t = s.replace(/(\d*\.?\d+)px (solid|dotted|dashed|double)/g, (m, w, k) => `${k === 'double' ? 1.8 : (THIN[+w] ?? +w / 2)}px ${k}`);
+    if (t !== s) e.setAttribute('style', t);
+  }
+}
+
 export function extractTables(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const out = [];
@@ -738,6 +748,7 @@ export function extractTables(html) {
       continue;
     }
     if (n.classList.contains('jtt-wrap') && !n.parentElement.closest('.jtt-wrap')) {
+      thinRules(n);
       const dir = n.querySelector('.jtt-dir')?.textContent.trim() || '';
       const titleText = (n.querySelector('.jtt-title')?.textContent || '').replace(/\s+/g, ' ').trim();
       out.push({ idx: out.length, el: n, dir, titleText, heads: Object.keys(heads).sort().map((k) => heads[k]) });
@@ -1371,6 +1382,7 @@ function colophon(book, docs, L) {
     tokumin: 'DiaPro · Kaisei Tokumin · Shippori Antique B1 · Gowun Batang (OFL) · 은바탕·은돋움 (GPL)',
     sm: 'DiaPro (OFL) · SM 세명조·SM 태고딕',
     un: 'DiaPro (OFL) · 은바탕·은돋움 (GPL) · Zen Old Mincho·Zen Kaku Gothic New (OFL)',
+    hira: 'DiaPro · Shippori Mincho (OFL) · ヒラギノ角ゴ · 은바탕·은돋움 (GPL)',
     local: `DiaPro (OFL) · ${[book.localMincho, book.localGothic].filter(Boolean).join('·') || 'Zen'} · 은바탕·은돋움 (GPL)`,
   }[book.fonts] || 'DiaPro (OFL) · Zen Old Mincho·Zen Kaku Gothic New (OFL) · 은바탕·은돋움 (GPL)';
   const d = document.createElement('div');
