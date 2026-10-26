@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시각표 인쇄</title>
+<meta name="description" content="쩌모위키 시각표를 골라 책자로 엮고 PDF로 인쇄한다">
+<script>/* 한 글자 주소로: halv.kr/timetable/print → t.halv.kr/print */if(location.hostname==='halv.kr'||location.hostname==='www.halv.kr')location.replace('https://t.halv.kr/print/'+location.search+location.hash);</script>
+<!-- 책 글꼴: 마음대로 배포해도 되는 것만 (DiaPro 는 api.php?action=css 가, 은바탕·은돋움은 /font/un 이 준다) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700&family=Zen+Old+Mincho:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/font/un/unbatang.css?v=1">
+<link rel="stylesheet" href="/font/un/undotum.css?v=1">
+<link rel="stylesheet" href="api.php?action=css">
+<link rel="stylesheet" href="print.css?v=1">
+<style id="pagesize">@page { size: 182mm 257mm; margin: 0; }</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><h1>시각표 인쇄</h1><a href="/" class="sub">편집기로</a></div>
+  <div class="grp">
+    <button type="button" id="btnPrint" class="primary">인쇄 · PDF</button>
+    <button type="button" id="btnSave" title="책의 구성과 설정을 파일로 저장">설계도 저장</button>
+    <label class="filebtn" title="저장한 설계도 불러오기">불러오기<input type="file" id="fileLoad" accept=".json,application/json" hidden></label>
+    <button type="button" id="btnLatest" title="실은 문서들을 위키의 최신 판으로 바꾼다">최신 판으로</button>
+    <button type="button" id="btnNew" title="빈 책으로 새로 시작">새 책</button>
+  </div>
+</header>
+
+<main class="app">
+  <aside class="side">
+    <details open>
+      <summary>책</summary>
+      <div class="form">
+        <label>제목<input id="fTitle" type="text"></label>
+        <label>부제<input id="fSubtitle" type="text"></label>
+        <label>표지 머리<input id="fEdition" type="text" placeholder="예: 1979년 3월호"></label>
+        <label>펴낸 날<input id="fDate" type="text"></label>
+        <label>펴낸 곳<input id="fPublisher" type="text"></label>
+        <label>책의 말<select id="fLang"><option value="ko">한국어 (차례·계속)</option><option value="ja">日本語 (目次・つづく)</option></select></label>
+        <label class="wide">판권 쪽에 덧붙일 말<textarea id="fNote" rows="2"></textarea></label>
+      </div>
+    </details>
+
+    <details open>
+      <summary>지면</summary>
+      <div class="form">
+        <label>판형<select id="fSize">
+          <option value="B5">B5 (182×257)</option><option value="A4">A4 (210×297)</option>
+          <option value="A5">A5 (148×210)</option><option value="B6">B6 (128×182)</option>
+          <option value="custom">직접 (mm)</option></select></label>
+        <label class="custom">폭<input id="fW" type="number" min="60" max="600" step="1"></label>
+        <label class="custom">높이<input id="fH" type="number" min="60" max="600" step="1"></label>
+        <label>여백 위<input id="mTop" type="number" min="3" max="60" step="0.5"></label>
+        <label>아래<input id="mBottom" type="number" min="3" max="60" step="0.5"></label>
+        <label>안쪽<input id="mInner" type="number" min="3" max="60" step="0.5"></label>
+        <label>바깥<input id="mOuter" type="number" min="3" max="60" step="0.5"></label>
+        <label>표 글자 (pt)<input id="fFs" type="number" min="4" max="14" step="0.25"></label>
+        <label>글꼴<select id="fFonts">
+          <option value="free">배포용 (Zen·은바탕·DiaPro)</option>
+          <option value="shaken">손에 둘 것 (石井·TypeSquare)</option></select></label>
+        <label>색<select id="fColor"><option value="color">색</option><option value="mono">흑백</option></select></label>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="pCover">표지</label>
+        <label><input type="checkbox" id="pToc">차례</label>
+        <label><input type="checkbox" id="pRunhead">머리글</label>
+        <label><input type="checkbox" id="pFolio">쪽 번호</label>
+        <label><input type="checkbox" id="pColophon">판권</label>
+        <label><input type="checkbox" id="pPack" title="작은 표는 한 쪽에 여러 개 싣는다">작은 표 모아 싣기</label>
+        <label><input type="checkbox" id="pPad4" title="중철 제본용: 빈 쪽을 더해 4의 배수로">4의 배수로</label>
+        <label><input type="checkbox" id="pMarks" title="입고용: 재단선과 도련 3mm">재단선</label>
+      </div>
+    </details>
+
+    <details open>
+      <summary>자료 <span class="hint">문서를 눌러 표를 고른다</span></summary>
+      <input id="srcFind" type="search" placeholder="문서 찾기" class="find">
+      <ul id="srcList" class="src"></ul>
+    </details>
+
+    <details open>
+      <summary>싣는 차례 <span class="hint" id="itemCount"></span></summary>
+      <ol id="items" class="items"></ol>
+      <div class="add">
+        <button type="button" id="addDivider">+ 중표지</button>
+        <button type="button" id="addText">+ 글 쪽</button>
+      </div>
+    </details>
+  </aside>
+
+  <section class="preview">
+    <div class="pv-bar">
+      <span id="status">준비 중…</span>
+      <label class="zoom">보기<select id="pvZoom">
+        <option value="fit">폭에 맞춤</option><option value="0.5">50%</option><option value="0.75">75%</option>
+        <option value="1">100%</option></select></label>
+    </div>
+    <div id="warn" class="warn" hidden></div>
+    <div id="sheets" class="book"></div>
+  </section>
+</main>
+
+<div id="measure" class="book" aria-hidden="true"></div>
+
+<script type="module" src="app.js?v=1"></script>
+</body>
+</html>
