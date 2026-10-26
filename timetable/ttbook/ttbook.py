@@ -296,6 +296,7 @@ SAMPLE_DIGIT = '0123456789'
 # ───────────────────────── 줄 안 요소 ─────────────────────────
 # 줄(line) = 요소 목록. 요소: ('tex', tex, size)  ('just', [tex…], size)  ('obj', tex, w_em, h_em, size)
 GOTHIC = {'DG', 'DGB', 'GB', 'G'}
+TEXT_FAMS = {'M', 'G', 'GB'}      # DiaPro 를 앞세우지 않는 본문 글꼴
 KO_OF = {'M': 'KM', 'DM': 'KM', 'G': 'KG', 'DG': 'KG', 'GB': 'KGB', 'DGB': 'KGB'}
 JP_OF = {'M': 'mincho', 'DM': 'mincho', 'G': 'gothic', 'DG': 'gothic', 'GB': 'gothicBold', 'DGB': 'gothicBold'}
 KO_ROLE = {'KM': 'minchoKo', 'KG': 'gothicKo', 'KGB': 'gothicKoBold'}
@@ -310,6 +311,7 @@ def char_kind(ch):
     return 'base'
 
 # 세로쓰기에서 돌려 쓸 글자 (세로쓰기 전용 글자 → 가로 글자)
+VALT = {'―': ['—', '─', '－'], '(': ['（'], ')': ['）']}
 VROT = {'︵': '(', '︶': ')', '︱': '―', '︹': '〔', '︺': '〕', '(': '(', ')': ')', '（': '(', '）': ')', '―': '―', '—': '―'}
 
 class Metrics:
@@ -361,6 +363,8 @@ class Inline:
         segs = []
         for ch in s:
             k = char_kind(ch)
+            # 본문 글꼴(명조·고딕)에서는 숫자·로마자·기호도 한글 글꼴을 먼저 (한자·가나만 일본 글꼴)
+            if k == 'base' and ctx.font in TEXT_FAMS and ch != ' ': k = 'kp'
             if k == 'kp' and self.m:
                 ki = self.m.info.get(KO_ROLE[KO_OF[ctx.font]])
                 if not (ki and ki.has(ch)): k = 'base'
@@ -373,7 +377,7 @@ class Inline:
             fam = KO_OF[ctx.font] if k in ('ko', 'kp') else ctx.font
             body = '{' + self.font(ctx, fam) + t + '}'
             up = self.shift_for(k, ctx.font)
-            if not vertical and abs(up) > 0.002:
+            if abs(up) > 0.002 and not (vertical and k == 'base'):
                 body = r'\raisebox{%.3fbp}{%s}' % (up * ctx.size * self.fs, body)
             out.append(body)
         return '{' + ''.join(out) + '}'
@@ -382,9 +386,14 @@ class Inline:
         """세로쓰기의 괄호·줄표: 한글 글꼴의 가로 글자를 돌려, 잉크의 가운데를 열의 가운데에"""
         base = VROT.get(ch, ch)
         em = ctx.size * self.fs
-        fam = KO_OF[ctx.font]
-        fi = self.m and self.m.info.get(KO_ROLE[fam])
-        bb = fi.bbox(base) if fi else None
+        # 한글 글꼴에 없으면 일본 글꼴의 것을 (어느 쪽이든 잉크를 재어 가운데에)
+        fam, bb = None, None
+        for cand in [base] + VALT.get(base, []):          # 그 글자가 없으면 비슷한 글자로 (― → — → ─)
+            for f2, role in ((KO_OF[ctx.font], KO_ROLE[KO_OF[ctx.font]]), (ctx.font, JP_OF[ctx.font])):
+                fi = self.m and self.m.info.get(role)
+                if fi and fi.bbox(cand):
+                    fam, bb, base = f2, fi.bbox(cand), cand; break
+            if bb: break
         if not bb:
             return r'\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (col_w, self.run(base, ctx, True)), 0.5
         x0, y0, x1, y1, adv = bb
@@ -721,7 +730,8 @@ class Book:
         T.colW = self.col_widths(T)
 
     # ── 제목(세로) ──
-    def title_tex(self, T):
+    def title_tex(self, T, drop=None, part=None):
+        """세로 제목: 방향 표지·종류·노선·구간, 끝에 몇째 조각인지"""
         fs = self.fs
         size = 1.15
         em = size * fs
@@ -749,7 +759,9 @@ class Book:
         def walk(n, font):
             nonlocal hgt
             for k in n.kids:
-                if isinstance(k, str): chars(k.replace('\n', ''), font)
+                if isinstance(k, str):
+                    t = k.replace('\n', '')
+                    chars(t, font)
                 elif 'jtt-dir' in k.cls:
                     down = 'jtt-dir--down' in k.cls
                     hollow = 'jtt-dir--o' in k.cls
@@ -757,14 +769,19 @@ class Book:
                     bs = 0.84 * em
                     bw = bs * (1 + 0.16)
                     bh = bs * (len(t) + 0.36 + 0.6)
+                    P = 0.4 * em                          # 뾰족한 끝의 높이
+                    top = (bh - P - len(t) * bs) / 2 + (0 if down else P)   # 글자는 몸통(뾰족한 끝을 뺀 곳)의 가운데에
                     stack = ''.join(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (bw, -0.12 * bs, bs, self.inl.run(ch, Ctx('GB', size * 0.84, None if hollow else 'FFFFFF'), True)) for ch in t)
                     items.append(r'\hbox to %.3fbp{\hss\ttdir{%.3f}{%.3f}{%d}{%d}{%.3f}{%.3f}{%s}\hss}' % (
-                        1.3 * em, bw, bh, 1 if down else 0, 1 if hollow else 0, 0.4 * em, (0.6 if not down else 0.36) * bs, stack))
+                        1.3 * em, bw, bh, 1 if down else 0, 1 if hollow else 0, P, top, stack))
                     hgt += bh / em + 0.3
                     items.append(r'\kern%.3fbp' % (0.3 * em))
                 elif k.cls & {'jtt-sub', 'jtt-box'}: walk(k, 'M')
                 else: walk(k, font)
         walk(T.title, 'GB')
+        if part:
+            items.append(r'\kern%.3fbp' % (0.3 * em)); hgt += 0.3
+            chars('(%s)' % part, 'M')
         return r'\vbox{\offinterlineskip ' + ''.join(items) + '}', hgt * em, (1.3 + 0.3) * em
 
     # ── 쪽 나누기: 펼침면 (왼쪽 면 = 제목+역명+열차, 오른쪽 면 = 열차+오른쪽 역명+제목) ──
@@ -833,12 +850,12 @@ class Book:
         return (n * 1.35 * 0.8 + 0.5) * self.fs
 
     # ── 표 조각 하나를 쪽에 ──
-    def render_piece(self, T, ch, rows, x0, y0, with_notes, notes_room=True):
+    def render_piece(self, T, ch, rows, x0, y0, with_notes, notes_room=True, line=None, part=None):
         """x0,y0: 조각 왼쪽 위 (쪽 좌표, 위에서 아래로). 그릴 것 목록과 크기를 돌려준다"""
         fs = self.fs
         tex, rects = [], []
         side = ch['side']
-        ttl, ttlH, TW = self.title_tex(T)
+        ttl, ttlH, TW = self.title_tex(T, line, part)
         fw, fp = self.frame_w, self.frame_pad
         # 열 x 위치
         cols = ch['cols']
@@ -1107,7 +1124,7 @@ class Book:
         rh = self.inl.run(runhead, Ctx('GB', 8.5 / fs))
         if part:
             rh += r'\ ' + self.inl.run('(%s)' % part, Ctx('M', 8.5 / fs))
-        fo = r'{\fGB\fontsize{13bp}{13bp}\selectfont %s}' % folio
+        fo = self.inl.run(str(folio), Ctx('GB', 13 / fs))
         Yr = Y + 0.37 * (13 - 8.5)     # 머리글 글줄을 쪽 번호의 가운데 높이로
         if recto:
             tex.append(r'\put(%.3f,%.3f){\llap{%s}}' % (x0 + self.cw - 12 * MM, Yr, rh))
@@ -1140,7 +1157,8 @@ class Book:
                 for ch in grp:
                     last = gi == len(groups) - 1 and bi == len(bands) - 1 and ch is grp[-1]
                     self.pages.append({'T': T, 'ch': ch, 'rows': rows, 'notes': last,
-                                       'label': item.get('label', ''), 'k': k, 'total': total})
+                                       'label': item.get('label', ''), 'k': k, 'total': total,
+                                       'line': item.get('line') or (item.get('label', '').split() or [''])[0]})
                     k += 1
 
     def emit(self, out_tex):
@@ -1150,9 +1168,11 @@ class Book:
             folio = first + pi
             recto = folio % 2 == 1
             x0 = self.mi if recto else self.mo
-            tex, rects, w, h = self.render_piece(pg['T'], pg['ch'], pg['rows'], x0, self.mt, pg['notes'])
             part = ORD_KO[pg['k']] if pg['total'] > 1 else ''
-            tex += self.page_furniture(folio, recto, pg['label'], part)
+            # 머리글은 노선 이름만 (책을 넘기며 찾는 자리). 몇째 조각인지는 표의 세로 제목 끝에
+            tex, rects, w, h = self.render_piece(pg['T'], pg['ch'], pg['rows'], x0, self.mt, pg['notes'],
+                                                 line=pg['line'], part=part)
+            tex += self.page_furniture(folio, recto, pg['line'], '')
             body.append(r'\begin{picture}(%.3f,%.3f)' % (self.W, self.H))
             body.append(r'\put(0,0){\pdfextension literal{%s}}' % self.pdf_ops(rects))
             body += tex
