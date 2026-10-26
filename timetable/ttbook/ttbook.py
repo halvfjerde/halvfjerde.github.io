@@ -207,9 +207,13 @@ FONT_OF_CLASS = {'jtt-st': 'M', 'jtt-ad': 'M', 'jtt-th': 'M', 'jtt-r-st': 'M', '
 
 # ───────────────────────── 줄 안 요소 ─────────────────────────
 # 줄(line) = 요소 목록. 요소: ('tex', tex, size)  ('just', [tex…], size)  ('obj', tex, w_em, h_em, size)
+GOTHIC = {'DG', 'DGB', 'GB', 'G'}
+HANGUL_RUN = re.compile('[\u1100-\u11ff\u3130-\u318f\uac00-\ud7a3]+')
+
 class Inline:
-    def __init__(self, fs):
+    def __init__(self, fs, hg_up=0.05):
         self.fs = fs          # 기준 글자 크기 (bp)
+        self.hg_up = hg_up    # 고딕 한글을 올리는 양 (em)
 
     def font(self, ctx):
         s = ctx.size * self.fs
@@ -217,13 +221,17 @@ class Inline:
         if ctx.color: t += r'\color[HTML]{%s}' % ctx.color
         return t
 
-    def run(self, s, ctx):
+    def run(self, s, ctx, vertical=False):
         if not s: return ''
         out = []
         for ch in s:
             if ch == ' ': out.append(r'\ ')
             else: out.append(esc(ch))
-        return '{' + self.font(ctx) + ''.join(out) + '}'
+        t = ''.join(out)
+        # 은돋움의 한글은 숫자·한자보다 낮게 앉는다 → 고딕의 한글만 조금 올린다 (가로쓰기에서만)
+        if not vertical and ctx.font in GOTHIC and self.hg_up:
+            t = HANGUL_RUN.sub(lambda m: r'\raisebox{%.3fem}{%s}' % (self.hg_up, m.group(0)), t)
+        return '{' + self.font(ctx) + t + '}'
 
     def lines(self, node, ctx):
         """노드 → 줄 목록"""
@@ -310,7 +318,7 @@ class Inline:
                     wl = sum(0.55 if x.isupper() else 0.5 for x in run)
                     rows.append(r'\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (em, self.run(run, c)))
                     h += wl; i = j; continue
-                rows.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (em, -0.12 * em, em, self.run(ch, c)))
+                rows.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (em, -0.12 * em, em, self.run(ch, c, True)))
                 h += 1; i += 1
         return r'\vbox{\offinterlineskip ' + ''.join(rows) + '}', h
 
@@ -440,7 +448,7 @@ class Book:
         self.P0 = cfg.get('colWidth', 2.3) * self.fs             # 열차 열 폭
         self.frame_w = self.rw[2]                                 # 틀 굵기
         self.frame_pad = cfg.get('framePad', 0.5) * MM            # 틀과 표 사이
-        self.inl = Inline(self.fs)
+        self.inl = Inline(self.fs, cfg.get('hangulGothicUp', 0.05))
         self.pages = []                                           # [(side, [tex…], runhead)]
 
     # ── 칸의 괘선(위키 CSS 와 같은 셈) ──
@@ -554,7 +562,7 @@ class Book:
                     run = s[i:j]
                     items.append(r'\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (1.3 * em, self.inl.run(run, c)))
                     hgt += sum(0.62 if x.isupper() else 0.5 for x in run); i = j; continue
-                items.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (1.3 * em, -0.12 * em, em, self.inl.run(ch, c)))
+                items.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (1.3 * em, -0.12 * em, em, self.inl.run(ch, c, True)))
                 hgt += 1; i += 1
         def walk(n, font):
             nonlocal hgt
@@ -567,7 +575,7 @@ class Book:
                     bs = 0.84 * em
                     bw = bs * (1 + 0.16)
                     bh = bs * (len(t) + 0.36 + 0.6)
-                    stack = ''.join(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (bw, -0.12 * bs, bs, self.inl.run(ch, Ctx('GB', size * 0.84, None if hollow else 'FFFFFF'))) for ch in t)
+                    stack = ''.join(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (bw, -0.12 * bs, bs, self.inl.run(ch, Ctx('GB', size * 0.84, None if hollow else 'FFFFFF'), True)) for ch in t)
                     items.append(r'\hbox to %.3fbp{\hss\ttdir{%.3f}{%.3f}{%d}{%d}{%.3f}{%.3f}{%s}\hss}' % (
                         1.3 * em, bw, bh, 1 if down else 0, 1 if hollow else 0, 0.4 * em, (0.6 if not down else 0.36) * bs, stack))
                     hgt += bh / em + 0.3
@@ -868,7 +876,7 @@ class Book:
         x0 = self.mi if recto else self.mo
         base_y = self.mt - 3.5 * MM
         Y = self.H - base_y
-        rh = r'{\fGB\fontsize{8.5bp}{10bp}\selectfont %s}' % esc(runhead)
+        rh = self.inl.run(runhead, Ctx('GB', 8.5 / fs))
         if part:
             rh += r'\ {\fM\fontsize{8.5bp}{10bp}\selectfont (%s)}' % esc(part)
         fo = r'{\fGB\fontsize{13bp}{13bp}\selectfont %s}' % folio

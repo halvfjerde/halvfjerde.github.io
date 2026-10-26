@@ -1,14 +1,43 @@
 {
   "name": "k11-gyeongbu",
-  "page": {"w": 148, "h": 210, "margin": {"top": 12, "bottom": 8, "inner": 11, "outer": 8}},
+  "page": {
+    "w": 148,
+    "h": 210,
+    "margin": {
+      "top": 12,
+      "bottom": 8,
+      "inner": 11,
+      "outer": 8
+    }
+  },
   "fs": 6.5,
-  "rules": {"thin": 0.1, "mid": 0.25, "thick": 0.35, "double": [0.1, 0.15]},
-  "fonts": {"mincho": "Shippori Mincho", "minchoKo": "UnBatang",
-            "gothic": "Zen Kaku Gothic New", "gothicKo": "UnDotum",
-            "gothicBold": "Zen Kaku Gothic New Bold", "gothicKoBold": "UnDotum Bold",
-            "dia": "DiaPro"},
+  "rules": {
+    "thin": 0.1,
+    "mid": 0.25,
+    "thick": 0.35,
+    "double": [
+      0.1,
+      0.15
+    ]
+  },
+  "fonts": {
+    "mincho": "Shippori Mincho",
+    "minchoKo": "UnBatang",
+    "gothic": "BIZ UDPGothic",
+    "gothicKo": "UnDotum",
+    "gothicBold": "BIZ UDPGothic Bold",
+    "gothicKoBold": "UnDotum Bold",
+    "dia": "DiaPro"
+  },
   "firstFolio": 2,
   "items": [
-    {"src": "pages/경부선.txt", "page": "연습장:시각표 2026년 11월호/경부선", "idx": 0, "label": "경부선 KTX 하행", "fit": "spread"}
-  ]
+    {
+      "src": "pages/경부선.txt",
+      "page": "연습장:시각표 2026년 11월호/경부선",
+      "idx": 0,
+      "label": "경부선 KTX 하행",
+      "fit": "spread"
+    }
+  ],
+  "hangulGothicUp": 0.05
 }
