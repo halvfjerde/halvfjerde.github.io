@@ -693,6 +693,8 @@ class Book:
         self.frame_w = self.rw[2]                                 # 틀 굵기
         self.frame_pad = cfg.get('framePad', 0.5) * MM            # 틀과 표 사이
         self.hang_title = cfg.get('titleInMargin', False)         # 세로 제목을 바깥 여백에 내어 달기
+        self.page_title = cfg.get('pageTitle', False)              # 표마다의 세로 제목 대신, 쪽마다 노선 이름을 하나 크게 (바깥 여백)
+        if self.page_title: self.hang_title = True
         self.squeeze = cfg.get('squeeze', 0.93)                    # 열 폭을 좁혀도 되는 한도 (넘치는 한두 편을 싣기 위해)
         # 글꼴: 이름으로 찾고, 조판 전에 재어 둔다
         dirs = cfg.get('fontDirs') or DEFAULT_FONT_DIRS
@@ -868,7 +870,7 @@ class Book:
         L, _, R = self.blocks(T)
         TW = 0 if self.hang_title else self.title_tex(T)[2]
         fw = self.frame_w + self.frame_pad
-        blk = sum(T.colW[j] for j in (L if side == 'L' else R))
+        blk = sum(T.colW[j] for j in (L if side == 'L' else R if side == 'R' else L + R))
         return TW + 2 * fw + blk
 
     def cap(self, T, side, squeeze=False):
@@ -889,7 +891,7 @@ class Book:
             P = self.P0
             cols = list(trains) + [('G', Tc[-1], g) for g in range(cap - len(trains))]
             extra = room - cap * self.P0
-        keep = (L + cols) if side == 'L' else (cols + R)
+        keep = (L + cols) if side == 'L' else (cols + R) if side == 'R' else (L + cols + R)
         return {'side': side, 'cols': keep, 'trains': cols, 'extra': max(0, extra), 'mirror': T.mirror, 'P': P}
 
     # ── 행 자르기: 착발 두 줄 등 여러 행에 걸친 칸을 가르지 않는 자리에서만 ──
@@ -952,8 +954,9 @@ class Book:
         fy1 = ys[-1] + nh + fp + fw
         # 틀
         rects += self.frame_rects(fx0, y0, fx1, fy1, fw)
-        # 제목
-        if side == 'R':
+        # 제목 (쪽마다 하나만 다는 경우에는 표마다 달지 않는다)
+        if self.page_title: pass
+        elif side == 'R':
             tex.append(self.put_box(fx1 + 0.3 * fs, y0, TW - 0.3 * fs, ttlH, ttl, 'l', 't'))
         else:
             tex.append(self.put_box(tx - TW if self.hang_title else x0, y0, TW - 0.3 * fs, ttlH, ttl, 'l', 't'))
@@ -961,22 +964,28 @@ class Book:
         if hb:
             hd = T.head
             parts = [n for n in hd.kids if isinstance(n, Node)]
+            if not any(n.cls & {'jtt-hl', 'jtt-hm', 'jtt-hrt'} for n in parts):
+                parts = [Node('div', []), hd, Node('div', [])]       # 띠가 한 덩어리면 가운데에
             color = None
             col = hd.style.get('color')
             if col and col.startswith('#'): color = col[1:].upper()
             if len(color or '') == 3: color = ''.join(c * 2 for c in color)
+            segs = []
             for p, al in zip(parts, 'lcr'):
                 lines = self.inl.lines(p, Ctx('DM', 1.0, color))
-                if not any(lines): continue
-                W = xs[-1] - xs[0] - 1.2 * fs
-                lt = line_tex(lines[0], W, al, fs, self.inl)
-                # 틀 안쪽 끝에서 띠 아래 괘선까지의 가운데에 (틀과 표 사이 여백도 띠의 일부로 보인다)
-                tex.append(self.put_box(xs[0] + 0.6 * fs, y0 + fw, W, ty + hb - (y0 + fw), lt, al, 'm'))
+                if al == 'r' and part and self.page_title:          # 몇째 조각인지는 띠 오른쪽에
+                    lines = [[('tex', self.inl.run('(%s)' % part, Ctx('M', 1.0, color)), 1.0)]]
+                segs.append(self.inl.flat(lines[0]) if lines and lines[0] else '')
+            W = xs[-1] - xs[0] - 1.2 * fs
+            # 왼쪽(방향·노선)·가운데(주요 역)·오른쪽(몇째)을 한 줄에. 좁아도 겹치지 않게 사이를 늘이고 줄인다
+            band = r'\hbox to %.3fbp{%s%s\hskip 1em plus 1fill %s\hskip 1em plus 1fill %s}' % (W, strut(1.2, fs), segs[0], segs[1], segs[2])
+            # 틀 안쪽 끝에서 띠 아래 괘선까지의 가운데에 (틀과 표 사이 여백도 띠의 일부로 보인다)
+            tex.append(self.put_box(xs[0] + 0.6 * fs, y0 + fw, W, ty + hb - (y0 + fw), band, 'l', 'm'))
             rects.append(self.hrule(xs[0], xs[-1], ty + hb, 1))
         # 칸
         rowpos = {r: i for i, r in enumerate(rows)}
         colpos = {j: i for i, j in enumerate(cols)}
-        if side == 'R' and self.cur_mirror:
+        if side in ('R', 'B') and self.cur_mirror:
             pass
         seen = set()
         for r in rows:
@@ -1074,7 +1083,8 @@ class Book:
 
     def grid_rules(self, T, rows, cols, xs, ys, side):
         nR, nC = len(rows), len(cols)
-        mir = side == 'R' and self.cur_mirror
+        mir = side in ('R', 'B') and self.cur_mirror
+        lastT = max((k for k, j in enumerate(cols) if kind_of(T, j)[0] == 'T'), default=-1)
         def cell_at(i, k): return cell_of(T, rows[i], cols[k])
         out = []
         # 세로선: 열 사이 k (1..nC-1), 행 i
@@ -1086,8 +1096,8 @@ class Book:
                 if a is not None and b is not None and a is not b:
                     la, ra, _, _ = self.borders(T, a)
                     lb, rb, _, _ = self.borders(T, b)
-                    if mir and kind_of(T, cols[k])[0] == 'L' and kind_of(T, cols[k - 1])[0] == 'T': w = 2
-                    elif mir and kind_of(T, cols[k])[0] == 'L': w = wmax(la, rb)
+                    if mir and k > lastT and kind_of(T, cols[k - 1])[0] == 'T': w = 2
+                    elif mir and k > lastT: w = wmax(la, rb)
                     else: w = wmax(ra, lb)
                 y0, y1 = ys[i], ys[i + 1]
                 if seg and seg[0] == w and abs(seg[2] - y0) < 0.01: seg[2] = y1
@@ -1193,13 +1203,31 @@ class Book:
         return '\\directlua{\n' + '\n'.join(lua) + '\n}\n' + '\n'.join(tex)
 
     # ── 머리글·쪽 번호 ──
+    def page_side_title(self, recto, lines):
+        """쪽의 노선 이름: 바깥 여백에 세로로 크게 (쪽마다 하나)"""
+        if not lines: return []
+        size = self.cfg.get('pageTitleSize', 11) / self.fs
+        em = size * self.fs
+        c = Ctx('GB', size)
+        items = []
+        for k, ln in enumerate(lines):
+            if k: items.append(r'\kern%.3fbp\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}\kern%.3fbp' % (
+                0.2 * em, 1.2 * em, -0.12 * em, em, self.inl.run('·', c, True), 0.2 * em))
+            for ch in ln:
+                items.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (1.2 * em, -0.12 * em, em, self.inl.run(ch, c, True)))
+        box = r'\vbox{\offinterlineskip ' + ''.join(items) + '}'
+        gapm = 1.0 * MM
+        if recto: x = self.mi + self.cw + gapm
+        else: x = self.mo - gapm - 1.2 * em
+        return [self.put_box(x, self.mt, 1.2 * em, 10, box, 'l', 't')]
+
     def page_furniture(self, folio, recto, runhead, part):
         fs = self.fs
         tex = []
         x0 = self.mi if recto else self.mo
         base_y = self.mt - self.cfg.get('headGap', 3.5) * MM     # 머리글·쪽 번호의 글줄 ~ 판면 위 끝
         Y = self.H - base_y
-        rh = self.inl.run(runhead, Ctx('GB', 8.5 / fs))
+        rh = self.inl.run(runhead, Ctx('GB', 8.5 / fs)) if runhead else ''
         if part:
             rh += r'\ ' + self.inl.run('(%s)' % part, Ctx('M', 8.5 / fs))
         fo = self.inl.run(str(folio), Ctx('GB', 13 / fs))
@@ -1243,7 +1271,7 @@ class Book:
         PH = self.ch
         gap = self.R * self.cfg.get('tierGap', 1.0)
         gapX = self.cfg.get('sideGap', 1.5) * MM
-        TWh = self.title_tex(tables[0])[2] if tables else 0
+        TWh = 0 if self.page_title else (self.title_tex(tables[0])[2] if tables else 0)
         pages = []
         def page(i):
             while len(pages) <= i: pages.append({'pieces': [], 'lines': []})
@@ -1252,9 +1280,9 @@ class Book:
         cur = {'c': 0}
         def top(p): return ys[p] + gap if ys[p] > 0 else 0.0
         def side_of(p): return 'L' if p % 2 == 0 else 'R'
-        def put(T, p, trains, rows, y, notes, h, x=0.0, narrow=False):
+        def put(T, p, trains, rows, y, notes, h, x=0.0, narrow=False, side=None):
             pg = page(p)
-            side = side_of(p)
+            side = side or side_of(p)
             pc = {'T': T, 'side': side, 'trains': trains, 'rows': rows, 'y': y, 'x': x, 'h': h, 'notes': notes,
                   'narrow': narrow, 'nat': self.fixed_w(T, side) + len(trains) * self.P0}
             pg['pieces'].append(pc)
@@ -1264,7 +1292,7 @@ class Book:
             L, Tc, R = self.blocks(T)
             head = list(range(T.hEnd)); foot = list(range(T.fStart, T.nrow)); body = list(range(T.hEnd, T.fStart))
             cuts = self.cut_ok(T)
-            TH = self.title_tex(T, part='열넷째')[1] + 0.5 * self.fs
+            TH = 0 if self.page_title else self.title_tex(T, part='열넷째')[1] + 0.5 * self.fs
             def piece(b0, b1, with_foot, notes):
                 rows = head + body[b0:b1] + (foot if with_foot else [])
                 return rows, max(self.piece_h(T, rows, notes), TH)
@@ -1291,8 +1319,9 @@ class Book:
             # 열차 무리
             capL, capR = self.cap(T, 'L'), self.cap(T, 'R')
             sL, sR = self.cap(T, 'L', True), self.cap(T, 'R', True)
+            sB = self.cap(T, 'B', True)      # 한 쪽에 홀로 실리는 표는 양쪽 역명을 다 단다
             n = len(Tc)
-            if n <= max(sL, sR):
+            if n <= sB:
                 groups = [('single', n)]
             else:
                 C = capL + capR
@@ -1302,7 +1331,7 @@ class Book:
                     full, r = divmod(n, C)
                     groups = [('pair', capL, capR)] * full
                     if r:
-                        if full >= 1 and r <= max(sL, sR): groups.append(('single', r))
+                        if full >= 1 and r <= sB: groups.append(('single', r))
                         else:
                             kA = -(-r // 2); groups.append(('pair', kA, r - kA))
                 else:
@@ -1331,15 +1360,15 @@ class Book:
                                 low = max(q['y'] for q in pg['pieces'])
                                 if prev['narrow'] and abs(prev['y'] - low) < 0.01:
                                     x = prev['x'] + prev['nat'] + TWh + gapX
-                                    nat = self.fixed_w(T, side_of(c)) + k * self.P0
+                                    nat = self.fixed_w(T, 'B') + k * self.P0
                                     if x + nat <= self.cw + 0.01 and prev['y'] + h <= PH + 0.01:
-                                        pieces.append(put(T, c, trs, rows, prev['y'], notes, h, x, True))
+                                        pieces.append(put(T, c, trs, rows, prev['y'], notes, h, x, True, 'B'))
                                         ys[c] = max(ys[c], prev['y'] + h)
                                         break
-                            if (sL if c % 2 == 0 else sR) >= k and top(c) + h <= PH + 0.01:
+                            if sB >= k and top(c) + h <= PH + 0.01:
                                 y0 = top(c)
-                                narrow = self.fixed_w(T, side_of(c)) + k * self.P0 < self.cw * 0.62
-                                pieces.append(put(T, c, trs, rows, y0, notes, h, 0.0, narrow))
+                                narrow = self.fixed_w(T, 'B') + k * self.P0 < self.cw * 0.62
+                                pieces.append(put(T, c, trs, rows, y0, notes, h, 0.0, narrow, 'B'))
                                 ys[c] = y0 + h
                                 break
                             cur['c'] = c + 1
@@ -1387,7 +1416,11 @@ class Book:
                                                line=pc['T'].line, part=pc['part'])
                 tex += t; rects += r
             # 머리글은 노선 이름만 (책을 넘기며 찾는 자리). 몇째 조각인지는 표의 세로 제목 끝에
-            tex += self.page_furniture(folio, recto, '·'.join(pg['lines']), '')
+            if self.page_title:
+                tex += self.page_side_title(recto, pg['lines'])
+                tex += self.page_furniture(folio, recto, '', '')
+            else:
+                tex += self.page_furniture(folio, recto, '·'.join(pg['lines']), '')
             body.append(r'\begin{picture}(%.3f,%.3f)' % (self.W, self.H))
             if rects: body.append(r'\put(0,0){\pdfextension literal{%s}}' % self.pdf_ops(rects))
             body += tex
