@@ -1,5 +1,5 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=14';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=15';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';

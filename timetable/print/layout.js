@@ -638,6 +638,11 @@ export async function planTable(srcWrap, box, opt, M) {
         while (minEnd < fStart && rowSum(r, minEnd) < headH * 0.75) minEnd++;
         const titleNeed = titleW ? titleH0 / (titleLine ? 2 : 1) - (extraH - 8) : 0;   // 표 제목이 두 줄 안에 들 높이
         if (y > 0 && snapY(Math.max(extraH + headH + rowSum(r, minEnd) + tail(minEnd), titleNeed)) > opt.availH - y + 0.5) y = 0;
+        // 한 쪽에 통째로 드는 표는 역 줄을 쪽 사이에서 자르지 않는다: 남은 높이에 안 들면 새 쪽에서 (JTB도 그렇다)
+        if (y > 0 && r === hEnd) {
+          const whole = snapY(Math.max(extraH + headH + rowSum(r, fStart) + tail(fStart), titleNeed));
+          if (whole <= opt.availH + 0.5 && whole > opt.availH - y + 0.5) y = 0;
+        }
         const room = opt.availH - y;
         let cut = fStart;
         if (hEnd < fStart) {
