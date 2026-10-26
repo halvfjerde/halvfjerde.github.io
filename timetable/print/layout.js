@@ -5,7 +5,8 @@
  *   · 옆으로 넘치면 열차(.jtt-t 열)로 자르고, 역명 등 왼쪽·오른쪽 고정 칸은 쪽마다 되풀이한다.
  *   · 아래로 넘치면 역(행)으로 자르고, 머리 행(.jtt-hr)은 쪽마다 되풀이, 꼬리 행(.jtt-f1 …)은 마지막에만.
  *   · 표마다 '나누기' / '줄여 맞추기' / '펼침면' 을 고른다.
- * 쪽 번호는 표지를 1로 센다. 왼쪽 철이므로 홀수 쪽이 오른쪽(recto), 짝수 쪽이 왼쪽(verso)이다.
+ * 쪽은 표지를 1로 센다. 왼쪽 철이면 홀수 쪽이 오른쪽 면(recto), 오른쪽 철이면 짝수 쪽이 오른쪽 면이다.
+ * 위키 문서에는 없는 것(철하는 쪽, 항목이 시작할 면, 찍히는 쪽 번호)은 설계도에서 정한다.
  */
 
 export const MM = 96 / 25.4;
@@ -622,6 +623,8 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
   box.insertAdjacentHTML('beforeend', `<div class="m-free">${esc([book.title, book.subtitle, book.publisher, book.date, L.toc].join(' '))}</div>`);
   for (let k = 0; k < 3; k++) { rect(box); await document.fonts.ready; await new Promise(requestAnimationFrame); }
   const G = book.grid === false ? null : gridSpec(box, availW, book.fs);
+  const rightBound = book.binding === 'right';
+  const isRightHand = (n) => (n % 2 === 1) !== rightBound;   // n 쪽이 펼쳤을 때 오른쪽 면인가
   const snapY = (v) => (G ? Math.ceil(v / G.R - 1e-3) * G.R : v);
   const gapY = snapY(G ? 4 * MM : 7 * MM);
   const contH = snapY(5 * MM);
@@ -665,10 +668,28 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
     if (book.parts.cover) pages.push({ kind: 'cover' });
     for (let k = 0; k < tocPages; k++) pages.push({ kind: 'toc', part: k });
     let cur = null;   // 지금 채우는 표 쪽
+    // 다음 쪽이 hand('left'|'right') 면이 되게 한다 (아니면 빈 쪽을 하나 넣는다)
+    const startOn = (hand) => { if ((hand === 'right') !== isRightHand(pages.length + 1)) pages.push({ kind: 'blank' }); };
     for (const b of blocks) {
+      // 항목의 시작: 새 쪽 / 왼쪽·오른쪽 면 / 쪽 번호 다시 매기기 (번호만 주면 그 번호의 홀짝에 맞는 면에서)
+      const it = b.item;
+      const restart = it.folio === '' || it.folio == null || !Number.isFinite(+it.folio) ? null : Math.trunc(+it.folio);
+      const spreadItem = b.kind === 'table' && b.frags.some((f) => f.side);
+      let hand = it.start === 'left' || it.start === 'right' ? it.start : null;
+      if (restart != null && !hand) hand = isRightHand(restart) ? 'right' : 'left';
+      if (spreadItem) hand = null;   // 펼침면은 스스로 면을 정한다
+      if (hand || it.start === 'page' || restart != null || b.kind !== 'table') cur = null;
+      if (hand) startOn(hand);
+      const firstIdx = pages.length;
+      const markRestart = () => {
+        if (restart == null) return;
+        const k = pages.findIndex((pg, i) => i >= firstIdx && pg.kind !== 'blank');
+        if (k >= 0) pages[k].restart = restart;
+      };
       if (b.kind === 'divider') {
         cur = null;
         pages.push({ kind: 'divider', item: b.item });
+        markRestart();
         tocEntries.push({ text: b.item.text || '', page: pages.length, level: 0 });
         continue;
       }
@@ -678,11 +699,19 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
           pages.push({ kind: 'text', html, item: b.item });
           if (k === 0 && b.item.toc) tocEntries.push({ text: b.item.toc, page: pages.length, level: 0 });
         });
+        markRestart();
         continue;
       }
       // 표: 쪽은 단(段)들로 채운다. 조각은 지금 단의 오른쪽에 들어가면 나란히, 아니면 아래에 새 단, 그도 안 되면 새 쪽.
       // 격자에서는 단의 오른쪽이 넉넉히 남았는데 표가 거기 다 들어가지 않으면, 실제 시각표처럼 첫 열차들을 거기에 이어 싣는다.
       let frags = b.frags;
+      // 오른쪽 철에서는 펼침면의 오른쪽 면이 먼저 온다: 짝(L, R)을 (R, L)로
+      if (rightBound && spreadItem) {
+        frags = frags.slice();
+        for (let i = 0; i + 1 < frags.length; i++) {
+          if (frags[i].side === 'L' && frags[i + 1].side === 'R') { [frags[i], frags[i + 1]] = [frags[i + 1], frags[i]]; i++; }
+        }
+      }
       if (G && book.pack && cur && !cur.side && !frags[0].side) {
         const tier = cur.tiers[cur.tiers.length - 1];
         const remW = availW - tier.x;
@@ -698,7 +727,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
         }
       }
       frags.forEach((f, k) => {
-        if (f.side === 'L' && pages.length % 2 === 0) {   // 펼침면 왼쪽은 짝수 쪽에서
+        if (f.side && (f.side === 'R') !== isRightHand(pages.length + 1)) {   // 펼침면: L 은 왼쪽 면, R 은 오른쪽 면에
           pages.push({ kind: 'blank' });
           cur = null;
         }
@@ -725,6 +754,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
         if (k === 0) tocEntries.push({ text: b.item.label, page: pages.length, level: 1 });
         if (f.side) cur = null;   // 펼침면 쪽에는 더 싣지 않는다
       });
+      markRestart();
     }
     if (book.parts.colophon) {
       const total = pages.length + 1;
@@ -741,14 +771,17 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
 
   /* 3. 그리기 */
   out.innerHTML = '';
+  // 찍히는 쪽 번호: 표지부터 1, 2, … 다시 매기라는 쪽에서 그 수로
+  const folios = [];
+  pages.forEach((p, i) => folios.push(p.restart ?? (i ? folios[i - 1] + 1 : 1)));
+  for (const e of tocEntries) e.page = folios[e.page - 1];
   const tocChunks = book.parts.toc ? await splitToc(tocEntries, box, availH, L) : [];
   pages.forEach((p, i) => {
     const n = i + 1;
-    const recto = n % 2 === 1;
-    const sheet = makeSheet(book, g, recto);
+    const sheet = makeSheet(book, g, isRightHand(n));
     const page = sheet.querySelector('.page');
     const content = page.querySelector('.content');
-    let runhead = '', folio = String(n);
+    let runhead = '', folio = String(folios[i]);
     if (p.kind === 'cover') { content.appendChild(cover(book)); folio = ''; page.classList.add('is-cover'); }
     else if (p.kind === 'toc') { content.appendChild(tocChunks[p.part] || document.createElement('div')); }
     else if (p.kind === 'divider') { content.appendChild(divider(p.item)); folio = ''; }
@@ -803,7 +836,8 @@ function makeSheet(book, g, recto) {
   sheet.style.width = `${sw}mm`;
   sheet.style.height = `${sh}mm`;
   const page = document.createElement('div');
-  page.className = `page ${recto ? 'recto' : 'verso'}`;
+  const fp = book.folioPos || 'bottom-outer';
+  page.className = `page ${recto ? 'recto' : 'verso'} fol-${fp}`;
   Object.assign(page.style, {
     left: `${marks ? CROP : 0}mm`, top: `${marks ? CROP : 0}mm`, width: `${g.W}mm`, height: `${g.H}mm`,
   });
@@ -811,7 +845,9 @@ function makeSheet(book, g, recto) {
   const inR = recto ? g.outer : g.inner;
   page.innerHTML = `<div class="runhead" style="left:${inL}mm;right:${inR}mm;bottom:${g.H - g.top + 4}mm"></div>`
     + `<div class="content" style="left:${inL}mm;top:${g.top}mm;width:${g.cw}mm;height:${g.ch}mm"></div>`
-    + `<div class="folio" style="left:${inL}mm;right:${inR}mm;top:${g.H - g.bottom + 5}mm"></div>`;
+    + (fp === 'top-outer'
+      ? `<div class="folio" style="left:${inL}mm;right:${inR}mm;bottom:${g.H - g.top + 4 + 1.2}mm"></div>`
+      : `<div class="folio" style="left:${inL}mm;right:${inR}mm;top:${g.H - g.bottom + 5}mm"></div>`);
   sheet.appendChild(page);
   if (marks) sheet.insertAdjacentHTML('afterbegin', cropMarks(sw, sh, g.W, g.H));
   return sheet;

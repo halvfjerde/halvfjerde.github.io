@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/font/un/unbatang.css?v=1">
 <link rel="stylesheet" href="/font/un/undotum.css?v=1">
 <link rel="stylesheet" href="api.php?action=css">
-<link rel="stylesheet" href="print.css?v=3">
+<link rel="stylesheet" href="print.css?v=4">
 <style id="pagesize">@page { size: 182mm 257mm; margin: 0; }</style>
 </head>
 <body>
@@ -61,6 +61,9 @@
           <option value="free">배포용 (Zen·은바탕·DiaPro)</option>
           <option value="shaken">손에 둘 것 (石井·TypeSquare)</option></select></label>
         <label>색<select id="fColor"><option value="color">색</option><option value="mono">흑백</option></select></label>
+        <label>철<select id="fBinding" title="책을 어느 쪽으로 철하는가. 펼침면의 순서와 안쪽 여백, 머리글·쪽 번호의 바깥쪽이 따라 바뀐다">
+          <option value="left">왼쪽 철 (가로짜기 책)</option><option value="right">오른쪽 철 (세로짜기 책)</option></select></label>
+        <label>쪽 번호<select id="fFolioPos"><option value="bottom-outer">아래 바깥</option><option value="bottom-center">아래 가운데</option><option value="top-outer">위 바깥 (머리글 줄)</option></select></label>
       </div>
       <div class="checks">
         <label><input type="checkbox" id="pCover">표지</label>
@@ -106,6 +109,6 @@
 
 <div id="measure" class="book" aria-hidden="true"></div>
 
-<script type="module" src="app.js?v=3"></script>
+<script type="module" src="app.js?v=4"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=3';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=4';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
@@ -9,7 +9,7 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}. ${d.getM
 const DEFAULT = () => ({
   v: 1, title: '시각표', subtitle: '', edition: '', date: today(), publisher: '', lang: 'ko', colophonNote: '',
   page: { size: 'B5', w: 182, h: 257, margin: { top: 14, bottom: 14, inner: 16, outer: 12 } },
-  fs: 8, fonts: 'free', color: 'color',
+  fs: 8, fonts: 'free', color: 'color', binding: 'left', folioPos: 'bottom-outer',
   parts: { cover: true, toc: true, runhead: true, folio: true, colophon: true },
   pack: true, grid: true, alignBands: false, pad4: false, output: { marks: false },
   items: [],
@@ -103,6 +103,7 @@ function addTable(title, oldid, idx, label) {
 
 /* ── 싣는 차례 ── */
 const FIT = [['split', '나누기'], ['shrink', '줄여 맞추기'], ['spread', '펼침면']];
+const START = [['', '이어서'], ['page', '새 쪽'], ['left', '왼쪽 면에서'], ['right', '오른쪽 면에서']];
 function renderItems() {
   const ol = $('#items');
   ol.innerHTML = '';
@@ -126,10 +127,15 @@ function renderItems() {
       body.innerHTML = `<input type="text" data-k="toc" value="${esc(it.toc || '')}" placeholder="차례에 올릴 이름 (없으면 안 올림)">
         <textarea data-k="text" rows="4" placeholder="빈 줄로 문단을 나눈다. '# '는 제목, '- '는 목록">${esc(it.text || '')}</textarea>`;
     }
+    // 시작할 면과 쪽 번호 (위키 문서에는 없는 것)
+    const starts = it.type === 'table' ? START : [['', '새 쪽'], ...START.slice(2)];
+    body.insertAdjacentHTML('beforeend', `<div class="opts"><select data-k="start" title="이 항목을 어디서 시작할지">${starts.map(([v, t]) => `<option value="${v}"${(it.start || '') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
+      <input type="number" data-k="folio" step="1" value="${it.folio ?? ''}" placeholder="쪽 번호" title="이 항목의 첫 쪽 번호. 비우면 앞에서 이어 센다. 왼쪽·오른쪽 면을 고르지 않았으면 이 번호의 홀짝에 맞는 면에서 시작한다"></div>`);
     body.querySelectorAll('[data-k]').forEach((el) => {
       el.addEventListener('change', () => {
         const k = el.dataset.k;
-        it[k] = k === 'scale' ? Math.max(40, Math.min(150, +el.value || 100)) : el.value;
+        it[k] = k === 'scale' ? Math.max(40, Math.min(150, +el.value || 100))
+          : k === 'folio' ? (el.value === '' || !Number.isFinite(+el.value) ? '' : Math.trunc(+el.value)) : el.value;
         changed(false);
       });
     });
@@ -157,7 +163,7 @@ const FIELDS = [
   ['#fSize', 'page.size'], ['#fW', 'page.w', Number], ['#fH', 'page.h', Number],
   ['#mTop', 'page.margin.top', Number], ['#mBottom', 'page.margin.bottom', Number],
   ['#mInner', 'page.margin.inner', Number], ['#mOuter', 'page.margin.outer', Number],
-  ['#fFs', 'fs', Number], ['#fFonts', 'fonts'], ['#fColor', 'color'],
+  ['#fFs', 'fs', Number], ['#fFonts', 'fonts'], ['#fColor', 'color'], ['#fBinding', 'binding'], ['#fFolioPos', 'folioPos'],
 ];
 const CHECKS = [
   ['#pCover', 'parts.cover'], ['#pToc', 'parts.toc'], ['#pRunhead', 'parts.runhead'], ['#pFolio', 'parts.folio'],

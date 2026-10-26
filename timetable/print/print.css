@@ -69,6 +69,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .items .opts { display: flex; gap: 6px; }
 .items .opts select { width: auto; flex: 1; }
 .items .opts input { width: 5.5em; }
+.items .opts input:disabled { opacity: .45; }
 .items .ctl { display: flex; flex-direction: column; gap: 2px; }
 .items .ctl button { border: 0; background: none; color: var(--ui-mute); cursor: pointer; padding: 1px 4px; font-size: 13px; line-height: 1; }
 .items .ctl button:hover { color: var(--ui-fg); background: #f2f1ee; border-radius: 3px; }
@@ -121,6 +122,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .page.recto .runhead, .page.recto .folio { text-align: right; }
 .page .runhead:empty { border-bottom: 0; }
 .page .folio { position: absolute; font: 8pt/1 "Zen Old Mincho", var(--bk-mincho); font-variant-numeric: lining-nums; }
+/* 쪽 번호 자리: 아래 가운데 / 위 바깥 (머리글은 안쪽으로) */
+.page.fol-bottom-center .folio { text-align: center; }
+.page.fol-top-outer .folio { font-size: 9pt; line-height: 1.2; }
+.page.recto.fol-top-outer .runhead { text-align: left; }
+.page.verso.fol-top-outer .runhead { text-align: right; }
 .marks { position: absolute; left: 0; top: 0; }
 .marks line { stroke: #000; stroke-width: .1; }
 
