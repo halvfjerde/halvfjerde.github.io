@@ -21,11 +21,11 @@
     ]
   },
   "fonts": {
-    "mincho": "Shippori Mincho",
+    "mincho": "Zen Old Mincho",
     "minchoKo": "SM SEMyungJo Std",
-    "gothic": "BIZ UDPGothic",
+    "gothic": "Hiragino Kaku Gothic ProN W3",
     "gothicKo": "SM TGothic Std",
-    "gothicBold": "BIZ UDPGothic Bold",
+    "gothicBold": "Hiragino Kaku Gothic ProN W6",
     "gothicKoBold": "SM TGothic Std",
     "dia": "DiaPro"
   },
