@@ -311,6 +311,9 @@ def char_kind(ch):
     return 'base'
 
 # 세로쓰기에서 돌려 쓸 글자 (세로쓰기 전용 글자 → 가로 글자)
+# 세로쓰기 약물 (가로 글자 → 세로쓰기 전용 글자)
+VFORM = {'(': '︵', '（': '︵', '︵': '︵', ')': '︶', '）': '︶', '︶': '︶',
+         '―': '︱', '—': '︱', '︱': '︱', '〔': '︹', '︹': '︹', '〕': '︺', '︺': '︺'}
 VALT = {'―': ['—', '─', '－'], '(': ['（'], ')': ['）']}
 VROT = {'︵': '(', '︶': ')', '︱': '―', '︹': '〔', '︺': '〕', '(': '(', ')': ')', '（': '(', '）': ')', '―': '―', '—': '―'}
 
@@ -381,6 +384,19 @@ class Inline:
                 body = r'\raisebox{%.3fbp}{%s}' % (up * ctx.size * self.fs, body)
             out.append(body)
         return '{' + ''.join(out) + '}'
+
+    def vform(self, ch, ctx, col_w):
+        """세로쓰기 약물(︵︶︱…): 한글 글꼴에 있으면 그것을, 없으면 일본 글꼴의 것을 한 글자 자리에 세운다.
+        둘 다 없으면 가로 글자를 돌린다 (vglyph)"""
+        v = VFORM.get(ch)
+        if not v or not self.m: return self.vglyph(ch, ctx, col_w)
+        em = ctx.size * self.fs
+        for fam, role in ((KO_OF[ctx.font], KO_ROLE[KO_OF[ctx.font]]), (ctx.font, JP_OF[ctx.font])):
+            fi = self.m.info.get(role)
+            if fi and fi.has(v):
+                g = '{' + self.font(ctx, fam) + esc(v) + '}'
+                return r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (col_w, -0.12 * em, em, g), 1.0
+        return self.vglyph(ch, ctx, col_w)
 
     def vglyph(self, ch, ctx, col_w):
         """세로쓰기의 괄호·줄표: 한글 글꼴의 가로 글자를 돌려, 잉크의 가운데를 열의 가운데에"""
@@ -485,7 +501,7 @@ class Inline:
                 if ch == ' ':
                     rows.append(r'\kern%.3fbp' % (0.33 * em)); h += 0.33; i += 1; continue
                 if ch in VROT:
-                    t, l = self.vglyph(ch, c, em)
+                    t, l = self.vform(ch, c, em)
                     rows.append(t); h += l; i += 1; continue
                 if is_latin(ch):
                     j = i
@@ -746,7 +762,7 @@ class Book:
                 if ch in ' 　':
                     items.append(r'\kern%.3fbp' % (0.3 * em)); hgt += 0.3; i += 1; continue
                 if ch in VROT:
-                    t, l = self.inl.vglyph(ch, c, 1.3 * em)
+                    t, l = self.inl.vform(ch, c, 1.3 * em)
                     items.append(t); hgt += l; i += 1; continue
                 if is_latin(ch):
                     j = i
