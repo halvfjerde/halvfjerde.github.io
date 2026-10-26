@@ -4,10 +4,10 @@
     "w": 148,
     "h": 210,
     "margin": {
-      "top": 12,
-      "bottom": 8,
-      "inner": 11,
-      "outer": 8
+      "top": 15,
+      "bottom": 11,
+      "inner": 16,
+      "outer": 11
     }
   },
   "fs": 6.5,
