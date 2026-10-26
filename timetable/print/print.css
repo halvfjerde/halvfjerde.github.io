@@ -44,6 +44,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .form textarea, .items textarea { resize: vertical; }
 .form label.custom { display: none; }
 .form.is-custom label.custom { display: flex; }
+.form label.localf { display: none; }
+.form.is-local label.localf { display: flex; }
 .checks { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 10px; font-size: 13px; }
 .checks label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 

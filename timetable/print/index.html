@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="/font/un/unbatang.css?v=1">
 <link rel="stylesheet" href="/font/un/undotum.css?v=1">
 <link rel="stylesheet" href="api.php?action=css">
-<link rel="stylesheet" href="print.css?v=13">
+<link rel="stylesheet" href="print.css?v=14">
 <style id="pagesize">@page { size: 182mm 257mm; margin: 0; }</style>
 </head>
 <body>
@@ -65,7 +65,10 @@
           <option value="antique">옛 명조 (しっぽり明朝 B1·옛 가나 고딕·송명)</option>
           <option value="shippori">しっぽり明朝 (고딕은 Zen·은바탕·은돋움)</option>
           <option value="tokumin">옛 특명조 (解星 特ミン·しっぽりアンチック·고운바탕)</option>
-          <option value="shaken">손에 둘 것 (石井·TypeSquare)</option></select></label>
+          <option value="shaken">손에 둘 것 (石井·TypeSquare)</option>
+          <option value="local">내 컴퓨터에 설치한 글꼴 (石井 등)</option></select></label>
+        <label class="localf" title="내 컴퓨터에 설치한 명조 글꼴의 이름 (예: 석정명조를 설치했다면 그 글꼴 이름). 비우면 Zen">명조 이름<input id="fLocalM" type="text" placeholder="예: IshiiMincho"></label>
+        <label class="localf" title="내 컴퓨터에 설치한 고딕 글꼴의 이름. 비우면 Zen">고딕 이름<input id="fLocalG" type="text" placeholder="예: IshiiGothic"></label>
         <label>색<select id="fColor"><option value="color">색</option><option value="mono">흑백</option></select></label>
         <label>철<select id="fBinding" title="책을 어느 쪽으로 철하는가. 펼침면의 순서와 안쪽 여백, 머리글·쪽 번호의 바깥쪽이 따라 바뀐다">
           <option value="left">왼쪽 철 (가로짜기 책)</option><option value="right">오른쪽 철 (세로짜기 책)</option></select></label>
@@ -121,6 +124,6 @@
 
 <div id="measure" class="book" aria-hidden="true"></div>
 
-<script type="module" src="app.js?v=13"></script>
+<script type="module" src="app.js?v=14"></script>
 </body>
 </html>

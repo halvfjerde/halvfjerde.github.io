@@ -783,7 +783,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
         그 값으로 책의 격자를 정한다 */
   const tabs = book.items.filter((it) => it.type === 'table')
     .map((it) => ({ it, t: docs.get(`${it.title}@${it.oldid}`)?.tables[it.idx] })).filter((x) => x.t);
-  const mkey = `${book.fs}|${book.fonts}`;
+  const mkey = `${book.fs}|${book.fonts}|${book.fonts === 'local' ? `${book.localMincho}|${book.localGothic}` : ''}`;
   const measures = new Map();   // 표 → 잰 값
   warmBox.insertAdjacentHTML('beforeend', `<div class="m-free">${esc([book.title, book.subtitle, book.edition, book.publisher, book.date, L.toc].join(' '))}</div>`);
   for (let i = 0; i < tabs.length; i++) {
@@ -840,7 +840,7 @@ export async function layoutBook(book, docs, out, mroot, onProgress) {
         minScale: 0.7, availW, availH, grid: G, fill: fillMode, gapY, contH,
       };
       // 가로 조각까지만 정해 둔다 (세로 띠는 쪽에 놓을 때 그 자리에 맞춰). 같은 표·같은 조건이면 지난번 것을 다시 쓴다
-      const ck = JSON.stringify([it.title, it.oldid, it.idx, fopt, book.fonts]);
+      const ck = JSON.stringify([it.title, it.oldid, it.idx, fopt, mkey]);
       const b = { kind: 'table', item: it, lang: langOf(t.titleText + it.title), src: t.el, fopt, ck };
       b.info = INFO_CACHE.get(ck);
       if (!b.info) {
@@ -1336,6 +1336,7 @@ function colophon(book, docs, L) {
     antique: 'DiaPro · Shippori Mincho B1 · Zen Kaku Gothic Antique · Song Myung (OFL) · 은바탕·은돋움 (GPL)',
     shippori: 'DiaPro · Shippori Mincho · Zen Kaku Gothic New (OFL) · 은바탕·은돋움 (GPL)',
     tokumin: 'DiaPro · Kaisei Tokumin · Shippori Antique B1 · Gowun Batang (OFL) · 은바탕·은돋움 (GPL)',
+    local: `DiaPro (OFL) · ${[book.localMincho, book.localGothic].filter(Boolean).join('·') || 'Zen'} · 은바탕·은돋움 (GPL)`,
   }[book.fonts] || 'DiaPro (OFL) · Zen Old Mincho·Zen Kaku Gothic New (OFL) · 은바탕·은돋움 (GPL)';
   const d = document.createElement('div');
   d.className = 'colophon';

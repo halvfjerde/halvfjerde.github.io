@@ -1,5 +1,5 @@
 /* 시각표 인쇄 — 고르기·설정·미리보기 */
-import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=12';
+import { layoutBook, extractTables, defaultLabel, shortTitle, SIZES } from './layout.js?v=13';
 
 const $ = (s) => document.querySelector(s);
 const KEY = 'tt-print-book-v1';
@@ -256,6 +256,7 @@ const FIELDS = [
   ['#mTop', 'page.margin.top', Number], ['#mBottom', 'page.margin.bottom', Number],
   ['#mInner', 'page.margin.inner', Number], ['#mOuter', 'page.margin.outer', Number],
   ['#fFs', 'fs', Number], ['#fFonts', 'fonts'], ['#fColor', 'color'], ['#fBinding', 'binding'], ['#fFolioPos', 'folioPos'],
+  ['#fLocalM', 'localMincho'], ['#fLocalG', 'localGothic'],
 ];
 const CHECKS = [
   ['#pCover', 'parts.cover'], ['#pToc', 'parts.toc'], ['#pRunhead', 'parts.runhead'], ['#pFolio', 'parts.folio'],
@@ -268,6 +269,7 @@ function fillForm() {
   for (const [sel, path] of FIELDS) $(sel).value = getp(book, path) ?? '';
   for (const [sel, path] of CHECKS) $(sel).checked = !!getp(book, path);
   $('#fSize').closest('.form').classList.toggle('is-custom', book.page.size === 'custom');
+  $('#fFonts').closest('.form').classList.toggle('is-local', book.fonts === 'local');
 }
 function bindForm() {
   for (const [sel, path, conv] of FIELDS) {
@@ -304,6 +306,15 @@ async function render() {
       el.classList.toggle('shaken', book.fonts === 'shaken');
       for (const f of ['antique', 'tokumin', 'shippori']) el.classList.toggle(`f-${f}`, book.fonts === f);
       el.classList.toggle('mono', book.color === 'mono');
+      // 내 컴퓨터에 설치한 글꼴: 이름 그대로 쓰고, 없는 글자(한글 등)는 은바탕·은돋움, 그다음 Zen
+      const q = (n) => (n ? `"${String(n).replace(/["\\]/g, '')}", ` : '');
+      if (book.fonts === 'local') {
+        el.style.setProperty('--bk-mincho', `${q(book.localMincho)}"UnBatang", "Zen Old Mincho", serif`);
+        el.style.setProperty('--bk-gothic', `${q(book.localGothic)}"UnDotum", "Zen Kaku Gothic New", sans-serif`);
+      } else {
+        el.style.removeProperty('--bk-mincho');
+        el.style.removeProperty('--bk-gothic');
+      }
     }
     if (book.fonts === 'shaken') await typesquare();
     await bookFonts(book.fonts);
