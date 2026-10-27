@@ -198,6 +198,7 @@ class Ctx:
         self.font, self.size, self.color = font, size, color
     def but(self, **kw):
         c = Ctx(self.font, self.size, self.color)
+        c.track = getattr(self, 'track', 0.0)
         for k, v in kw.items(): setattr(c, k, v)
         return c
 
@@ -420,7 +421,8 @@ class Inline:
                             return r'\kern%.3fbp %s\kern%.3fbp ' % (-x0 * em_b, esc(ch), (-(adv - x1) + 0.1) * em_b)
                         return r'\kern%.3fbp %s\kern%.3fbp ' % ((-x0 + 0.1) * em_b, esc(ch), -(adv - x1) * em_b)
                 return esc(ch)
-            t = ''.join(one(ch) for ch in chs)
+            tr_ = getattr(ctx, 'track', 0.0)          # 자간 (em). 열차번호의 숫자는 살짝 좁게
+            t = (r'\kern%.3fbp ' % (tr_ * ctx.size * self.fs)).join(one(ch) for ch in chs) if tr_ else ''.join(one(ch) for ch in chs)
             c2 = ctx
             up = self.shift_for(k, ctx.font)
             if k == 'jp' and self.m:
@@ -429,7 +431,7 @@ class Inline:
                     c2 = ctx.but(size=ctx.size * sc)
                     up += (1 - sc) * self.c          # 작아진 글자의 가운데를 제자리에
             body = '{' + self.font(c2, fam) + t + '}'
-            wsum += c2.size * sum(self.adv(ch, fam) for ch in chs)
+            wsum += c2.size * sum(self.adv(ch, fam) for ch in chs) + (tr_ * ctx.size * (len(chs) - 1) if tr_ else 0.0)
             if abs(up) > 0.002 and not (vertical and k == 'base'):
                 body = r'\raisebox{%.3fbp}{%s}' % (up * ctx.size * self.fs, body)
             out.append(body)
@@ -543,6 +545,7 @@ class Inline:
             c2 = ctx
             for cl, f in FONT_OF_CLASS.items():
                 if cl in cls: c2 = c2.but(font=f)
+            if 'jtt-no' in cls: c2 = c2.but(track=-0.04)     # 열차번호(명조) 숫자는 자간을 살짝 좁게
             if 'jtt-lit' in cls and ctx.font in ('DGB', 'GB'): c2 = c2.but(font='GB')   # 굵은 글 안의 로마자(KTX 등)는 고딕 굵게 그대로
             if 'jtt-j' in cls:
                 chars = [self.run(x.text(), c2) for x in k.kids if isinstance(x, Node)]
@@ -971,10 +974,11 @@ class Book:
         em = size * self.fs
         bs = 0.84 * em
         bw = bs * 1.16
-        bh = bs * (len(t) + 0.36 + 0.6)
+        G = 0.14 * bs                     # 두 글자 사이를 살짝 띄운다
+        bh = bs * (len(t) + 0.36 + 0.6) + G * (len(t) - 1)
         P = 0.4 * em
-        top = (bh - P - len(t) * bs) / 2 + (0 if down else P)
-        stack = ''.join(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (
+        top = (bh - P - len(t) * bs - G * (len(t) - 1)) / 2 + (0 if down else P)
+        stack = (r'\kern%.3fbp' % G).join(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (
             bw, -0.12 * bs, bs, self.inl.run(ch, Ctx('GB', size * 0.84, None if hollow else 'FFFFFF'), True)) for ch in t)
         return r'\hbox to %.3fbp{\hss\ttdir{%.3f}{%.3f}{%d}{%d}{%.3f}{%.3f}{%s}\hss}' % (
             colw, bw, bh, 1 if down else 0, 1 if hollow else 0, P, top, stack), bh
@@ -1194,6 +1198,12 @@ class Book:
                     if ch in VROT:
                         t, l = self.inl.vform(ch, c, cw)
                         items.append(t); L += l * em; i += 1; continue
+                    if ch.isdigit():                  # 쪽 번호 등 두 자리까지: 세로 안에 가로로 세워(縦中横) 한 칸에
+                        j = i
+                        while j < len(text) and text[j].isdigit(): j += 1
+                        if j - i <= 2:
+                            items.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (cw, -0.12 * em, em, self.inl.run(text[i:j], c, True)))
+                            L += em; i = j; continue
                     if is_latin(ch):
                         j = i
                         while j < len(text) and is_latin(text[j]): j += 1
@@ -2333,9 +2343,16 @@ class Book:
                     if a % 2 == 0 and b == a + 1 and alone(prev) and alone(pc):
                         groups[-1].append(pc); continue
                 groups.append([pc])
+            f0 = self.cfg.get('firstFolio', 2)
             for k, g in enumerate(groups):
+                lab = (ORD_KO[k] if k < len(ORD_KO) else '%d째' % (k + 1)) if len(groups) > 1 else ''
+                # 다음·앞 조각이 바로 이웃한 쪽이 아니면 어디로 이어지는지 (「첫째・17쪽으로」「둘째・9쪽에서」)
+                if lab and k + 1 < len(groups) and pidx[id(groups[k + 1][0])] - pidx[id(g[-1])] > 1:
+                    lab += '・%d쪽으로' % (pidx[id(groups[k + 1][0])] + f0)
+                if lab and k > 0 and pidx[id(g[0])] - pidx[id(groups[k - 1][-1])] > 1:
+                    lab += '・%d쪽에서' % (pidx[id(groups[k - 1][-1])] + f0)
                 for pc in g:
-                    pc['part'] = (ORD_KO[k] if k < len(ORD_KO) else '%d째' % (k + 1)) if len(groups) > 1 else ''
+                    pc['part'] = lab
         # 단(같은 높이)마다 맨 오른쪽 조각만 빈 열로 판면 끝까지 채운다
         for pg in pages:
             for pc in pg['pieces']:
@@ -2428,7 +2445,7 @@ class Book:
                     run.append(nxt[0])
                 for k, q in enumerate(run):
                     q['vrun'] = (k, sum(r['h'] for r in run) - (len(run) - 1) * fw, len(run))
-                    q['vrun_part'] = '·'.join(r['part'] for r in run if r.get('part'))    # 한 칸에 걸친 몇째들: (첫째·둘째)
+                    q['vrun_part'] = '・'.join(dict.fromkeys(r['part'] for r in run if r.get('part')))    # 한 칸에 걸친 몇째들: (첫째·둘째)
         self.pages = pages
 
     def emit(self, out_tex):
