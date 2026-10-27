@@ -59,16 +59,20 @@ def merge_into(g, k, insert=True, via=None):
             if x in sn: tt[sn.index(x)] = tr['times'][j]
         return dict(tr, times=tt, **(extra or {}))
     trs = [remap(tr, gn) for tr in g['trains']]
+    skipped = list(g.get('skipped', []))
     for tr in k['trains']:
         r = remap(tr, kn, {'ktx': True, **real_ends_of(tr, k['stations'])})
         ix = [i for i, x in enumerate(r['times']) if isinstance(x, int)]
         if not ix: continue
+        if via and len(ix) == 1:                          # 이 표에서는 한 역(포항 등)에만 서는 열차: 고속철도 표에만 (주에 적는다)
+            if (sn[ix[0]], via) not in skipped: skipped.append((sn[ix[0]], via))
+            continue
         if via:
             lab = f'{via}/경유'                                # 「경부고속선/경유」 두 줄 세로쓰기
             if clean_name(r['from']) != sn[ix[0]] and ix[0] >= 1: r['times'][ix[0] - 1] = lab
             if clean_name(r['to']) != sn[ix[-1]] and ix[-1] + 1 < len(sn): r['times'][ix[-1] + 1] = lab
         trs.append(r)
-    return dict(g, stations=st, trains=trs)
+    return dict(g, stations=st, trains=trs, skipped=skipped)
 
 # 서는 열차가 없어도 남길 역 (하행·상행의 역을 맞춰 나란히 놓을 때 행이 어긋나지 않게. 모든 열차 통과로)
 KEEP_STATIONS = {('gen', '목포보성선'): {'조성'}}
@@ -219,6 +223,7 @@ class Table:
         self.cat, self.line, self.dir = t['cat'], t['line'], t['dir']
         self.variant = t.get('variant')
         self.merged = t.get('merged')       # 합친 노선 (경전선·전라선)
+        self.skipped = t.get('skipped', [])  # 합치지 않은 KTX: 이 표에서 한 역에만 서는 것 [(역, 고속선)]
         st = [clean_name(s) for s in t['stations']]
         self.hanja = hanja
         trains = []
@@ -559,6 +564,8 @@ class Table:
             notes.append('굵은 줄 오른쪽은 수서 발착')
         elif (self.cat, self.line) in COUPLE_GUEST and self.variant != '수서':
             notes.append(f'수서 발착 열차는 수서 발착 병결 표에')
+        for st_, via_ in self.skipped:
+            notes.append(f"{st_}에만 서는 KTX({via_} 경유)는 {via_.replace('고속선', '고속철도')} 표에")
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
             notes.append('着発 역의 빈 도착 시각은 자료 없음')
         L += notes

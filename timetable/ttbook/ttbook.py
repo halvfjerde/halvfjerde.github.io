@@ -2355,12 +2355,17 @@ class Book:
                 for T in held: T.hold_after = h['after']
                 k = rest[:at + 1] + held + rest[at + 1:]
             if k: bunches.append(k)
+        # hsrLast: 고속철도만 있는 표(경부고속철도·호남고속철도)는 책 끝으로 (노선마다 한 묶음)
+        hsr = lambda T: self.cfg.get('hsrLast', False) and self.is_ktx(T) and '고속철도' in T.title.text()
         for T in tables:
             if self.cfg.get('ktxFirst', False) and self.is_ktx(T): continue
+            if hsr(T): continue
             if bunches and bunches[-1] and not self.is_ktx(bunches[-1][0]) and bunches[-1][0].line == T.line:
                 bunches[-1].append(T)
             else:
                 bunches.append([T])
+        for ln in dict.fromkeys(T.line for T in tables if hsr(T)):
+            bunches.append([T for T in tables if hsr(T) and T.line == ln])
         # 띠 자리: bandPos top | left | auto (auto: 왼쪽 세로 띠로 해야 한 쪽에 두 단이 들어가는 표만 왼쪽으로)
         mode = self.cfg.get('bandPos', 'top')
         def per_page(h):
