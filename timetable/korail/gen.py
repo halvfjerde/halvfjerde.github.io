@@ -82,6 +82,7 @@ SPLIT_SUSEO = {('ktx', '경부선'), ('ktx', '호남선')}
 # 순환 열차(시발역＝종착역: 홍성–천안–서화성–홍성 ITX-마음)는 따로 표로 (다른 표에서는 뺀다)
 SPLIT_LOOP = {('gen', '서해선')}
 LINE_STATIONS = {}      # (cat, 노선) → 역 이름들 (main 에서 채운다)
+NOTE_COL_MAX = 21       # 주석 열을 더해도 이 열 수 안이면 주석 열, 넘치면 비고에
 LOOP_NAME = {('gen', '서해선'): '평택선'}
 def is_loop(tr): return bool(tr.get('from')) and clean_name(tr.get('from')) == clean_name(tr.get('to') or '')
 # 노선 띠에 적을 역(하행 차례. 상행은 뒤집는다). 없으면 자동
@@ -432,7 +433,12 @@ class Table:
         L.append('[footer]')
         if has_to: L.append(f'to   {lbl("to")} r={LBL["to"][1]}')
         if cp and cp['pos'] == 'foot': L.append(cpl_row)
-        cpn = any(self.cpl_note(tr) for tr in self.trains) or any(self.from_line(tr) for tr in self.trains)
+        # 표의 첫 역에서 다른 선에서 들어온 열차: 그 열차(같은 선에서 잇달아 오는 열차들) 앞에 주석 열(꺾쇠 화살표 ↱ + 「…선에서」 세로).
+        # 주석 열을 더하면 한 쪽에 넘칠 만큼 열차가 많은 표는 비고에 (↑…선 경유)
+        fls = [self.from_line(tr) for tr in self.trains]
+        runs = sum(1 for i, f in enumerate(fls) if f and (i == 0 or fls[i - 1] != f))
+        self.notecol = bool(runs) and len(self.trains) + runs <= NOTE_COL_MAX
+        cpn = any(self.cpl_note(tr) for tr in self.trains) or (any(fls) and not self.notecol)
         # 운행일은 제 행에 (기호 ◆◇ 또는 요일), 비고 행에는 병결·그 밖의 주. 모든 표의 끝은 비고 행 (인쇄에서 쪽의 남는 자리를 받는다)
         isday = lambda s: bool(s) and all(ch in WEEK for ch in s)
         days = {tr['note'] for tr in self.trains if isday(tr['note'])}
@@ -511,8 +517,21 @@ class Table:
         L.append('')
         L.append('[trains]')
         prev_block = 0
+        prev_fl = None
+        nft = (1 if has_to else 0) + (1 if cp and cp['pos'] == 'foot' else 0) + (1 if self.has_days else 0) + (1 if (has_day or self.rem_row) else 0)
         for tr in self.trains:
             if tr.get('block', 0) != prev_block: L.append('---'); prev_block = tr.get('block', 0)   # 덧붙인 덩어리 앞에 굵은 세로줄
+            fl = self.from_line(tr) if self.notecol else None
+            if fl and fl != prev_fl:                     # 주석 열: 첫 역 줄에 ↱, 그 밑에 「…선에서」 세로
+                nslot = sum(2 if k in self.split else 1 for k in range(len(self.st)))
+                toks = []
+                for k in range(len(self.st)):
+                    ps = ['!'] * (2 if k in self.split else 1)
+                    if k == 0: ps[0] = q(f'^{nslot} va=t; ↱/VR{{{esc_txt(fl)}에서}}')
+                    toks.append(','.join(ps))
+                ph = ['_', '_'] + (['_'] if has_fr else []) + (['_'] if cp and cp['pos'] == 'head' else [])
+                L.append(' '.join(ph) + ' : ' + ' '.join(compress(toks)) + (' : ' + ' '.join(['_'] * nft) if nft else ''))
+            prev_fl = fl
             k = KIND.get(tr['type'], tr['type'])
             col = SUSEO_COLOR if self.is_suseo(tr) else KTX_COLOR       # 수서 발착은 자주색
             hdr = [q(badge(k, tr['type'])), tr['no']] + ([f'style=fc={col}', 'tstyle=fw=b'] if tr.get('ktx') else [f'style=fc={col}'] if ktx else [])   # 고속철도 표는 열차 칸을 모두 파랗게
@@ -538,7 +557,7 @@ class Table:
                 cn = self.cpl_note(tr)
                 fl = self.from_line(tr)
                 if cn: ft.append(q(cn))
-                elif fl and not (nt and '경유' in nt): ft.append(q(vert(f'↑{fl}/경유')))     # 표의 첫 역에서 다른 선에서 들어온 열차: 위 화살표 밑에 세로쓰기(…선 | 경유)
+                elif fl and not self.notecol and not (nt and '경유' in nt): ft.append(q(vert(f'↑{fl}/경유')))     # 표의 첫 역에서 다른 선에서 들어온 열차: 위 화살표 밑에 세로쓰기(…선 | 경유)
                 elif nt and not isday(nt): ft.append(q(vert(day_range(nt))))
                 else: ft.append('_')
             elif self.rem_row: ft.append('_')
