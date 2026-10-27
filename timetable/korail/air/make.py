@@ -15,7 +15,6 @@ def short(nm):
 def wdl(ws):
     ws = sorted(ws)
     if ws == [0, 1, 2, 3, 4]: return '월∼금'
-    if len(ws) == 6: return '%s 빼고' % WD[next(w for w in range(7) if w not in ws)]
     if len(ws) >= 3 and ws == list(range(ws[0], ws[-1] + 1)): return WD[ws[0]] + '∼' + WD[ws[-1]]
     return '・'.join(WD[w] for w in ws)
 def label(days):
