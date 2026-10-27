@@ -322,7 +322,7 @@ HFULL = {'(': '（', '（': '（', '︵': '（', ')': '）', '）': '）', '︶'
          '―': '―', '—': '―', '︱': '―', '〔': '〔', '︹': '〔', '〕': '〕', '︺': '〕'}
 SUBST = {'∼': ['～', '〜', '~'], '～': ['〜', '∼', '~'], '〜': ['～', '∼', '~'], '―': ['—', '─'], '—': ['―', '─'], '・': ['·'], '·': ['・']}
 VALT = {'―': ['—', '─', '－'], '(': ['（'], ')': ['）']}
-VROT = {'︵': '(', '︶': ')', '︱': '―', '︹': '〔', '︺': '〕', '(': '(', ')': ')', '（': '(', '）': ')', '―': '―', '—': '―'}
+VROT = {'〔': '〔', '〕': '〕', '︵': '(', '︶': ')', '︱': '―', '︹': '〔', '︺': '〕', '(': '(', ')': ')', '（': '(', '）': ')', '―': '―', '—': '―'}
 
 class Metrics:
     """글꼴에서 잰 값: 기준 중심(명조 한자), 글꼴마다 옮길 양"""
@@ -728,7 +728,7 @@ class Book:
         self.page_title = cfg.get('pageTitle', False)              # 표마다의 세로 제목 대신, 쪽마다 노선 이름을 하나 크게 (바깥 여백)
         if self.page_title: self.hang_title = True
         self.band_inset = cfg.get('bandInset', 1.1) * self.fs
-        self.vband_w = cfg.get('leftBandWidth', 1.8) * self.fs      # 띠를 표 왼쪽 끝에 세로로 둘 때의 폭     # 띠의 왼쪽·오른쪽 글을 틀에서 띄우는 만큼
+        self.vband_w = cfg.get('leftBandWidth', 2.2) * self.fs      # 띠를 표 왼쪽 끝에 세로로 둘 때의 폭     # 띠의 왼쪽·오른쪽 글을 틀에서 띄우는 만큼
         self.notes = cfg.get('notes', True)                        # false: 표 밑의 주기(공통 범례)를 싣지 않는다
         self._bands = {}
         self.fold = cfg.get('fold', 'off')                          # off | on | auto: 표를 한 쪽 폭의 띠로 접어 위아래로 쌓기
@@ -814,8 +814,23 @@ class Book:
         """칸마다 줄 목록·필요 높이, 행 높이(R 의 배수)"""
         fs = self.fs
         base = Ctx('DM', 1.0)
+        # 운행일 행: 세로쓰기 대신 작은 글자로 가로로 (한 줄에 세 자까지, 고르게 나눠 여러 줄)
+        if self.cfg.get('daysCompact', True):
+            dayrows = {cl.r for cl in T.cells if cl.c == 0 and re.sub(r'\s', '', cl.node.text()) == '운행일'}
+            for cl in T.cells:
+                if cl.r in dayrows and cl.c > 0 and cl.node.find(lambda n: 'jtt-v' in n.cls):
+                    t = re.sub(r'\s', '', cl.node.text())
+                    k = -(-len(t) // 3)
+                    per = -(-len(t) // k)
+                    nd = Node('td', [])
+                    for i in range(0, len(t), per):
+                        if i: nd.kids.append(Node('br', []))
+                        nd.kids.append(t[i:i + per])
+                    cl.node, cl.small = nd, 0.75
+                    cl.style = dict(cl.style); cl.style['vertical-align'] = 'middle'
         for cell in T.cells:
             c = base
+            if getattr(cell, 'small', None): c = c.but(size=cell.small)
             for cl, f in FONT_OF_CLASS.items():
                 if cl in cell.cls: c = c.but(font=f)
             if ('jtt-ad' in cell.cls or 'jtt-mk' in cell.cls) and 'jtt-th' not in cell.cls: c = c.but(size=0.8)
@@ -1148,19 +1163,21 @@ class Book:
             tex.append(self.put_box(tx - TW if self.hang_title else x0, y0, TW - 0.3 * fs, ttlH, ttl, 'l', 't'))
         # 세로 띠
         if VB:
-            bx = xs[0] - VB if side != 'R' else xs[-1]
+            # 제목칸: 틀 안쪽 끝 ~ 세로 괘선 사이(틀과 표 사이 여백까지)의 가운데에
+            bx = fx0 + fw if side != 'R' else xs[-1]
+            VBc = VB + fp
             run = pc and pc.get('vrun')
             if run and run[2] > 1:            # 같은 표의 띠 여럿에 걸친 제목칸: 첫 띠에서 한 번에
                 if run[0] == 0:
                     Hh = run[1] - 2 * (fw + fp) - 0.6 * fs
                     vt, _ = self.vband(T, None, Hh)
-                    tex.append(self.put_box(bx, ty + 0.3 * fs, VB, Hh, vt, 'c', 't'))
+                    tex.append(self.put_box(bx, ty + 0.3 * fs, VBc, Hh, vt, 'c', 't'))
                 y_a = y0 if run[0] > 0 else ty
                 y_b = fy1 if run[0] < run[2] - 1 else ys[-1]
                 rects.append(('v', xs[0] if side != 'R' else xs[-1], y_a, y_b, 1))
             else:
                 vt, _ = self.vband(T, part, ys[-1] - ty - 0.6 * fs)
-                tex.append(self.put_box(bx, ty + 0.3 * fs, VB, ys[-1] - ty - 0.6 * fs, vt, 'c', 't'))
+                tex.append(self.put_box(bx, ty + 0.3 * fs, VBc, ys[-1] - ty - 0.6 * fs, vt, 'c', 't'))
                 rects.append(('v', xs[0] if side != 'R' else xs[-1], ty, ys[-1], 1))
         # 노선 머리띠
         if hb:
@@ -1486,11 +1503,35 @@ class Book:
         t = (T.title.text() if T.title is not None else '') + (T.head.text() if T.head is not None else '')
         return 'KTX' in t
 
+    def redundant_ends(self, T):
+        """시발역·종착역 행이 표 안의 시각과 겹치면(모든 열차가 표에 실린 역에서 떠나고 닿으면) 그 행들.
+        접어 실을 때만 뺀다 (첫 시각·끝 시각과 끝남 표시 ═ 로 알 수 있다)"""
+        if hasattr(T, '_drop'): return T._drop
+        names = set()
+        for cl in T.cells:
+            if T.hEnd <= cl.r < T.fStart and cl.c == 0:
+                names.add(re.sub(r'\s', '', cl.node.text()))
+        drop = set()
+        for label in ('시발역', '종착역'):
+            rows = {cl.r for cl in T.cells if cl.c == 0 and re.sub(r'\s', '', cl.node.text()) == label}
+            if not rows: continue
+            ok = True
+            for cl in T.cells:
+                if cl.r in rows and cl.c > 0 and T.kind[cl.c][0] == 'T':
+                    nm = re.sub(r'[\d\s:.]', '', cl.node.text())
+                    if nm and nm not in names: ok = False; break
+            if ok: drop |= rows
+        T._drop = drop
+        return drop
+
     def jobs_of(self, T):
         """표 하나를 실을 일감들: [{kind single|pair, trs, rows, h, ...}] (역 구간 먼저, 그 안에서 열차 무리 차례)"""
         PH = self.ch
         L, Tc, R = self.blocks(T)
         head = list(range(T.hEnd)); foot = list(range(T.fStart, T.nrow)); body = list(range(T.hEnd, T.fStart))
+        if getattr(T, 'fold', False) and self.cfg.get('dropEnds', True):
+            drop = self.redundant_ends(T)
+            head = [r for r in head if r not in drop]; foot = [r for r in foot if r not in drop]
         cuts = self.cut_ok(T)
         TH = 0 if self.page_title else self.title_tex(T, part='열넷째')[1] + 0.5 * self.fs
         BWF = self.band_w(self.cw)
@@ -1666,7 +1707,8 @@ class Book:
                 m = per_page(max(j['h'] for j in jf))
                 ok = m >= 2 and len(jf) > 1
                 pf = -(-len(jf) // max(m, 1))
-                pt = sum(2 if j['kind'] == 'pair' else 1 for j in jt) * max(j['h'] for j in jt) / PH
+                # 펼침면 짝은 두 쪽을 다 쓴다(남는 자리에 다른 표가 들기 어렵다). 한 쪽 조각은 높이만큼
+                pt = sum(2 if j['kind'] == 'pair' else j['h'] / PH for j in jt)
                 if self.fold == 'on' or (ok and pf <= pt + 0.01):
                     continue
                 T.band_left = False; T.fold = False

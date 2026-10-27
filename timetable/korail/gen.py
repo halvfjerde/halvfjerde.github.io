@@ -318,7 +318,7 @@ class Table:
             for i, s in enumerate(self.st):
                 trav = sum(1 for tr in self.trains if isinstance(tr['times'][i], int) or tr['times'][i] == 'v')
                 stop = self.stops(i)
-                if (N >= 20 and trav and stop == trav and stop >= 0.3 * N) or (s in KTX_MAJOR and stop):
+                if N >= 20 and trav and stop == trav and stop >= 0.3 * N:      # 지나는 열차가 모두 서는 역만 (직관적 주요역 KTX_MAJOR 은 인쇄 쪽수 때문에 한 줄로)
                     self.split.add(i)
         self.split -= {i for i, s in enumerate(self.st) if s in NOSPLIT_ALL}
         # 상행·하행이 같은 주요역·착발역을 쓰도록 main 에서 두 방향을 모아 정한 값(shared)으로 덮어쓴다
