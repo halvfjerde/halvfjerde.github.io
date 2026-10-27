@@ -936,14 +936,15 @@ class Book:
         """진행 방향 화살표: 첫 역 행부터 끝 역 행까지 축, 끝에 칠한 촉, 뒤에 V 깃"""
         em = self.fs
         hw, hl = 0.24 * em, 0.9 * em          # 촉: 속 빈 세모
-        fw_, fd = 0.14 * em, 0.4 * em         # 깃: 속 빈 V (🔰 꼴 띠), 좌우로 좁고 위아래로 높게 (행 1.8개 남짓)
-        fv = max(0.5 * em, 1.8 * self.R - fd - 0.2 * em)
+        fw_, ft = 0.3 * em, 0.14 * em         # 깃: 속 빈 V (🔰 꼴 띠). 반폭·띠 굵기(가로), 위아래로 높게 (행 1.8개 남짓)
+        fd = 0.0
+        fv = max(0.5 * em, 1.8 * self.R - 0.2 * em)
         lw = self.rw[1]
         yt, yb = y0 + 0.1 * em, y1 - 0.08 * em
         if dr == 'u': yt, yb = y1 - 0.1 * em, y0 + 0.08 * em      # 위로: 꼬리가 아래
         s = 1 if yb > yt else -1
         out = [('line', [(x, yt + s * fv), (x, yb - s * hl * 1.02)], shaft or lw),      # 축: 착발 칸과 첫 열차 열 사이 괘선을 대신 (깃 밑에서부터)
-               ('closed', [(x - fw_, yt), (x, yt + s * fv), (x + fw_, yt), (x + fw_, yt + s * fd), (x, yt + s * (fv + fd)), (x - fw_, yt + s * fd)], lw),
+               ('closed', [(x - fw_, yt), (x, yt + s * fv), (x + fw_, yt), (x + fw_ - ft, yt), (x, yt + s * fv * (1 - ft / fw_)), (x - fw_ + ft, yt)], lw),
                ('closed', [(x - hw, yb - s * hl), (x + hw, yb - s * hl), (x, yb)], lw)]
         return out
 
