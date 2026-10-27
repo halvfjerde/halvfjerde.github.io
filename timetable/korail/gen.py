@@ -1097,11 +1097,11 @@ def main():
                     if any(y not in S for y in nb) and x not in jn.get(b, []): jn.setdefault(b, []).append(x)
         out = []
         # 「→갑∼을: 노선」(같은 구간), 「→역: 노선」(환승). 인쇄에서 노선마다 그 표의 쪽 번호를 붙인다
-        out += [f"→{x}∼{y}: {'·'.join(bs)}" for (x, y), bs in shared.items()]
+        out += [f"→{x}∼{y}: {'・'.join(bs)}" for (x, y), bs in shared.items()]
         if jn:
             byst = {}
             for b, xs in jn.items(): byst.setdefault(tuple(xs), []).append(b)
-            out += [f"→{'·'.join(xs)}: {'·'.join(bs)}" for xs, bs in byst.items()]
+            out += [f"→{'・'.join(xs)}: {'・'.join(bs)}" for xs, bs in byst.items()]       # 가운뎃점은 일본 것(・)
         return out
     for line, parts in BOOK:
         P = [f'{{{{시각표테마}}}}', f'{{{{상위문서|{PREFIX}}}}}',
