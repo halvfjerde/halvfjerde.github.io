@@ -40,6 +40,7 @@ MERGE_INTO = {}
 for _k, _g in MERGE_KTX.items(): MERGE_INTO.setdefault(_g, []).append(_k)
 VIA_HSR = {('ktx', '경전선'): '경부고속선', ('ktx', '전라선'): '호남고속선', ('ktx', '동해선(서울~포항)'): '경부고속선'}
 KTX_STYLE = ['style=fc=' + KTX_COLOR, 'tstyle=fw=b']
+SUSEO_COLOR = '#d1007a'         # 수서 발착 열차(옛 SRT)는 자주색
 
 def merge_into(g, k, insert=True, via=None):
     """재래선 표 g 에 KTX 표 k 의 열차를 합친다. k 에만 있는 역은 k 의 차례대로 g 사이에 끼운다(insert).
@@ -149,7 +150,7 @@ LINE_HANJA = {'경부선': '京釜線', '호남선': '湖南線', '전라선': '
               '충북선': '忠北線', '경북선': '慶北線', '대구선': '大邱線', '영동선': '嶺東線', '태백선': '太白線',
               '목포보성선': '木浦寶城線', '교외선': '郊外線'}
 # 종별 → 열차명 칸 (KTX 표에서 그냥 KTX는 비운다)
-KIND = {'KTX': '', 'KTX-산천': '산천', 'KTX산천': '산천', 'KTX_산천': '산천', 'KTX-청룡': '청룡', 'KTX-이음': '이음',
+KIND = {'KTX': 'KTX', 'KTX-산천': '산천', 'KTX산천': '산천', 'KTX_산천': '산천', 'KTX-청룡': '청룡', 'KTX-이음': '이음',
         'ITX-새마을': '새마을', '새마을': '새마을', 'ITX-마음': '마음', '무궁화': '무궁화', '누리로': '누리로'}
 LBL = {  # 머리 이름 (한국어, 국한문)
     'fr': ('시발역', '始發驛'), 'no': ('열차번호', '列車番號'), 'kind': ('등급', '等級'), 'car': ('차종', '車種'),
@@ -503,7 +504,8 @@ class Table:
         for tr in self.trains:
             if tr.get('block', 0) != prev_block: L.append('---'); prev_block = tr.get('block', 0)   # 덧붙인 덩어리 앞에 굵은 세로줄
             k = KIND.get(tr['type'], tr['type'])
-            hdr = [q(badge(k, tr['type'])), tr['no']] + (KTX_STYLE if tr.get('ktx') else ['style=fc=' + KTX_COLOR] if ktx else [])   # 고속철도 표는 열차 칸을 모두 파랗게
+            col = SUSEO_COLOR if self.is_suseo(tr) else KTX_COLOR       # 수서 발착은 자주색
+            hdr = [q(badge(k, tr['type'])), tr['no']] + ([f'style=fc={col}', 'tstyle=fw=b'] if tr.get('ktx') else [f'style=fc={col}'] if ktx else [])   # 고속철도 표는 열차 칸을 모두 파랗게
             if has_fr:
                 o, d = self.ends_of(tr)
                 hdr.append(q(f'{esc_txt(o)}/{hm(self.end_times(tr)[0])}'))
@@ -537,8 +539,9 @@ class Table:
         kinds = [KIND.get(tr['type'], tr['type']) for tr in self.trains]
         if ktx:
             names = [('산천', 'KTX-산천'), ('청룡', 'KTX-청룡'), ('이음', 'KTX-이음')]
-            parts = ['무표시는 KTX'] + [f'S{{{k}}}은 `{full}`' for k, full in names if k in kinds]
-            notes.append('차종 ' + ', '.join(parts))
+            parts = [f'S{{{k}}}은 `{full}`' for k, full in names if k in kinds]
+            if parts: notes.append('차종 ' + ', '.join(parts))
+            if any(self.is_suseo(tr) for tr in self.trains): notes.append('자주 글씨는 수서 발착')
         else:
             types = {tr['type'] for tr in self.trains}
             parts = []
@@ -547,8 +550,9 @@ class Table:
             if 'ITX-마음' in types: parts.append('BS{k마음.}은 `ITX-마음`')
             if any(tr.get('ktx') for tr in self.trains):
                 ks = sorted({tr['type'] for tr in self.trains if tr.get('ktx')})
-                sub_ = [f'S{{{KIND[x]}}}은 `{x}`' for x in ks if KIND.get(x)]
+                sub_ = [f'S{{{KIND[x]}}}은 `{x}`' for x in ks if KIND.get(x) and KIND[x] != 'KTX']
                 parts.append('파란 글씨는 KTX' + (f"({', '.join(sub_)})" if sub_ else ''))
+                if any(tr.get('ktx') and self.is_suseo(tr) for tr in self.trains): parts.append('자주 글씨는 수서 발착 KTX')
             if parts: notes.append('등급 ' + ', '.join(parts))
         if self.has_days:   # 운행일 관련은 한 줄로
             dn = []
@@ -602,6 +606,10 @@ class Table:
         cp = getattr(self, 'cpl', None)
         gs = cp['map'].get(tr['no'], []) if cp else []
         return sorted(gs, key=lambda x: -len(week_days(cp['days'][x])))
+
+    def is_suseo(self, tr):
+        o, d = self.ends_of(tr)
+        return '수서' in (clean_name(o), clean_name(d))
 
     def daysym_pre(self):
         days = {tr['note'] for tr in self.trains if tr['note']}

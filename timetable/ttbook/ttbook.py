@@ -598,9 +598,12 @@ class Inline:
         filled = 'jtt-bd--f' in k.cls
         if filled: c2 = c2.but(color='FFFFFF')
         inner_node = next((x for x in k.kids if isinstance(x, Node)), k)
+        latin = bool(re.fullmatch(r'[A-Za-z]+', inner_node.text().strip()))
+        if latin: c2 = c2.but(font='GB' if filled else 'G')       # KTX 등 로마자 등급: 고딕으로, 한글 두 자 폭에
         inner = self.flat(self.lines(inner_node, c2)[0])
         w, sx = 1.3, 1.0
-        if 'jtt-bd--w2' in k.cls: w = 2.2
+        if latin: w, sx = 2.2, 0.92
+        elif 'jtt-bd--w2' in k.cls: w = 2.2
         elif 'jtt-bd--w3' in k.cls: w, sx = 2.4, 0.78
         elif 'jtt-bd--w4' in k.cls: w, sx = 2.4, 0.6
         h = 1.3
@@ -2558,16 +2561,19 @@ class Book:
             if not sj or len(sj) != 1 or sj[0]['kind'] != 'stack': continue
             da, db, rd, hd = sj[0]['d']; ua, ub, ru, hu = sj[0]['u']
             ys_ = []
-            for b_ in range(blank, -1, -1):           # 빈 열은 들 만큼 (모자라면 줄인다)
-                nR = max(len(db), len(ub)) + b_
-                wR = max(self.fixed_w(Td, 'R'), self.fixed_w(Tu, 'R')) + nR * self.P0
-                wY = self.cw + fw - wR
-                ys_ = []
-                for Y in (Yd, Yu):
-                    _, Yc, _ = self.blocks(Y)
-                    if self.fixed_w(Y, 'B') + len(Yc) * self.P0 > wY + 0.01: break
-                    ry = list(range(Y.nrow))
-                    ys_.append((Y, Yc, ry, self.piece_h(Y, ry, False, self.band_w(wY))))
+            # 빈 열은 들 만큼 (모자라면 줄인다). 옆 표에도 빈 열이 하나는 남게(끝을 보이게) 먼저 해 보고, 안 되면 그것 없이
+            for yb_ in (1, 0):
+                for b_ in range(blank, -1, -1):
+                    nR = max(len(db), len(ub)) + b_
+                    wR = max(self.fixed_w(Td, 'R'), self.fixed_w(Tu, 'R')) + nR * self.P0
+                    wY = self.cw + fw - wR
+                    ys_ = []
+                    for Y in (Yd, Yu):
+                        _, Yc, _ = self.blocks(Y)
+                        if self.fixed_w(Y, 'B') + (len(Yc) + yb_) * self.P0 > wY + 0.01: break
+                        ry = list(range(Y.nrow))
+                        ys_.append((Y, Yc, ry, self.piece_h(Y, ry, False, self.band_w(wY))))
+                    if len(ys_) == 2: break
                 if len(ys_) == 2: break
             if len(ys_) != 2 or ys_[0][3] + ys_[1][3] - fw > PH + 0.01: continue
             for T in (Td, Tu, Yd, Yu): T.custom_jobs = None; T.stack_with = None; T.side_with = None; T.stacked = False
