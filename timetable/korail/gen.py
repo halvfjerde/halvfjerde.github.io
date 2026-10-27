@@ -194,6 +194,8 @@ class Table:
         self.st = [st[i] for i in keep]
         for tr in trains:
             tr['times'] = [tr['times'][i] for i in keep]
+            for key in ('via_in_at', 'via_out_at'):          # 뺀 역만큼 자리를 당긴다
+                if key in tr: tr[key] = keep.index(tr[key]) if tr[key] in keep else sum(1 for i in keep if i < tr[key]) - 1
             if tr.get('pass_from') is not None:
                 pf = st[tr['pass_from']]
                 tr['pass_from'] = self.st.index(pf) if pf in self.st else None
@@ -572,7 +574,7 @@ class Table:
             slots = [(k, p) for k in range(k0, k1 + 1) for p in range(phys(k))]
             if len(slots) < 2: return None
             text = via.replace(' ', '')
-            text = text.replace('경유', '/경유')             # 「태백선/경유」 두 줄 세로쓰기
+            if '/' not in text: text = text.replace('경유', '/경유')             # 「태백선/경유」 두 줄 세로쓰기
             need = math.ceil((max(len(x) for x in text.split('/')) + 0.3) / 1.26)   # 긴 줄 1em씩(괄호 없이), 행 1.26em
             if need > len(slots): need = 0                   # 자리가 모자라면 주석 없이 ║ 만 (행이 굵어지지 않게)
             s0 = (len(slots) - need) // 2
@@ -769,12 +771,28 @@ def main():
                     drop = [i for i, x in enumerate(nm) if x in ('수서', '동탄', '평택지제')]
                     entry = nm.index('천안아산') if '천안아산' in nm else None
                     trs = []
+                    # 병결 짝이 있으면 직통 열차처럼: 갈림역 앞(하행)·뒤(상행)는 시각 대신 「ㅇㅇㅇ열차에서/분리」「ㅇㅇㅇ열차로/병결」
+                    gt, gmap = GUEST_SUSEO.get((cat, sheet, d), ({'trains': []}, {}))
+                    gby = {x['no']: x for x in gt['trains']}
+                    at = COUPLE[COUPLE_GUEST[(cat, sheet)]][2]
+                    ka = nm.index(at)
                     for tr in t['trains']:
                         if not isinstance(tr['times'][k], int): trs.append(tr); continue
                         tt = list(tr['times'])
                         ends = {'from': '수서', 'fromT': tt[k]} if d == 'down' else {'to': '수서', 'toT': tt[k]}
                         for i in drop: tt[i] = None
-                        trs.append(dict(tr, times=tt, block=1, pass_from=entry, **ends))
+                        hosts = gmap.get(tr['no'], [])
+                        if hosts:
+                            h = hosts[0]
+                            if d == 'down':
+                                for i in range(ka): tt[i] = None
+                                tt[ka - 1] = f'{h}열차에서/분리'
+                            else:
+                                for i in range(ka + 1, len(tt)): tt[i] = None
+                                tt[ka + 1] = f'{h}열차로/병결'
+                            trs.append(dict(tr, times=tt, block=1, arr_at=gby.get(tr['no'], {}).get('arr_at', {}), **ends))
+                        else:
+                            trs.append(dict(tr, times=tt, block=1, pass_from=entry, **ends))
                     t = dict(t, trains=trs)
                 elif (cat, sheet) in COUPLE_GUEST:     # 수서 열차는 병결 별표로
                     k = next(i for i, x in enumerate(t['stations']) if clean_name(x) == '수서')

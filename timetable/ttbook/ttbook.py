@@ -1775,16 +1775,13 @@ class Book:
 
     def split_lr(self, T, k):
         """펼침면 한 벌에 k 편: 왼쪽 면을 먼저 채우고 나머지를 오른쪽 면에 (빈 열은 펼침면 끝에 모인다)"""
-        cL, cR = self.cap(T, 'L'), self.cap(T, 'R')
-        if k <= cL + cR: return min(cL, k)
-        return min(self.cap(T, 'L', True), k)
+        return min(self.cap(T, 'L', True), k)          # 왼쪽 면(첫째)부터 가득 (열 폭을 조금 좁혀서라도)
 
     def stack_parts(self, T, G):
         """펼침면 G 개에 앞에서부터 채운 열차 무리: [(왼쪽 면 열차, 오른쪽 면 열차)] (빈 열은 끝에만)"""
         _, Tc, _ = self.blocks(T)
         n = len(Tc)
-        Cn = self.cap(T, 'L') + self.cap(T, 'R')
-        C = Cn if n <= G * Cn else self.cap(T, 'L', True) + self.cap(T, 'R', True)
+        C = self.cap(T, 'L', True) + self.cap(T, 'R', True)     # 앞 펼침면부터 가득
         out, ti = [], 0
         for g in range(G):
             k = min(C, n - ti)
@@ -1810,7 +1807,7 @@ class Book:
         # 앞 펼침면은 가득, 끝에 남는 몇 편은: 양쪽 다 한 쪽에 들면 한 쪽에 하행 위·상행 아래로
         def parts(T, n):
             _, Tc, _ = self.blocks(T)
-            cL, cR = self.cap(T, 'L'), self.cap(T, 'R')
+            cL, cR = self.cap(T, 'L', True), self.cap(T, 'R', True)
             out, ti = [], 0
             for g in range(G - 1):
                 k = cL + cR
@@ -1863,8 +1860,8 @@ class Book:
                 k = min(self.cap(T, sd, sq), len(Tc) - ti)
                 out.append(Tc[ti:ti + k]); ti += k
             return out if ti == len(Tc) else None
-        pd_ = split(Td, False) or split(Td, True)
-        pu_ = split(Tu, False) or split(Tu, True)
+        pd_ = split(Td, True)          # 앞 쪽부터 가득
+        pu_ = split(Tu, True)
         if not pd_ or not pu_: return None
         return [{'T': Td, 'Tu': Tu, 'kind': 'stackN', 'sides': sides, 'd': (pd_, rd, hd), 'u': (pu_, ru, hu),
                  'h': hd + hu - fw, 'trs': pd_[0], 'rows': rd, 'notes': False, 'bw': bw}]
@@ -2030,12 +2027,11 @@ class Book:
         elif n <= sB:
             groups = [('single', n)]
         else:
-            C = capL + capR
+            C = sL + sR                    # 앞 펼침면부터 가득 (열 폭을 조금 좁혀서라도)
             G = -(-n // C)
-            if G > 1 and n <= (G - 1) * (sL + sR): G -= 1
             if n <= G * C:
                 full, r = divmod(n, C)
-                groups = [('pair', capL, capR)] * full
+                groups = [('pair', sL, sR)] * full
                 if r:
                     if full >= 1 and r <= sB: groups.append(('single', r))
                     else:
@@ -2397,9 +2393,10 @@ class Book:
             for k, g in enumerate(groups):
                 lab = (ORD_KO[k] if k < len(ORD_KO) else '%d째' % (k + 1)) if len(groups) > 1 else ''
                 # 다음·앞 조각이 바로 이웃한 쪽이 아니면 어디로 이어지는지 (「첫째・17쪽으로」「둘째・9쪽에서」)
-                if lab and k + 1 < len(groups) and pidx[id(groups[k + 1][0])] - pidx[id(g[-1])] > 1:
+                # 바로 다음 장(다음 펼침면)이면 적지 않는다
+                if lab and k + 1 < len(groups) and pidx[id(groups[k + 1][0])] - pidx[id(g[-1])] > 2:
                     lab += '・%d쪽으로' % (pidx[id(groups[k + 1][0])] + f0)
-                if lab and k > 0 and pidx[id(g[0])] - pidx[id(groups[k - 1][-1])] > 1:
+                if lab and k > 0 and pidx[id(g[0])] - pidx[id(groups[k - 1][-1])] > 2:
                     lab += '・%d쪽에서' % (pidx[id(groups[k - 1][-1])] + f0)
                 for pc in g:
                     pc['part'] = lab
