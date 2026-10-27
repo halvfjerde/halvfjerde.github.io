@@ -402,8 +402,22 @@ class Inline:
         for k, chs in segs:
             sp = r'\hskip %.3fbp ' % (0.3 * ctx.size * self.fs)
             sp2 = r'\hskip %.3fbp ' % (0.55 * ctx.size * self.fs)
-            t = ''.join(sp if ch == ' ' else sp2 if ch == '\u2002' else esc(ch) for ch in chs)
             fam = KO_OF[ctx.font] if k in ('ko', 'kp') else ctx.font
+            # 가로쓰기 괄호: 잉크를 안쪽 글자에 붙이고(0.1em) 바깥쪽 여백은 앞의 띄움이 맡는다 (세로쓰기와 같게)
+            fi_b = self.m.info.get(KO_ROLE[fam]) if (self.m and k == 'kp' and fam in KO_ROLE) else None
+            em_b = ctx.size * self.fs
+            def one(ch):
+                if ch == ' ': return sp
+                if ch == '\u2002': return sp2
+                if fi_b and ch in '〔（「『〕）」』':
+                    bb = fi_b.bbox(ch)
+                    if bb:
+                        x0, _, x1, _, adv = bb
+                        if ch in '〔（「『':
+                            return r'\kern%.3fbp %s\kern%.3fbp ' % (-x0 * em_b, esc(ch), (-(adv - x1) + 0.1) * em_b)
+                        return r'\kern%.3fbp %s\kern%.3fbp ' % ((-x0 + 0.1) * em_b, esc(ch), -(adv - x1) * em_b)
+                return esc(ch)
+            t = ''.join(one(ch) for ch in chs)
             c2 = ctx
             up = self.shift_for(k, ctx.font)
             if k == 'jp' and self.m:
@@ -641,13 +655,22 @@ class Inline:
         parts, h = [], 0.0
         vb = k.find(lambda n: 'jtt-vb' in n.cls)
         bks = [x for x in k.kids if isinstance(x, Node) and 'jtt-bk' in x.cls]
-        BK = 0.6                                  # 괄호 자리 (잉크가 얇아 한 자보다 작게)
+        GAP = 0.12                                # 괄호 잉크와 글자 사이 (em)
+        fd = self.m.info.get('dia') if self.m else None
+        def bslot(ch, opening):
+            """괄호 자리: 잉크를 재어, 글자에서 GAP 만큼 떨어지게. (tex, 높이 em)"""
+            g = self.run(ch, ctx.but(font='DM'))
+            bb = fd.bbox(ch) if fd else None
+            if not bb:
+                return r'\hbox to %.3fbp{\hss\raisebox{%.3fbp}[%.3fbp][0pt]{%s}\hss}' % (cwid, 0.0 if opening else -0.4 * em, 0.6 * em, g), 0.6
+            _, y0, _, y1, _ = bb
+            S = (y1 - y0) + GAP
+            r = (GAP - y0) if opening else (S - GAP - y1)
+            return r'\hbox to %.3fbp{\hss\raisebox{%.3fbp}[%.3fbp][0pt]{%s}\hss}' % (cwid, r * em, S * em, g), S
         def bk(n, top):
             nonlocal h
-            g = self.run(n.text(), ctx.but(font='DM'))
-            # 여는 괄호는 잉크가 아래쪽에 있으므로 자리의 아래에 붙인다
-            parts.append(r'\hbox to %.3fbp{\hss\raisebox{%.3fbp}[%.3fbp][0pt]{%s}\hss}' % (cwid, 0.0, BK * em, g))
-            h += BK
+            t_, hh_ = bslot(n.text(), True)
+            parts.append(t_); h += hh_
         ncol = max(1, len(self.text_cols(vb, ctx))) if vb is not None else 1
         cwid = 1.05 * em * ncol                 # 여러 줄이면 괄호는 줄들 가운데에
         if bks and 'jtt-bk--o' in bks[0].cls: bk(bks[0], True)
@@ -666,8 +689,8 @@ class Inline:
         cl = [b for b in bks if 'jtt-bk--c' in b.cls]
         if cl:
             for b in cl:
-                g = self.run(b.text(), ctx.but(font='DM'))
-                parts.append(r'\hbox to %.3fbp{\hss\raisebox{%.3fbp}[%.3fbp][0pt]{%s}\hss}' % (cwid, BK * em - em, BK * em, g)); h += BK
+                t_, hh_ = bslot(b.text(), False)
+                parts.append(t_); h += hh_
         tex = r'\vtop{\kern0pt\vbox{\offinterlineskip ' + ''.join(parts) + '}}'
         return ('obj', tex, 1.05 * ncol, h, ctx.size, 'v')
 
@@ -751,7 +774,8 @@ class Book:
         self.hang_title = cfg.get('titleInMargin', False)         # 세로 제목을 바깥 여백에 내어 달기
         self.page_title = cfg.get('pageTitle', False)              # 표마다의 세로 제목 대신, 쪽마다 노선 이름을 하나 크게 (바깥 여백)
         if self.page_title: self.hang_title = True
-        self.band_inset = cfg.get('bandInset', 1.1) * self.fs
+        self.band_inset = cfg.get('bandInset', 0.9) * self.fs
+        self.band_lead = cfg.get('bandLead', 0.3) * self.fs        # 띠가 두 줄 이상일 때 줄 사이 더 벌림
         self.vband_w = cfg.get('leftBandWidth', 2.2) * self.fs      # 띠를 표 왼쪽 끝에 세로로 둘 때의 폭
         self.vpad = cfg.get('leftBandPad', 1.2) * self.fs           # 세로 띠 글의 위아래 여백     # 띠의 왼쪽·오른쪽 글을 틀에서 띄우는 만큼
         self.notes = cfg.get('notes', True)                        # false: 표 밑의 주기(공통 범례)를 싣지 않는다
@@ -1053,7 +1077,7 @@ class Book:
         if self.cfg.get('bandRows'): base = self.cfg['bandRows'] * self.R     # 인쇄에서 띠 높이를 줄 수로 정한다
         if bw is None: return base
         plan = self.band_plan(T, bw, part or ('열넷째' if self.page_title else None))
-        need = (sum(p[3] for p in plan) + 0.3) * self.fs
+        need = (sum(p[3] for p in plan) + 0.3) * self.fs + (len(plan) - 1) * self.band_lead
         return max(base, math.ceil(need / self.R - 1e-6) * self.R)
 
     def band_plan(self, T, W, part=None):
@@ -1301,8 +1325,8 @@ class Book:
             if len(plan) == 1:
                 tex.append(self.put_box(xs[0] + self.band_inset, y0 + fw, W, space, row(*plan[0]), 'l', 'm'))
             else:
-                tot = sum(p[3] for p in plan) * fs
-                box = r'\vbox{\offinterlineskip %s}' % ''.join(row(*p) for p in plan)
+                tot = sum(p[3] for p in plan) * fs + (len(plan) - 1) * self.band_lead
+                box = r'\vbox{\offinterlineskip %s}' % (r'\kern%.3fbp ' % self.band_lead).join(row(*p) for p in plan)
                 tex.append(self.put_box(xs[0] + self.band_inset, y0 + fw + (space - tot) / 2, W, tot, box, 'l', 't'))
             rects.append(self.hrule(xs[0], xs[-1], ty + hb, 1))
         # 칸
@@ -1626,7 +1650,13 @@ class Book:
             fw_ = (self.inl.wc.get(fo, 2.0)) * fs
             gap = 3 * MM
             W = self.cw - fw_ - gap
-            body = r'\hskip 1em plus 0.5em '.join(r'\mbox{%s}' % p for p in parts)
+            # 두 줄이 되면 두 줄로: 항목을 앞뒤 반으로 나눠 줄을 바꾼다
+            if len(parts) >= 2:
+                h_ = -(-len(parts) // 2)
+                body = r'\hskip 1em plus 0.5em '.join(r'\mbox{%s}' % p for p in parts[:h_]) + r'\\' + \
+                       r'\hskip 1em plus 0.5em '.join(r'\mbox{%s}' % p for p in parts[h_:])
+            else:
+                body = r'\mbox{%s}' % parts[0]
             box = r'\parbox[b]{%.3fbp}{\fontsize{%.3fbp}{%.3fbp}\selectfont%s %s}' % (
                 W, sz * fs, sz * fs * 1.3, r'\raggedleft' if recto else r'\raggedright', body)
             if recto: tex.append(r'\put(%.3f,%.3f){%s}' % (x0, Y, box))
