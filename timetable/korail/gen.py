@@ -85,6 +85,7 @@ KIND = {'KTX': '', 'KTX-산천': '산천', 'KTX산천': '산천', 'KTX_산천': 
 LBL = {  # 머리 이름 (한국어, 국한문)
     'fr': ('시발역', '始發驛'), 'no': ('열차번호', '列車番號'), 'kind': ('등급', '等級'), 'car': ('차종', '車種'),
     'to': ('종착역', '終着驛'), 'day': ('비고', '備考'),   # 운행일 등. 인쇄에서는 쪽의 남는 자리를 이 행이 받는다
+    'days': ('운행일', '運行日'),                         # 기호(◆◇)로 적는 운행일: 한 줄. 그 밑에 빈 비고 행
 }
 def lbl(k): return LBL[k][1 if MIX else 0]
 
@@ -298,7 +299,11 @@ class Table:
         has_day = any(tr['note'] for tr in self.trains)
         days = {tr['note'] for tr in self.trains if tr['note']}
         self.daysym = {'월화수목금': '◆', '토일': '◇'} if days and days <= {'월화수목금', '토일'} else None
-        if has_day: L.append(f'day  {lbl("day")} r={LBL["day"][1]}' + ('' if self.daysym_pre() else ' style=va=t'))
+        # 모든 표의 끝은 비고 행 (인쇄에서 쪽의 남는 자리를 받는다). 기호로 적는 운행일은 그 위에 한 줄로
+        self.rem_empty = not has_day or bool(self.daysym)
+        if has_day and self.daysym: L.append(f'days {lbl("days")} r={LBL["days"][1]}')
+        elif has_day: L.append(f'day  {lbl("day")} r={LBL["day"][1]} style=va=t')
+        if self.rem_empty: L.append(f'rem  {lbl("day")} r={LBL["day"][1]} style=va=t')
         L.append('')
         thru = collections.Counter()
         for tr in self.trains:
@@ -368,6 +373,7 @@ class Table:
             if has_day:
                 nt = tr['note']
                 ft.append('_' if not nt else self.daysym[nt] if self.daysym else q(vert(nt)))
+            if self.rem_empty: ft.append('_')
             line = ' '.join(hdr) + ' : ' + ' '.join(cells)
             if ft: line += ' : ' + ' '.join(ft)
             L.append(line)
@@ -392,7 +398,7 @@ class Table:
                 used = {tr['note'] for tr in self.trains}
                 if '월화수목금' in used: dn.append('◆ 평일(월∼금) 운행')
                 if '토일' in used: dn.append('◇ 토·일 운행')
-            dn.append('비고 무표시는 매일 운행')
+            dn.append(('운행일' if self.daysym else '비고') + ' 무표시는 매일 운행')
             notes.append(', '.join(dn))
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
             notes.append('着発 역의 빈 도착 시각은 자료 없음')

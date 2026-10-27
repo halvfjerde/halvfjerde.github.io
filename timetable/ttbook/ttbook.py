@@ -302,8 +302,8 @@ SAMPLE_DIGIT = '0123456789'
 # 줄(line) = 요소 목록. 요소: ('tex', tex, size)  ('just', [tex…], size)  ('obj', tex, w_em, h_em, size)
 GOTHIC = {'DG', 'DGB', 'GB', 'G'}
 TEXT_FAMS = {'M', 'G', 'GB'}      # DiaPro 를 앞세우지 않는 본문 글꼴
-KO_OF = {'M': 'KM', 'DM': 'KM', 'G': 'KG', 'DG': 'KG', 'GB': 'KGB', 'DGB': 'KGB'}
-JP_OF = {'M': 'mincho', 'DM': 'mincho', 'G': 'gothic', 'DG': 'gothic', 'GB': 'gothicBold', 'DGB': 'gothicBold'}
+KO_OF = {'M': 'KM', 'DM': 'KM', 'G': 'KG', 'DG': 'KG', 'GB': 'KGB', 'DGB': 'KGB', 'FO': 'KGB'}
+JP_OF = {'M': 'mincho', 'DM': 'mincho', 'G': 'gothic', 'DG': 'gothic', 'GB': 'gothicBold', 'DGB': 'gothicBold', 'FO': 'gothicBold'}
 KO_ROLE = {'KM': 'minchoKo', 'KG': 'gothicKo', 'KGB': 'gothicKoBold'}
 # 한글 문맥의 문장 부호: 한글 글꼴의 것을 먼저 쓴다
 KO_PUNCT = set('()[]{}<>,.:;!?\'"-/·「」『』（）〔〕［］《》〈〉―—–‐～〜…')
@@ -544,6 +544,7 @@ class Inline:
             if 'jtt-td' in cls:
                 lines[-1].append(('obj', r'\hbox to %.3fbp{\hss %s\hss}' % (0.36 * c2.size * self.fs, self.run(k.text(), c2.but(font='M'))),
                                   0.36 * c2.size, 1.25 * c2.size, c2.size)); continue
+            if 'tt-small' in cls: c2 = c2.but(size=c2.size * 0.75)
             if 'jtt-b' in cls: c2 = c2.but(font='DGB', size=c2.size * 1.2)
             elif 'jtt-k' in cls: c2 = c2.but(font='DGB')
             if 'jtt-g' in cls: c2 = c2.but(size=c2.size * 1.2)
@@ -831,13 +832,21 @@ class Book:
             for cl in T.cells:
                 if cl.r in dayrows and cl.c > 0 and cl.node.find(lambda n: 'jtt-v' in n.cls):
                     t = re.sub(r'\s', '', cl.node.text())
-                    k = -(-len(t) // 3)
-                    per = -(-len(t) // k)
+                    # 요일 뭉치만 작은 가로 글씨로(세 자까지 한 줄, 넷~여섯 자는 두 자씩 세 줄까지).
+                    # 나머지(「운행」, 「…선 경유」 등)는 관습대로 보통 크기 세로쓰기
+                    m = re.match(r'[월화수목금토일∼~·]+', t)
+                    if not m: continue
+                    days, rest = m.group(0), t[m.end():]
+                    per = 3 if len(days) <= 3 or len(days) > 6 else 2
+                    sm = Node('span', [('class', 'tt-small')])
+                    for i in range(0, len(days), per):
+                        if i: sm.kids.append(Node('br', []))
+                        sm.kids.append(days[i:i + per])
+                    vt = Node('span', [('class', 'jtt-v')])
+                    vt.kids.append(rest or '운행')
                     nd = Node('td', [])
-                    for i in range(0, len(t), per):
-                        if i: nd.kids.append(Node('br', []))
-                        nd.kids.append(t[i:i + per])
-                    cl.node, cl.small = nd, 0.75
+                    nd.kids += [sm, Node('br', []), vt]
+                    cl.node = nd
                     cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
         for cell in T.cells:
             c = base
@@ -1398,7 +1407,9 @@ class Book:
         ('KM', 'minchoKo', ['mincho', 'dia'], ''),
         ('KG', 'gothicKo', ['gothic', 'dia'], ''),
         ('KGB', 'gothicKoBold', ['gothicBold', 'dia'], ''),
+        ('FO', 'folio', ['gothicBold', 'gothicKoBold'], ''),      # 쪽 번호 (Univers 등)
     ]
+    OPTIONAL = {'FO': 'GB'}
     def fontdefs(self):
         info = self.metrics.info
         # 파일 이름에 빈칸·한자 등이 있으면 fontspec 이 이름을 망가뜨리므로, 빈칸 없는 이름의 링크를 만들어 쓴다
@@ -1425,6 +1436,8 @@ class Book:
         lua, tex = [], []
         for cmd, main, fbs, feat in self.FAMILIES:
             fi = info.get(main)
+            if not fi and cmd in self.OPTIONAL:          # 없으면 다른 글꼴 묶음으로 대신
+                tex.append(r'\let\f%s\f%s' % (cmd, self.OPTIONAL[cmd])); continue
             if not fi: raise SystemExit('font not found: %s = %s' % (main, self.fonts.get(main)))
             lst = [x for x in (fb(r) for r in fbs) if x]
             lua.append('luaotfload.add_fallback("fb%s", {%s})' % (cmd, ', '.join('"%s"' % x for x in lst)))
@@ -1505,7 +1518,7 @@ class Book:
         rh = self.inl.run(runhead, Ctx('GB', 8.5 / fs)) if runhead else ''
         if part:
             rh += r'\ ' + self.inl.run('(%s)' % part, Ctx('M', 8.5 / fs))
-        fo = self.inl.run(str(folio), Ctx('GB', 13 / fs))
+        fo = self.inl.run(str(folio), Ctx('FO', 13 / fs))
         Yr = Y + 0.37 * (13 - 8.5)     # 머리글 글줄을 쪽 번호의 가운데 높이로
         if recto:
             tex.append(r'\put(%.3f,%.3f){\llap{%s}}' % (x0 + self.cw - 12 * MM, Yr, rh))
