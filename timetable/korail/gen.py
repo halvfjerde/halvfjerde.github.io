@@ -481,7 +481,12 @@ class Table:
         isday_ = lambda s: bool(s) and all(ch in WEEK for ch in s)
         tls = [self.to_line(tr) for tr in self.trains]
         busy = lambda tr, f: bool(self.cpl_note(tr) or self.rem_via(tr) or (f and not self.notecol) or (tr['note'] and not isday_(tr['note'])))
-        self.tl_col = any(t_ and busy(tr, f) for tr, f, t_ in zip(self.trains, fls, tls))
+        # 비고에 「…선 경유」를 내려도 비고 행이 높아지지 않을 때만 (이미 그만큼 긴 세로 주가 있을 때). 아니면 주석 열
+        def rem_len(tr, f):
+            v = self.rem_via(tr) or (f'↑{f}/경유' if f and not self.notecol else None) or (day_range(tr['note']) if tr['note'] and not isday_(tr['note']) else None)
+            return max((len(x) for x in v.split('/')), default=0) + (1 if v.startswith('↑') else 0) if v else 0
+        room = max((rem_len(tr, f) for tr, f in zip(self.trains, fls)), default=0)
+        self.tl_col = any(t_ and (busy(tr, f) or room < len(t_) + 1) for tr, f, t_ in zip(self.trains, fls, tls))
         cpn = any(self.cpl_note(tr) for tr in self.trains) or (any(fls) and not self.notecol) or any(self.rem_via(tr) for tr in self.trains) or (any(tls) and not self.tl_col)
         # 운행일은 제 행에 (기호 ◆◇ 또는 요일), 비고 행에는 병결·그 밖의 주. 모든 표의 끝은 비고 행 (인쇄에서 쪽의 남는 자리를 받는다)
         isday = lambda s: bool(s) and all(ch in WEEK for ch in s)
