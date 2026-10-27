@@ -341,9 +341,10 @@ class Table:
         L.append('[footer]')
         if has_to: L.append(f'to   {lbl("to")} r={LBL["to"][1]}')
         if cp and cp['pos'] == 'foot': L.append(cpl_row)
-        has_day = any(tr['note'] for tr in self.trains)
+        cpn = any(self.cpl_note(tr) for tr in self.trains)
+        has_day = cpn or any(tr['note'] for tr in self.trains)
         days = {tr['note'] for tr in self.trains if tr['note']}
-        self.daysym = {'월화수목금': '◆', '토일': '◇'} if days and days <= {'월화수목금', '토일'} else None
+        self.daysym = {'월화수목금': '◆', '토일': '◇'} if days and days <= {'월화수목금', '토일'} and not cpn else None
         # 모든 표의 끝은 비고 행 (인쇄에서 쪽의 남는 자리를 받는다). 기호로 적는 운행일은 그 위에 한 줄로
         self.rem_empty = not has_day or bool(self.daysym)
         if has_day and self.daysym: L.append(f'days {lbl("days")} r={LBL["days"][1]}')
@@ -418,7 +419,9 @@ class Table:
             if has_fr:
                 o, d = self.ends_of(tr)
                 hdr.append(q(f'{esc_txt(o)}/{hm(self.end_times(tr)[0])}'))
-            cpv = (q('/'.join(f'N{{{x}}}' for x in cp['map'][tr['no']])) if cp['map'].get(tr['no']) else '_') if cp else None   # 열차번호 꼴. 짝이 요일로 바뀌면 두 줄
+            # 열차번호 꼴. 짝이 요일로 바뀌면 칸에는 많이 다니는 짝, 다른 짝은 비고에 (금∼일/672)
+            gs_ = self.cpl_main(tr)
+            cpv = (q(f'N{{{gs_[0]}}}') if gs_ else '_') if cp else None
             if cp and cp['pos'] == 'head': hdr.append(cpv)
             cells = self.cells(tr)
             ft = []
@@ -428,7 +431,9 @@ class Table:
             if cp and cp['pos'] == 'foot': ft.append(cpv)
             if has_day:
                 nt = tr['note']
-                ft.append('_' if not nt else self.daysym[nt] if self.daysym else q(vert(day_range(nt))))
+                cn = self.cpl_note(tr)
+                if cn: ft.append(q(vert(((day_range(nt) + '/') if nt else '') + cn)))
+                else: ft.append('_' if not nt else self.daysym[nt] if self.daysym else q(vert(day_range(nt))))
             if self.rem_empty: ft.append('_')
             line = ' '.join(hdr) + ' : ' + ' '.join(cells)
             if ft: line += ' : ' + ' '.join(ft)
@@ -459,13 +464,24 @@ class Table:
         cp = getattr(self, 'cpl', None)
         if cp:
             notes.append('병결열차는 연결해 달리는 열차')
-        elif (self.cat, self.line) in COUPLE_GUEST:
-            h = COUPLE_GUEST[(self.cat, self.line)]
+        elif (self.cat, self.line) in COUPLE_GUEST and self.variant != '수서':
             notes.append(f'수서 발착 열차는 수서 발착 병결 표에')
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
             notes.append('着発 역의 빈 도착 시각은 자료 없음')
         L += notes
         return '\n'.join(L)
+
+    def cpl_note(self, tr):
+        """병결 짝이 요일로 바뀌는 열차의 비고: 칸에 적지 않은 짝의 요일과 번호 「금∼일/672」"""
+        gs = self.cpl_main(tr)
+        if len(gs) < 2: return None
+        return '/'.join(f'{day_range(self.cpl["days"][x]).split("/")[0]}/{x}' for x in gs[1:])
+
+    def cpl_main(self, tr):
+        """짝 열차들. 운행일이 많은 것부터"""
+        cp = getattr(self, 'cpl', None)
+        gs = cp['map'].get(tr['no'], []) if cp else []
+        return sorted(gs, key=lambda x: -len(week_days(cp['days'][x])))
 
     def daysym_pre(self):
         days = {tr['note'] for tr in self.trains if tr['note']}
@@ -697,11 +713,10 @@ def main():
                     gc, gs, at = COUPLE[(cat, sheet)]
                     t, hmap, gt, gmap = couple(t, tabs.get((gc, gs, d)), at)
                     GUEST_SUSEO[(gc, gs, d)] = (gt, gmap)
-                    cpl = {'map': hmap, 'pos': 'foot' if d == 'down' else 'head', 'with': gs, 'at': at}
+                    cpl = {'map': hmap, 'pos': 'foot' if d == 'down' else 'head', 'with': gs, 'at': at,
+                           'days': {tr['no']: tr['note'] for tr in gt['trains']}}
                 elif variant == '수서' and (cat, sheet) in COUPLE_GUEST:
-                    t, gmap = GUEST_SUSEO[(cat, sheet, d)]
-                    h = COUPLE_GUEST[(cat, sheet)]
-                    cpl = {'map': gmap, 'pos': 'head' if d == 'down' else 'foot', 'with': h[1], 'at': COUPLE[h][2]}
+                    t, gmap = GUEST_SUSEO[(cat, sheet, d)]      # 별표는 직결 열차처럼 (시발·종착역이 수서). 병결열차 행 없이
                 elif (cat, sheet) in COUPLE_GUEST:     # 수서 열차는 병결 별표로
                     k = next(i for i, x in enumerate(t['stations']) if clean_name(x) == '수서')
                     t = dict(t, trains=[tr for tr in t['trains'] if not isinstance(tr['times'][k], int)])

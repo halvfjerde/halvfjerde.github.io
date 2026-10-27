@@ -1832,14 +1832,15 @@ class Book:
                  'rows': js[0][2], 'notes': False, 'bw': bw}]
 
     def tail_side_jobs(self, Td, Tu):
-        """하행·상행 각각 한 쪽 가득한 단(오른쪽 역명 없이)을 싣고, 끝에 남는 몇 편은 둘을 한 쪽에 좌우로.
+        """하행·상행 각각 한 쪽 가득한 단(오른쪽 역명 없이)을 싣고, 남는 몇 편은 둘을 한 쪽에 좌우로: 하 | 하·상 | 상.
+        하행은 끝의 몇 편, 상행은 앞의 몇 편이 가운데 쪽에 (가운데 쪽과 상행 쪽이 펼침면이면 상행은 펼침면 하나로 읽힌다).
         한 쪽에 단 하나만 들어가는 높이의 표에서, 펼침면 짝(오른쪽 면이 거의 빈)보다 쪽을 아낀다"""
         if self.cfg.get('rightStubSingle', True): return None
         for T in (Td, Tu): T.band_left = False; T.fold = False
         PH, fw = self.ch, self.frame_w
         half = self.half_w()
         bwf, bwh = self.band_w(self.cw), self.band_w(half)
-        jobs, rems = [], []
+        fulls, rems = [], []
         for T in (Td, Tu):
             _, Tc, _ = self.blocks(T)
             capS = self.cap(T, 'B', True)
@@ -1849,16 +1850,19 @@ class Book:
             rows = list(range(T.nrow))
             h = self.piece_h(T, rows, False, bwf)
             if h > PH + 0.01: return None
+            off = 0 if T is Td else r                # 하행은 끝, 상행은 앞의 몇 편을 가운데 쪽으로
+            js = []
             for g in range(full):
-                trs = Tc[g * capS:(g + 1) * capS]
-                jobs.append({'T': T, 'kind': 'single', 'trs': trs, 'rows': rows, 'notes': False, 'sB': capS, 'side': 'B',
-                             'narrow': False, 'nat': self.fixed_w(T, 'B') + len(trs) * self.P0, 'bw': bwf, 'h': h})
-            rt = Tc[full * capS:]
+                trs = Tc[off + g * capS:off + (g + 1) * capS]
+                js.append({'T': T, 'kind': 'single', 'trs': trs, 'rows': rows, 'notes': False, 'sB': capS, 'side': 'B',
+                           'narrow': False, 'nat': self.fixed_w(T, 'B') + len(trs) * self.P0, 'bw': bwf, 'h': h})
+            fulls.append(js)
+            rt = Tc[full * capS:] if T is Td else Tc[:r]
             if self.fixed_w(T, 'B') + len(rt) * self.P0 * self.squeeze > half + 0.01: return None
             rems.append((T, rt, rows, self.piece_h(T, rows, False, bwh)))
-        jobs.append({'T': Td, 'Tu': Tu, 'kind': 'side', 'parts': rems, 'h': max(r[3] for r in rems), 'trs': rems[0][1],
-                     'rows': rems[0][2], 'notes': False, 'bw': bwh, 'nosplit': True})
-        return jobs
+        side = {'T': Td, 'Tu': Tu, 'kind': 'side', 'parts': rems, 'h': max(r[3] for r in rems), 'trs': rems[0][1],
+                'rows': rems[0][2], 'notes': False, 'bw': bwh, 'nosplit': True}
+        return fulls[0] + [side] + fulls[1]
 
     def jobs_of(self, T):
         """표 하나를 실을 일감들: [{kind single|pair, trs, rows, h, ...}] (역 구간 먼저, 그 안에서 열차 무리 차례)"""
@@ -2213,8 +2217,20 @@ class Book:
             # 세로 제목칸 표는 오른쪽 면 조각에 칸이 없으니, 칸이 있는 조각(펼침면 하나)마다 센다
             shown = [pc for pc in ps if not (getattr(T, 'band_left', False) and pc['side'] == 'R')]
             for pc in ps: pc['part'] = ''
-            for k, pc in enumerate(shown):
-                pc['part'] = (ORD_KO[k] if k < len(ORD_KO) else '%d째' % (k + 1)) if len(shown) > 1 else ''
+            # 펼침면에 걸쳐 이어지는 조각(왼쪽 면 → 오른쪽 면, 그 쪽에 그 표의 조각이 하나뿐)은 하나로 센다
+            pidx = {id(q): i for i, pg in enumerate(pages) for q in pg['pieces']}
+            alone = lambda q: sum(1 for r in pages[pidx[id(q)]]['pieces'] if r['T'] is T) == 1
+            groups = []
+            for pc in shown:
+                if groups:
+                    prev = groups[-1][-1]
+                    a, b = pidx[id(prev)], pidx[id(pc)]
+                    if a % 2 == 0 and b == a + 1 and alone(prev) and alone(pc):
+                        groups[-1].append(pc); continue
+                groups.append([pc])
+            for k, g in enumerate(groups):
+                for pc in g:
+                    pc['part'] = (ORD_KO[k] if k < len(ORD_KO) else '%d째' % (k + 1)) if len(groups) > 1 else ''
         # 단(같은 높이)마다 맨 오른쪽 조각만 빈 열로 판면 끝까지 채운다
         for pg in pages:
             for pc in pg['pieces']:
