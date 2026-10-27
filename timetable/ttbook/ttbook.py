@@ -836,6 +836,7 @@ class Book:
         left = 1
         if cls & {'jtt-c1', 'jtt-t1', 'jtt-st', 'jtt-ad', 'jtt-rc', 'jtt-cx'}: left = 0
         if 'jtt-rc1' in cls: left = 2
+        if getattr(T, 'both', False) and cell.c > 0 and T.kind[cell.c][0] == 'L' and T.kind[cell.c - 1][0] == 'T': left = 2   # 상하병기: 가운데 역명의 왼쪽
         right = 0
         if 'jtt-ad' in cls and 'jtt-adin' not in cls: right = 2
         if 'jtt-lend' in cls: right = 2
@@ -1183,10 +1184,14 @@ class Book:
         room = (self.cw if avail is None else avail) - self.fixed_w(T, side)
         cap = max(1, int(room / self.P0 + 1e-6))
         n = max(len(trains), ncol or 0)        # ncol: 위아래로 맞붙은 조각과 열 수를 같게 (세로 괘선이 이어지도록)
-        if getattr(T, 'both', False):          # 상하행 한 표: 빈 열 없이 제 차례대로 (하행 | 역명 | 상행). 남는 폭은 역명 칸에
+        if getattr(T, 'both', False):          # 상하행 한 표: 하행 | 역명 | 상행. 남는 폭은 바깥쪽 빈 열(‥)로 (왼쪽·오른쪽 반씩)
             P = self.P0 if len(trains) <= cap else room / len(trains)
-            keep = sorted(set(L) | set(trains))
-            return {'side': side, 'cols': keep, 'trains': list(trains), 'extra': max(0, room - len(trains) * P), 'mirror': False, 'P': P}
+            nG = max(0, cap - len(trains)) if avail is not None else 0
+            dn = [j for j in trains if j < min(L)]; upc = [j for j in trains if j > max(L)]
+            gl = [('G', (dn or upc)[0], 1000 + g) for g in range(nG // 2)]
+            gr = [('G', (upc or dn)[-1], 2000 + g) for g in range(nG - nG // 2)]
+            keep = gl + dn + list(L) + upc + gr
+            return {'side': side, 'cols': keep, 'trains': gl + dn + upc + gr, 'extra': max(0, room - (len(trains) + nG) * P), 'mirror': False, 'P': P}
         if n > cap:
             P = room / n
             cols, extra = list(trains) + [('G', Tc[-1], g) for g in range(n - len(trains))], 0
@@ -2373,6 +2378,7 @@ class Book:
                     sd = 'R' if k_ in job.get('contR', ()) and c % 2 == 1 and any(q['T'] is T_ for q in page(c - 1)['pieces']) else 'B'
                     pc_ = put(T_, c, trs_, rows_, y, False, h_, sum(ws_[:k_]) - k_ * fw, True, sd, self.band_w(ws_[k_]) if job.get('widths') else job['bw'])
                     pc_['fixw'] = ws_[k_]
+                    if job.get('rowgroup'): pc_['rg'] = True
                 ys[c] = y + h
                 return True
             if job['kind'] == 'facing':           # 한 쪽짜리 하행·상행: 펼침면 왼쪽에 하행, 오른쪽에 상행
@@ -2751,18 +2757,16 @@ class Book:
             nat_ = [self.fixed_w(T, 'B') + len(self.blocks(T)[1]) * self.P0 for T in row]
             tot_ = self.cw + (k_ - 1) * fw
             if sum(nat_) > tot_ + 0.01: continue
-            ws_ = [x * min(1.1, tot_ / sum(nat_)) for x in nat_]       # 많이 남으면 늘이지 않고 오른쪽을 비운다
+            ws_ = [x * tot_ / sum(nat_) for x in nat_]       # 남는 폭은 표마다 빈 열(‥)로
             parts_ = []
             for T, w1 in zip(row, ws_):
                 T.fold = False; T.band_left = False
                 rr = list(range(T.nrow))
                 parts_.append((T, self.blocks(T)[1], rr, self.piece_h(T, rr, False, self.band_w(w1))))
-            hm_ = max(q[3] for q in parts_)
-            parts_ = [(a, b, c, hm_) for a, b, c, _ in parts_]        # 한 단은 높이를 맞춘다 (밑의 표가 가지런히)
             for T in row: T.custom_jobs = None; T.stack_with = None; T.side_with = None; T.stacked = True
             row[0].stacked = False
             row[0].custom_jobs = [{'T': row[0], 'kind': 'side', 'parts': parts_, 'widths': ws_, 'h': max(q[3] for q in parts_),
-                                   'trs': parts_[0][1], 'rows': parts_[0][2], 'notes': False, 'bw': self.band_w(ws_[0]), 'nosplit': True}]
+                                   'trs': parts_[0][1], 'rows': parts_[0][2], 'notes': False, 'bw': self.band_w(ws_[0]), 'nosplit': True, 'rowgroup': True}]
         # besideRight: 펼침면 짝(하행 위·상행 아래)의 오른쪽 면 끝 몇 편 옆에 다음 노선의 하행·상행을 나란히 (그 노선의 한 쪽을 아낀다)
         for br in self.cfg.get('besideRight', []):
             kx = br.get('ktx', False)            # KTX 표끼리 (KTX밖에 없는 노선)
@@ -2974,7 +2978,7 @@ class Book:
                 return [[q for q in pg['pieces'] if round(q['y'], 2) == y_] for y_ in ys_]
             def can(t):
                 return all(q['T'].dayrow is not None and q['rows'] and q['rows'][-1] == q['T'].dayrow for q in t)
-            alloc = {}
+            alloc, ok_ = {}, {}
             for p, pg in enumerate(pages):
                 if not pg['pieces']: continue
                 ts = tiers(pg)
@@ -2987,7 +2991,7 @@ class Book:
                 tot_h = sum(hs[i] for i in cand)
                 for i in cand:
                     give[i] = min(smax, left * hs[i] / tot_h) if tot_h > 0 else 0.0
-                alloc[p] = (ts, give)
+                alloc[p] = (ts, give); ok_[p] = ok
             # 펼침면에 걸친 단: 마주 보는 쪽과 같은 만큼(작은 쪽에 맞춘다)
             for p in list(alloc):
                 ts, give = alloc[p]
@@ -3000,14 +3004,15 @@ class Book:
                             give[i] = mgive[j] = min(give[i], mgive[j])
             for p, (ts, give) in alloc.items():
                 shift = 0.0
-                for t, g in zip(ts, give):
+                for ti_, (t, g) in enumerate(zip(ts, give)):
                     bottom = max(q['y'] + q['h'] for q in t)
+                    gg = g if g > 0.5 * self.R else 0.0
                     for q in t:
                         q['y'] += shift
-                        if g > 0.5 * self.R:
-                            e = g + (bottom - (q['y'] - shift + q['h']))
-                            q['stretch'] = e; q['h'] += e
-                    if g > 0.5 * self.R: shift += g
+                        if ok_[p][ti_]:          # 한 단의 표는 아래 끝을 맞춘다 (남는 자리가 없어도)
+                            e = gg + (bottom - (q['y'] - shift + q['h']))
+                            if e > 0.01: q['stretch'] = e; q['h'] += e
+                    shift += gg
             # 옆에 위아래로 쌓인 표들이 있는 쪽(과 마주 보는 쪽): 세로로 이어진 조각들마다 쪽 맨 아래까지, 남는 자리는 높이에 비례해 나눈다
             def xover(a, b):
                 wa, wb = a.get('avail', a['nat']), b.get('avail', b['nat'])
@@ -3015,8 +3020,9 @@ class Book:
             def stacked_beside(ps):
                 return any(xover(a, b) and abs(a['y'] - b['y']) > 0.5 for a in ps for b in ps if a is not b) and \
                     any(not xover(a, b) for a in ps for b in ps if a is not b)
-            sp_ = {p for p, pg in enumerate(pages) if stacked_beside(pg['pieces'])}
+            sp_ = {p for p, pg in enumerate(pages) if stacked_beside(pg['pieces']) and not all(q.get('rg') for q in pg['pieces'])}
             sp_ |= {p + 1 if p % 2 == 0 else p - 1 for p in sp_}
+            sp_ = {p for p in sp_ if p < len(pages) and not (pages[p]['pieces'] and all(q.get('rg') for q in pages[p]['pieces']))}
             for p in sp_:
                 if p >= len(pages): continue
                 ps = pages[p]['pieces']
