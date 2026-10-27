@@ -77,6 +77,14 @@ DIVERGE = {
 SUSEO_TO = {('ktx', '경전선'): ('ktx', '경부선'), ('ktx', '전라선'): ('ktx', '호남선')}
 MERGE_SUSEO = False          # 시험해 보았으나 합친 수서 표가 길어져 위아래로 들지 않아 쪽이 늘어난다 (아직 쓰지 않음)
 if not MERGE_SUSEO: SUSEO_TO = {}
+# 병결(분할·병합): 수서를 드나드는 손님 노선 열차는 주인 노선과 갈림역까지 함께 달린다.
+# 주인 노선 수서 표에는 짝 열차 번호만(병결열차 행), 손님 노선에는 갈림역 ─ 끝의 작은 별표(수서 발착 병결)
+COUPLE = {('ktx', '경부선'): ('ktx', '경전선', '동대구'), ('ktx', '호남선'): ('ktx', '전라선', '익산')}
+COUPLE_GUEST = {(c, s): host for host, (c, s, _) in COUPLE.items()}
+GUEST_SUSEO = {}              # (cat, 손님 노선, 방향) → (별표, {손님 번호: [주인 번호]}). 주인 노선을 먼저 짤 때 채운다
+
+def week_days(note):
+    return set(note) if note and all(ch in WEEK for ch in note) else set(WEEK)
 
 # 착발을 나누지 않는 역: 연결선으로 애매하게 붙는 역
 NOSPLIT_ALL = {'행신'}
@@ -96,7 +104,8 @@ KIND = {'KTX': '', 'KTX-산천': '산천', 'KTX산천': '산천', 'KTX_산천': 
 LBL = {  # 머리 이름 (한국어, 국한문)
     'fr': ('시발역', '始發驛'), 'no': ('열차번호', '列車番號'), 'kind': ('등급', '等級'), 'car': ('차종', '車種'),
     'to': ('종착역', '終着驛'), 'day': ('비고', '備考'),   # 운행일 등. 인쇄에서는 쪽의 남는 자리를 이 행이 받는다
-    'days': ('운행일주의', '運行日注意'),                         # 기호(◆◇)로 적는 운행일: 한 줄. 그 밑에 빈 비고 행
+    'days': ('운행일주의', '運行日注意'),
+    'cpl': ('병결열차', '倂結列車'),        # 갈림역에서 나뉘고 합치는 짝 열차의 번호                         # 기호(◆◇)로 적는 운행일: 한 줄. 그 밑에 빈 비고 행
 }
 def lbl(k): return LBL[k][1 if MIX else 0]
 
@@ -301,6 +310,7 @@ class Table:
         dirmark = 'k하행.' if self.dir == 'down' else 'n상행.'
         vlab = (' 수서발' if self.dir == 'down' else ' 수서행') if self.variant == '수서' else ''
         if self.merged: vlab = f'·{self.merged}' + vlab           # 경부선·경전선 수서발
+        cp = getattr(self, 'cpl', None)      # 병결: {열차번호: [짝 열차번호]}, 행 자리(head: 시발역 밑 / foot: 종착역 밑)
         name = ('KTX ' if ktx else '') + (self.line_disp) + vlab
         span = (f'{band_names[0]} > {band_names[-1]}' if band_names[0] != band_names[-1] else ' > '.join(band_names)) if not sub else ' > '.join(sub.split(' ─ ')[::-1] if self.dir == 'up' else sub.split(' ─ '))
         L = []
@@ -324,10 +334,13 @@ class Table:
         # 등급(KTX는 차종) 표지 바로 밑에 열차번호, 두 행은 이름 칸을 합쳐 사이 선 없이. 그 밑에 시발역
         L.append(f'kind {lbl("no")} style=va=b r={LBL["no"][1]}')
         L.append(f'no   ^ fmt=N{{*}} style=va=t')
+        cpl_row = f'cpl  {lbl("cpl")} r={LBL["cpl"][1]}'
         if has_fr: L.append(f'fr   {lbl("fr")} r={LBL["fr"][1]}')
+        if cp and cp['pos'] == 'head': L.append(cpl_row)
         L.append('')
         L.append('[footer]')
         if has_to: L.append(f'to   {lbl("to")} r={LBL["to"][1]}')
+        if cp and cp['pos'] == 'foot': L.append(cpl_row)
         has_day = any(tr['note'] for tr in self.trains)
         days = {tr['note'] for tr in self.trains if tr['note']}
         self.daysym = {'월화수목금': '◆', '토일': '◇'} if days and days <= {'월화수목금', '토일'} else None
@@ -405,11 +418,14 @@ class Table:
             if has_fr:
                 o, d = self.ends_of(tr)
                 hdr.append(q(f'{esc_txt(o)}/{hm(self.end_times(tr)[0])}'))
+            cpv = (q('/'.join(f'N{{{x}}}' for x in cp['map'][tr['no']])) if cp['map'].get(tr['no']) else '_') if cp else None   # 열차번호 꼴. 짝이 요일로 바뀌면 두 줄
+            if cp and cp['pos'] == 'head': hdr.append(cpv)
             cells = self.cells(tr)
             ft = []
             if has_to:
                 o, d = self.ends_of(tr)
                 ft.append(q(f'{esc_txt(d)}/{hm(self.end_times(tr)[1])}'))
+            if cp and cp['pos'] == 'foot': ft.append(cpv)
             if has_day:
                 nt = tr['note']
                 ft.append('_' if not nt else self.daysym[nt] if self.daysym else q(vert(day_range(nt))))
@@ -440,6 +456,12 @@ class Table:
                 if '토일' in used: dn.append('◇ 토·일 운행')
             dn.append(('운행일주의' if self.daysym else '비고') + ' 무표시는 매일 운행')
             notes.append(', '.join(dn))
+        cp = getattr(self, 'cpl', None)
+        if cp:
+            notes.append('병결열차는 연결해 달리는 열차')
+        elif (self.cat, self.line) in COUPLE_GUEST:
+            h = COUPLE_GUEST[(self.cat, self.line)]
+            notes.append(f'수서 발착 열차는 수서 발착 병결 표에')
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
             notes.append('着発 역의 빈 도착 시각은 자료 없음')
         L += notes
@@ -522,7 +544,7 @@ class Table:
                 t = hm(x)
                 if not sp: out.append(t); continue
                 st = self.st[i]
-                arr = ARR.get((tr['no'], st))             # 따로 조사한 도착 시각 (TAGO 열차정보, 시발 시각이 맞는 것만)
+                arr = tr.get('arr_at', {}).get(st, ARR.get((tr['no'], st)))   # 따로 조사한 도착 시각 (TAGO 열차정보, 시발 시각이 맞는 것만)
                 if arr is None or not 0 <= (x - arr) % 1440 <= 15:
                     w = DWELL.get((grade(tr['type']), st))   # 없으면 같은 등급·같은 역의 정차 시간으로
                     arr = x - w if w is not None else None
@@ -535,11 +557,18 @@ class Table:
                     out.append(f'{arr},{t}')
             else:
                 out.append({'v': 'v', 'x': 'x', 'I': 'i'}.get(x, 'x'))   # None: 갈라진 다른 갈래 (‥)
-        res = []
-        for c in out:
-            if res and res[-1][0] == c and c in ('v', 'x', 'i', '!'): res[-1][1] += 1
-            else: res.append([c, 1])
-        return [c if k == 1 else f'{c}*{k}' for c, k in res]
+        if tr.get('cont'):                                # 갈림역 너머로 이어지는 홀로 열차(하행): 끝 표시 대신 ‥
+            out = ['x' if c in ('-', '-,x') else c for c in out]
+            out = [f'{c.split(",")[0]},x' if c.endswith(',-') else c for c in out]
+        return compress(out)
+
+
+def compress(out):
+    res = []
+    for c in out:
+        if res and res[-1][0] == c and c in ('v', 'x', 'i', '!'): res[-1][1] += 1
+        else: res.append([c, 1])
+    return [c if k == 1 else f'{c}*{k}' for c, k in res]
 
 
 def share(ts):
@@ -558,6 +587,53 @@ def share(ts):
         if any(0 <= k + dk < len(order) and order[k + dk] in chosen for dk in (-1, 1)): continue
         chosen.add(s)
     return {'split': split, 'major': chosen}
+
+
+def couple(t, g, at):
+    """주인 표 t(수서 발착)와 손님 노선 표 g 의 수서 열차를 병결로 짝짓는다.
+    짝: 갈림역 at 앞에서 함께 서는 역의 시각이 모두 같고 운행일이 겹치는 주인 열차. 짝이 없으면 홀로 다니는 열차로 주인 표에도 싣는다.
+    → (새 주인 표, {주인 번호: [손님 번호]}, 손님 별표(갈림역 ─ 손님 노선 끝), {손님 번호: [주인 번호]})"""
+    gn = [clean_name(x) for x in g['stations']]
+    hn = [clean_name(x) for x in t['stations']]
+    gk = gn.index('수서'); ka = gn.index(at)
+    down = t['dir'] == 'down'
+    # 하행은 갈림역에서 떨어진 뒤 손님이 늦게 떠난다(갈림역 시각이 다름): 견주는 건 갈림역 앞까지. 상행은 갈림역에서 합쳐 함께 떠난다
+    trunk = range(0, ka) if down else range(ka, len(gn))
+    gtr = [tr for tr in g['trains'] if isinstance(tr['times'][gk], int)]
+    hmap, gmap, extra = collections.defaultdict(list), {}, []
+    def real_ends(tr):
+        ix = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
+        return {'from': tr.get('from') or g['stations'][ix[0]], 'to': tr.get('to') or g['stations'][ix[-1]],
+                'fromT': tr.get('fromT') or tr['times'][ix[0]], 'toT': tr.get('toT') or tr['times'][ix[-1]]}
+    small = []
+    for tr in gtr:
+        hits = []
+        for h in t['trains']:
+            com = [(i, hn.index(gn[i])) for i in trunk if gn[i] in hn and isinstance(tr['times'][i], int) and isinstance(h['times'][hn.index(gn[i])], int)]
+            if len(com) >= 2 and all(tr['times'][i] == h['times'][j] for i, j in com) and week_days(tr['note']) & week_days(h['note']):
+                hits.append(h)
+        for h in hits: hmap[h['no']].append(tr['no'])
+        gmap[tr['no']] = [h['no'] for h in hits]
+        ends = real_ends(tr)
+        if not hits:          # 홀로 다니는 열차: 주인 표에도 (갈림역 너머로 이어짐)
+            tt = [None] * len(hn)
+            for i in trunk:
+                if gn[i] in hn: tt[hn.index(gn[i])] = tr['times'][i]
+            extra.append(dict(tr, times=tt, cont=down, **ends))
+        # 손님 별표: 하행은 갈림역 도착 = 짝의 도착 시각
+        arr_at = {}
+        if down and hits:
+            h = hits[0]; j = hn.index(at); x = h['times'][j]
+            a = ARR.get((h['no'], at))
+            if a is None or not 0 <= (x - a) % 1440 <= 15:
+                w = DWELL.get((grade(h['type']), at)); a = x - w if w is not None else None
+            if a is not None: arr_at[at] = a
+        rng = range(ka, len(gn)) if down else range(0, ka + 1)
+        small.append(dict(tr, **ends, arr_at=arr_at, times=[tr['times'][i] for i in rng]))
+        print('  병결', t['line'], t['dir'], tr['no'], '↔', [h['no'] for h in hits] or '홀로')
+    rng = range(ka, len(gn)) if down else range(0, ka + 1)
+    gt = dict(g, stations=[g['stations'][i] for i in rng], trains=small, variant='수서')
+    return dict(t, trains=t['trains'] + extra), dict(hmap), gt, gmap
 
 
 def main():
@@ -583,11 +659,12 @@ def main():
         title = f'{PREFIX}/{line}'
         expanded = []
         for cat, sheet, sub in parts:
-            if (cat, sheet) in SPLIT_SUSEO:
+            if (cat, sheet) in SPLIT_SUSEO or (cat, sheet) in COUPLE_GUEST:
                 expanded += [(cat, sheet, sub, None), (cat, sheet, sub, '수서')]
             else: expanded.append((cat, sheet, sub, None))
         for cat, sheet, sub, variant in expanded:
             head = ('KTX' if cat == 'ktx' else '일반열차') + (f" ({sub.replace(' ─ ', '–')})" if sub else '') + (' (수서 발착)' if variant == '수서' else '')
+            if variant == '수서' and (cat, sheet) in COUPLE_GUEST: head = 'KTX (수서 발착 병결)'
             P.append(f'== {head} ==')
             pair = {}
             for d in ('down', 'up'):
@@ -615,7 +692,20 @@ def main():
                                 return dict(tr, times=tt)
                             t = dict(t, stations=st2, trains=[remap(tr, t['stations']) for tr in t['trains']] + [remap(tr, g['stations']) for tr in gtr])
                             t['merged'] = gs
-                T = Table(t, data['hanja']); T.line_disp = line
+                cpl = None
+                if variant == '수서' and (cat, sheet) in COUPLE:
+                    gc, gs, at = COUPLE[(cat, sheet)]
+                    t, hmap, gt, gmap = couple(t, tabs.get((gc, gs, d)), at)
+                    GUEST_SUSEO[(gc, gs, d)] = (gt, gmap)
+                    cpl = {'map': hmap, 'pos': 'foot' if d == 'down' else 'head', 'with': gs, 'at': at}
+                elif variant == '수서' and (cat, sheet) in COUPLE_GUEST:
+                    t, gmap = GUEST_SUSEO[(cat, sheet, d)]
+                    h = COUPLE_GUEST[(cat, sheet)]
+                    cpl = {'map': gmap, 'pos': 'head' if d == 'down' else 'foot', 'with': h[1], 'at': COUPLE[h][2]}
+                elif (cat, sheet) in COUPLE_GUEST:     # 수서 열차는 병결 별표로
+                    k = next(i for i, x in enumerate(t['stations']) if clean_name(x) == '수서')
+                    t = dict(t, trains=[tr for tr in t['trains'] if not isinstance(tr['times'][k], int)])
+                T = Table(t, data['hanja']); T.line_disp = line; T.cpl = cpl
                 T.wiki(sub); pair[d] = T
             shared = share(list(pair.values()))
             for d in ('down', 'up'):

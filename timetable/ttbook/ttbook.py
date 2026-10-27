@@ -1322,7 +1322,7 @@ class Book:
             if run and run[2] > 1:            # 같은 표의 띠 여럿에 걸친 제목칸: 첫 띠에서 한 번에
                 if run[0] == 0:
                     Hh = run[1] - 2 * (fw + fp) - 2 * self.vpad
-                    vt, _ = self.vband(T, None, Hh, VB, vsc)
+                    vt, _ = self.vband(T, pc.get('vrun_part') or None, Hh, VB, vsc)
                     tex.append(self.put_box(bx, ty + self.vpad, VBc, Hh, vt, 'c', 't'))
                 y_a = y0 if run[0] > 0 else ty
                 y_b = fy1 if run[0] < run[2] - 1 else ys[-1]
@@ -1646,7 +1646,9 @@ class Book:
             for d in [k for k in nd.kids if isinstance(k, Node)]:
                 t = re.sub(r'\s+', ' ', d.text()).strip()
                 if t and all(t != x[0] for x in items): items.append((t, d))
-        return [d for t, d in items if not any(t != u and t in u for u, _ in items)]
+        items = [(t, d) for t, d in items if not any(t != u and t in u for u, _ in items)]
+        rank = lambda t: 0 if t.startswith(('차종', '등급')) else 1 if '운행' in t else 2   # 첫 줄에 차종·운행일, 그 밖은 다음 줄
+        return [d for t, d in sorted(items, key=lambda x: rank(x[0]))]
 
     def page_furniture(self, folio, recto, runhead, part, legend=None):
         fs = self.fs
@@ -1675,6 +1677,8 @@ class Book:
             # 두 줄이 되면 두 줄로: 항목을 앞뒤 반으로 나눠 줄을 바꾼다
             if len(parts) >= 2:
                 h_ = -(-len(parts) // 2)
+                rk = [0 if re.match(r'\s*(차종|등급)', d.text()) else 1 if '운행' in d.text() else 2 for d in legend]
+                if 2 in rk and rk.count(2) < len(rk): h_ = rk.index(2)     # 그 밖의 해설(병결 등)은 둘째 줄로
                 body = r'\hskip 1em plus 0.5em '.join(r'\mbox{%s}' % p for p in parts[:h_]) + r'\\' + \
                        r'\hskip 1em plus 0.5em '.join(r'\mbox{%s}' % p for p in parts[h_:])
             else:
@@ -1990,7 +1994,7 @@ class Book:
                     bwf = self.band_w(self.cw)
                     hs_ = [self.piece_h(T_, rows_, False, bwf) for T_, trs_, rows_, h_ in job['parts']]
                     hf = max(hs_)
-                    if y + hf <= PH + 0.01:
+                    if y + hf <= PH + 0.01 and hf > 0.5 * PH:      # 작은 표(반 쪽 높이 미만)는 한 쪽에 좌우로
                         for k_, (T_, trs_, rows_, h_) in enumerate(job['parts']):
                             put(T_, c + k_, trs_, rows_, y, False, hf, 0.0, False, 'B', bwf)
                         ys[c] = ys[c + 1] = y + hf
@@ -2074,6 +2078,16 @@ class Book:
         bunches = []
         if self.cfg.get('ktxFirst', False):
             k = [T for T in tables if self.is_ktx(T)]
+            # 뒤로 미룰 표(holdAfter): 그 노선의 표가 모두 실린 뒤에 (그 앞으로 당겨 오지 않는다)
+            for h in self.cfg.get('holdAfter', []):
+                held = [T for T in k if T.line == h['line'] and h.get('title', '') in T.title.text()]
+                if not held: continue
+                rest = [T for T in k if T not in held]
+                at = max((i for i, T in enumerate(rest) if T.line == h['after']), default=-1)
+                # 앞서 같은 노선으로 미룬 표 뒤에
+                while at + 1 < len(rest) and getattr(rest[at + 1], 'hold_after', None) == h['after']: at += 1
+                for T in held: T.hold_after = h['after']
+                k = rest[:at + 1] + held + rest[at + 1:]
             if k: bunches.append(k)
         for T in tables:
             if self.cfg.get('ktxFirst', False) and self.is_ktx(T): continue
@@ -2186,7 +2200,8 @@ class Book:
                         unit = [qi]
                         while unit[-1] + 1 < len(pend) and rkey(bunch[unit[-1] + 1]) == rkey(bunch[qi]): unit.append(unit[-1] + 1)
                         js = [pend[k][0] for k in unit if pend[k]]
-                        if js and all(whole[k] and len(pend[k]) == init[k] for k in unit) and all(j['kind'] in ('single', 'side') for j in js) \
+                        held = any(getattr(bunch[k], 'hold_after', None) and any(pend[m] for m in range(len(bunch)) if bunch[m].line == bunch[k].hold_after) for k in unit)
+                        if js and not held and all(whole[k] and len(pend[k]) == init[k] for k in unit) and all(j['kind'] in ('single', 'side') for j in js) \
                                 and top(c) + sum(j['h'] for j in js) - (len(js) - 1) * fw <= PH + 0.01:
                             for k in unit:
                                 if pend[k]: try_place(pend[k][0], c); pend[k].popleft()
@@ -2292,6 +2307,7 @@ class Book:
                     run.append(nxt[0])
                 for k, q in enumerate(run):
                     q['vrun'] = (k, sum(r['h'] for r in run) - (len(run) - 1) * fw, len(run))
+                    q['vrun_part'] = '·'.join(r['part'] for r in run if r.get('part'))    # 한 칸에 걸친 몇째들: (첫째·둘째)
         self.pages = pages
 
     def emit(self, out_tex):
