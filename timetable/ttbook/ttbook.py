@@ -1524,8 +1524,45 @@ class Book:
         T._drop = drop
         return drop
 
+    def stack_parts(self, T, G):
+        """펼침면 G 개에 고르게 나눈 열차 무리: [(왼쪽 면 열차, 오른쪽 면 열차)]"""
+        _, Tc, _ = self.blocks(T)
+        capL = self.cap(T, 'L', True)
+        base, ex = divmod(len(Tc), G)
+        out, ti = [], 0
+        for g in range(G):
+            k = base + (1 if g < ex else 0)
+            kA = min(capL, -(-k // 2))
+            out.append((Tc[ti:ti + kA], Tc[ti + kA:ti + k])); ti += k
+        return out
+
+    def stack_jobs(self, Td, Tu):
+        """하행을 위 단, 상행을 아래 단에 펼침면 가로로. 들지 않으면 None"""
+        fw = self.frame_w
+        PH = self.ch
+        bw = self.band_w(self.cw)
+        rows = {}
+        for T in (Td, Tu):
+            rows[id(T)] = list(range(T.nrow))
+        hd = self.piece_h(Td, rows[id(Td)], False, bw)
+        hu = self.piece_h(Tu, rows[id(Tu)], False, bw)
+        if hd + hu - fw > PH + 0.01: return None
+        C = lambda T, sq: self.cap(T, 'L', sq) + self.cap(T, 'R', sq)
+        nd, nu = len(self.blocks(Td)[1]), len(self.blocks(Tu)[1])
+        G = max(-(-nd // C(Td, False)), -(-nu // C(Tu, False)))
+        if G > 1 and nd <= (G - 1) * C(Td, True) and nu <= (G - 1) * C(Tu, True): G -= 1
+        if any(len(a) > self.cap(T, 'L', True) or len(b) > self.cap(T, 'R', True)
+               for T in (Td, Tu) for a, b in self.stack_parts(T, G)): return None
+        jobs = []
+        for (da, db), (ua, ub) in zip(self.stack_parts(Td, G), self.stack_parts(Tu, G)):
+            jobs.append({'T': Td, 'Tu': Tu, 'kind': 'stack', 'd': (da, db, rows[id(Td)], hd), 'u': (ua, ub, rows[id(Tu)], hu),
+                         'h': hd + hu - fw, 'trs': da + db, 'rows': rows[id(Td)], 'notes': False, 'bw': bw})
+        return jobs
+
     def jobs_of(self, T):
         """표 하나를 실을 일감들: [{kind single|pair, trs, rows, h, ...}] (역 구간 먼저, 그 안에서 열차 무리 차례)"""
+        if getattr(T, 'stack_with', None) is not None: return self.stack_jobs(T, T.stack_with)
+        if getattr(T, 'stacked', False): return []
         PH = self.ch
         L, Tc, R = self.blocks(T)
         head = list(range(T.hEnd)); foot = list(range(T.fStart, T.nrow)); body = list(range(T.hEnd, T.fStart))
@@ -1645,6 +1682,18 @@ class Book:
         def try_place(job, c):
             """지금 쪽 c 에 (짝이면 c 와 c+1 에) 그대로 들면 싣고 True"""
             T, trs, rows, h, notes = job['T'], job['trs'], job['rows'], job['h'], job['notes']
+            if job['kind'] == 'stack':            # 펼침면에서만 (왼쪽 면에서 시작)
+                if c % 2 == 1: return False
+                y = max(top(c), top(c + 1))
+                if y + h > PH + 0.01: return False
+                da, db, rd, hd = job['d']; ua, ub, ru, hu = job['u']
+                Tu = job['Tu']
+                for p_, tr_ in ((c, da), (c + 1, db)):
+                    if tr_: put(T, p_, tr_, rd, y, False, hd)
+                for p_, tr_ in ((c, ua), (c + 1, ub)):
+                    if tr_: put(Tu, p_, tr_, ru, y + hd - fw, False, hu)
+                ys[c] = ys[c + 1] = y + h
+                return True
             if job['kind'] == 'single':
                 k = len(trs)
                 pg = page(c)
@@ -1675,7 +1724,9 @@ class Book:
             return False
 
         def advance(job, c):
-            if job['kind'] == 'pair' and c % 2 == 0:
+            if job['kind'] == 'stack':
+                cur['c'] = c + 1 if c % 2 == 1 else c + 2
+            elif job['kind'] == 'pair' and c % 2 == 0:
                 # 왼쪽 면에 자리가 없고 오른쪽 면이 비었으면 오른쪽 면에서 시작해 넘겨 잇는다
                 cur['c'] = c + 1 if (ys[c + 1] == 0 and job['h'] <= PH + 0.01) else c + 2
             else:
@@ -1708,7 +1759,7 @@ class Book:
             if mode == 'left': T.band_left = fits
             else: T.band_left = fits and len(jl) <= len(jt) and 2 * hl - fw <= PH + 0.01 < 2 * ht - fw
         for T in tables:
-            T.band_left = False; T.fold = False
+            T.band_left = False; T.fold = False; T.stack_with = None; T.stacked = False
             if self.fold != 'off':
                 jt = self.jobs_of(T)
                 T.band_left = T.head is not None; T.fold = True
@@ -1734,6 +1785,20 @@ class Book:
                 for T in ts:
                     T.fold = False; T.band_left = False
                     band_pos(T)
+            # 하행·상행 짝이 펼침면에 위아래로 들면 그렇게 (하행 위, 상행 아래, 가로로 이어 읽는다)
+            if self.cfg.get('upDown', True) and len(ts) == 2:
+                dn = [T for T in ts if '하행' in T.title.text()]
+                up = [T for T in ts if '상행' in T.title.text()]
+                # 한 쪽에 홀로 드는 작은 표는 그대로 (위아래로 차례로 쌓인다)
+                if len(dn) == 1 and len(up) == 1 and any(
+                        len(self.blocks(T)[1]) > self.cap(T, 'B', True) for T in ts):
+                    Td, Tu = dn[0], up[0]
+                    old = [(T.fold, T.band_left) for T in ts]
+                    for T in ts: T.fold = False; T.band_left = T.head is not None
+                    if self.stack_jobs(Td, Tu):
+                        Td.stack_with, Tu.stacked = Tu, True
+                        continue
+                    for T, (f, b) in zip(ts, old): T.fold, T.band_left = f, b
             if any(T.band_left for T in ts) and not all(T.band_left for T in ts):
                 ok = True
                 for T in ts:
