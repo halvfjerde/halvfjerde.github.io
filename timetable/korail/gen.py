@@ -105,6 +105,7 @@ def merge_into(g, k, insert=True, via=None):
             continue
         if via:
             lab = f'{via}/경유'                                # 「경부고속선/경유」 두 줄 세로쓰기
+            if r.get('cpl_at'): lab = f"{via}/{r['cpl_at']} {'분리' if k.get('dir') == 'down' else '연결'}"   # 병결: 「호남고속선/익산 분리」
             if clean_name(r['from']) != sn[ix[0]] and ix[0] >= 1: r['times'][ix[0] - 1] = lab
             if clean_name(r['to']) != sn[ix[-1]] and ix[-1] + 1 < len(sn): r['times'][ix[-1] + 1] = lab
         trs.append(r)
@@ -804,7 +805,8 @@ class Table:
             slots = [(k, p) for k in range(k0, k1 + 1) for p in range(phys(k))]
             if len(slots) < 2: return None
             horiz = via.startswith('=')                       # 「=수서/발/654」: 가로로 줄마다 한 행 (필요한 행만 합친다)
-            text = via.lstrip('=').replace(' ', '')
+            text = via.lstrip('=')
+            if not re.search(r'\S (분리|연결)$', text): text = text.replace(' ', '')       # 「익산 분리」만 띄어 쓴다
             if not horiz and '/' not in text: text = text.replace('경유', '/경유')             # 「태백선/경유」 두 줄 세로쓰기
             need = len(text.split('/')) if horiz else math.ceil((max(len(x) for x in text.split('/')) + 0.3) / 1.26)   # 긴 줄 1em씩(괄호 없이), 행 1.26em
             if need > len(slots): need = 0                   # 자리가 모자라면 주석 없이 ║ 만 (행이 굵어지지 않게)
@@ -1023,7 +1025,9 @@ def main():
                     if kk in BRANCH_AT:            # 고속선 구간은 고속철도 표에: 갈림역부터만
                         gt_, gmap_ = GUEST_SUSEO.get(kk + (d,), ({'trains': []}, {}))
                         gby_ = {x['no']: x for x in gt_['trains']}
-                        kt = dict(kt, trains=[dict(tr, arr_at=gby_.get(tr['no'], {}).get('arr_at', {})) for tr in kt['trains']])
+                        cat_ = COUPLE[COUPLE_GUEST[kk]][2] if kk in COUPLE_GUEST else None      # 병결 짝이 있는 열차: 갈림역에서 분리·연결
+                        kt = dict(kt, trains=[dict(tr, arr_at=gby_.get(tr['no'], {}).get('arr_at', {}),
+                                                   **({'cpl_at': cat_} if cat_ and gmap_.get(tr['no']) else {})) for tr in kt['trains']])
                         kt = branch_only(kt, BRANCH_AT[kk])
                     t = merge_into(t, kt, insert=kk not in BRANCH_AT, via=VIA_HSR.get(kk))
                 for gk in MERGE_GEN_INTO.get((cat, sheet), []):

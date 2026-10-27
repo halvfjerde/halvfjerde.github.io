@@ -1044,8 +1044,8 @@ class Book:
                 cell.refin = True
                 cell.need = self.cell_need(T, cell, cell.lines)
             else:                     # 주 칸 끝에 한 줄 더: 세로쓰기의 띄어쓰기는 빼고(표지가 사이를 띄운다) 높이를 아낀다
-                def nospace(n):
-                    n.kids = [k.replace(' ', '') if isinstance(k, str) else (nospace(k) or k) for k in n.kids]
+                def nospace(n):      # 「익산 분리」의 띄어쓰기는 남긴다
+                    n.kids = [re.sub(r' (?!분리|연결)', '', k) if isinstance(k, str) else (nospace(k) or k) for k in n.kids]
                 nd = copy.deepcopy(cell.node); nospace(nd); cell.node = nd
                 ls_ = [l for l in self.inl.lines(nd, c)]
                 # 끝 역에서 나가는 주석 열(「…선 경유」 + ⬏): 표지는 화살표 앞에
@@ -1653,7 +1653,7 @@ class Book:
         """열차 칸의 주가 다른 표를 가리키면 {kind: via|train, ...}: 「…선 경유」(그 노선 표의 같은 열차), 「…로 연결·분리」「…/발/654」(그 번호의 열차)"""
         if T.kind[cell.c][0] != 'T' or cell.r < T.hEnd: return None
         t = re.sub(r'\s', '', cell.node.text())
-        m = re.fullmatch(r'[↑↱]?(.+?선)경유(?:.+선경유)?⬏?', t)
+        m = re.fullmatch(r'[↑↱]?(.+?선)(?:경유|[가-힣]+(?:분리|연결))(?:.+선경유)?⬏?', t)
         if m: return {'kind': 'via', 'name': m.group(1)}
         if re.search(r'연결|분리', t) or re.fullmatch(r'\D+(발|착)\d+', t):
             nos = []
