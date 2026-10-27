@@ -219,6 +219,9 @@ def esc_txt(s):
     """칸 내용 안에서 꾸미기 표기로 읽히지 않게"""
     return s.replace('.', '..')
 
+# 시발역·종착역 칸에 줄여 적는 역 이름 (한 칸에 다섯 자는 뭉개져 보기 싫다. 옛 여수역은 여수엑스포로 바뀌어 헷갈릴 것이 없다)
+END_ABBR = {'여수엑스포': '여수'}
+
 def vert(s):
     return f'r{esc_txt(s)}.' if s else '_'
 
@@ -590,7 +593,7 @@ class Table:
             hdr = [q(badge(k, tr['type'])), tr['no']] + ([f'style=fc={col}', 'tstyle=fw=b'] if tr.get('ktx') else [f'style=fc={col}'] if ktx else [])   # 고속철도 표는 열차 칸을 모두 파랗게
             if has_fr:
                 o, d = self.ends_of(tr)
-                hdr.append(q(f'{esc_txt(o)}/{hm(self.end_times(tr)[0])}'))
+                hdr.append(q(f'{esc_txt(END_ABBR.get(o, o))}/{hm(self.end_times(tr)[0])}'))
             # 열차번호 꼴. 짝이 요일로 바뀌면 칸에는 많이 다니는 짝, 다른 짝은 비고에 (금∼일/672)
             gs_ = self.cpl_main(tr)
             cpv = (q('/'.join(f'N{{{x}}}' for x in gs_)) if gs_ else '_') if cp else None   # 짝이 요일로 바뀌면 두 줄, 비고에 요일
@@ -599,7 +602,7 @@ class Table:
             ft = []
             if has_to:
                 o, d = self.ends_of(tr)
-                ft.append(q(f'{esc_txt(d)}/{hm(self.end_times(tr)[1])}'))
+                ft.append(q(f'{esc_txt(END_ABBR.get(d, d))}/{hm(self.end_times(tr)[1])}'))
             if cp and cp['pos'] == 'foot': ft.append(cpv)
             nt = tr['note']
             if self.has_days:
@@ -673,6 +676,8 @@ class Table:
         elif (self.cat, self.line) in COUPLE_GUEST and self.variant != '수서':
             notes.append(f'수서 발착 열차는 수서 발착 병결 표에')
         if self.loop_note: notes.append(self.loop_note)
+        ab_ = [k for k, v in END_ABBR.items() if any(k in self.ends_of(tr) for tr in self.trains)]
+        if ab_: notes.append('시발·종착역의 ' + ', '.join(f'{END_ABBR[k]}는 {k}' for k in ab_))
         for st_, via_ in self.skipped:
             notes.append(f"{st_}에만 서는 KTX({via_} 경유)는 {via_.replace('고속선', '고속철도')} 표에")
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
