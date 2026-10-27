@@ -35,6 +35,7 @@ TOUR = json.load(open(TOUR_JSON)) if os.path.exists(TOUR_JSON) else None
 if TOUR: BOOK.append(('관광열차', [('tour', t['line'], None) for t in TOUR['tables'] if t['dir'] == 'down']))
 # 관광열차 표는 상하행을 한 표에 (가운데 역명, 왼쪽 하행·오른쪽 상행). 열차 옆 주석 열 (표 이름 → 세로 두 줄)
 TOUR_COLNOTE = {}
+LEGEND_PAGE = True      # 책 앞에 범례: 표마다 등급·운행일 해설을 적지 않고, 운행일은 기호 없이 요일로
 BOTH_TABLES = {('gen', '서해선', '순환')}       # 상하행을 한 표에 적는 그 밖의 표 (평택선)
 TOUR_HEADR = {'정선아리랑': '토·일과 2, 7, 12, 17, 22, 27일 운행'}      # 표 머리띠 오른쪽에 적는 주      # 칸 문법 그대로 (세로 덩어리를 위에서 아래로)
 # 노선마다 재래선(일반열차) 표를 먼저, KTX 는 그 뒤에
@@ -550,7 +551,7 @@ class Table:
         isday = lambda s: bool(s) and all(ch in WEEK for ch in s)
         days = {tr['note'] for tr in self.trains if isday(tr['note'])}
         self.has_days = bool(days)
-        self.daysym = {'월화수목금': '◆', '토일': '◇'} if days and days <= {'월화수목금', '토일'} else None
+        self.daysym = {'월화수목금': '◆', '토일': '◇'} if days and days <= {'월화수목금', '토일'} and not LEGEND_PAGE else None   # 범례가 있으면 요일을 그대로
         has_day = cpn or any(tr['note'] and not isday(tr['note']) for tr in self.trains)     # 비고에 적을 것
         self.rem_empty = not has_day
         if self.has_days: L.append(f'days {lbl("days")} r={LBL["days"][1]} style=va=t')
@@ -702,7 +703,8 @@ class Table:
         L.append('[notes]')
         notes = []
         kinds = [KIND.get(tr['type'], tr['type']) for tr in self.trains]
-        if ktx:
+        if LEGEND_PAGE: pass                 # 등급·글자 색·운행일 해설은 책 앞 범례에 (표마다 적지 않는다)
+        elif ktx:
             names = [('산천', 'KTX-산천'), ('청룡', 'KTX-청룡'), ('이음', 'KTX-이음')]
             parts = [f'S{{{k}}}은 `{full}`' for k, full in names if k in kinds]
             if parts: notes.append('차종 ' + ', '.join(parts))
@@ -720,7 +722,7 @@ class Table:
                 parts.append('파란 글씨는 KTX' + (f"({', '.join(sub_)})" if sub_ else ''))
                 if any(tr.get('ktx') and self.is_suseo(tr) for tr in self.trains): parts.append('자주 글씨는 수서 발착 KTX')
             if parts: notes.append('등급 ' + ', '.join(parts))
-        if self.has_days:   # 운행일 관련은 한 줄로
+        if self.has_days and not LEGEND_PAGE:   # 운행일 관련은 한 줄로
             dn = []
             if self.daysym:
                 used = {tr['note'] for tr in self.trains}
@@ -737,7 +739,7 @@ class Table:
         if self.loop_note: notes.append(self.loop_note)
         notes += getattr(self, 'xfer', [])            # 환승·같은 구간 안내 (인쇄에서 쪽 번호를 붙인다)
         ab_ = [k for k, v in END_ABBR.items() if any(k in self.ends_of(tr) for tr in self.trains)]
-        if ab_ and not getattr(self, 'both', False): notes.append('시발·종착역의 ' + ', '.join(f'{END_ABBR[k]}는 {k}' for k in ab_))
+        if ab_ and not getattr(self, 'both', False) and not LEGEND_PAGE: notes.append('시발·종착역의 ' + ', '.join(f'{END_ABBR[k]}는 {k}' for k in ab_))
         for st_, via_ in self.skipped:
             notes.append(f"{st_}에만 서는 KTX({via_} 경유)는 {via_.replace('고속선', '고속철도')} 표에")
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
@@ -1094,11 +1096,12 @@ def main():
                     nb = [sb[k] for k in (i - 1, i + 1) if 0 <= k < len(sb)]
                     if any(y not in S for y in nb) and x not in jn.get(b, []): jn.setdefault(b, []).append(x)
         out = []
-        if jn:          # 같은 역들끼리 묶어: 「동대구 동해선·중앙선, 천안·평택 서해선」
+        # 「→갑∼을: 노선」(같은 구간), 「→역: 노선」(환승). 인쇄에서 노선마다 그 표의 쪽 번호를 붙인다
+        out += [f"→{x}∼{y}: {'·'.join(bs)}" for (x, y), bs in shared.items()]
+        if jn:
             byst = {}
             for b, xs in jn.items(): byst.setdefault(tuple(xs), []).append(b)
-            out.append('환승 ' + ', '.join(f"{'·'.join(xs)} {'·'.join(bs)}" for xs, bs in byst.items()))
-        out += [f"{x}∼{y} 간은 {'·'.join(bs)} 표도 참조" for (x, y), bs in shared.items()]
+            out += [f"→{'·'.join(xs)}: {'·'.join(bs)}" for xs, bs in byst.items()]
         return out
     for line, parts in BOOK:
         P = [f'{{{{시각표테마}}}}', f'{{{{상위문서|{PREFIX}}}}}',

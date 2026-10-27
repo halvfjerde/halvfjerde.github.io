@@ -1973,6 +1973,28 @@ class Book:
                 tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(nm, c_), 'l', 'm'))
                 tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(pg_, Ctx('M', 1.1)), 'r', 'm'))
                 ops.append('q 0.3 w 0 G [0.6 1.6] 0 d %.3f %.3f m %.3f %.3f l S Q' % (xx + 62, H - (yy + lh * 0.7), xx + colw - 26, H - (yy + lh * 0.7)))
+            # 범례: 등급 표지(모듈로 그린 것)와 기호
+            yy = y0 + 26 + per * lh + 24
+            tex.append(self.put_box(x0, yy, W, 14, self.inl.run('범례', Ctx('GB', 14 / fs)), 'l', 't'))
+            yy += 24
+            lg = self.cfg.get('legend', [])
+            if lg:
+                html = run_module('title "x"\n\n[stations]\n가\n\n[notes]\n' + '\n'.join(x[1] for x in lg), os.path.join(HERE, 'src', 'Timetable.lua'), os.path.join(HERE, 'build'))
+                nd = parse_html(html).find(lambda n: 'jtt-notes' in n.cls)
+                rows_ = [k for k in nd.kids if isinstance(k, Node)] if nd is not None else []
+                for (head_, _), d in zip(lg, rows_):
+                    ln_ = self.inl.lines(d, Ctx('M', 1.1))
+                    tex.append(self.put_box(x0, yy, 60, 12, self.inl.run(head_, Ctx('GB', 1.1)), 'l', 'm'))
+                    tex.append(self.put_box(x0 + 62, yy, W - 62, 12, self.inl.flat(ln_[0]) if ln_ else '', 'l', 'm'))
+                    yy += 15
+            # 표 속 기호 (DiaPro 글리프 그대로)
+            sy = [('‥', '그 역을 지나지 않음'), ('║', '다른 선을 달림'), ('↓', '통과'), ('▔', '여기서 끝남 (상하병기의 상행은 ▁)'), ('━', '굵은 세로줄 오른쪽은 수서 발착 등 덧붙인 열차')]
+            tex.append(self.put_box(x0, yy, 60, 12, self.inl.run('기호', Ctx('GB', 1.1)), 'l', 'm'))
+            for i_, (g_, t_) in enumerate(sy):
+                if g_ == '━': continue
+                tex.append(self.put_box(x0 + 62, yy, 14, 12, self.inl.run(g_, Ctx('DM', 1.1)), 'c', 'm'))
+                tex.append(self.put_box(x0 + 80, yy, W - 80, 12, self.inl.run(t_, Ctx('M', 1.1)), 'l', 'm'))
+                yy += 13
         return tex, ' '.join(ops)
 
     def page_side_title(self, recto, lines, dirs=None, nos=None):
@@ -2050,7 +2072,7 @@ class Book:
                 t = re.sub(r'\s+', ' ', d.text()).strip()
                 if t and all(t != x[0] for x in items): items.append((t, d))
         items = [(t, d) for t, d in items if not any(t != u and t in u for u, _ in items)]
-        rank = lambda t: 0 if t.startswith(('차종', '등급')) else 1 if '운행' in t else 2   # 첫 줄에 차종·운행일, 그 밖은 다음 줄
+        rank = lambda t: 0 if t.startswith(('차종', '등급')) else 1 if '운행' in t else 3 if t.startswith('→') else 2   # 첫 줄에 차종·운행일, 같은 구간·환승은 맨 뒤
         return [d for t, d in sorted(items, key=lambda x: rank(x[0]))]
 
     def page_furniture(self, folio, recto, runhead, part, legend=None):
@@ -2092,6 +2114,9 @@ class Book:
                 return ''.join(out)
             for i_, d in enumerate(legend):
                 t_ = re.sub(r'\s+', ' ', d.text()).strip()
+                if t_.startswith('→') and ':' in t_:         # 「갑∼을: 노선」 같은 구간·환승: 역은 굵은 고딕, 노선마다 쪽 번호
+                    a_, b_ = t_[1:].split(':', 1)
+                    parts[i_] = self.inl.run(a_ + ':', Ctx('GB', sz)) + r'\kern%.3fbp ' % (0.25 * sz * fs) + with_badges(b_.strip()); continue
                 if t_.startswith('환승 ') or t_.endswith('표도 참조'):
                     parts[i_] = with_badges(t_); continue
                 m = re.search(r'.*는 (.+?) 표에\s*$', re.sub(r'\s+', ' ', d.text()))
@@ -2106,8 +2131,9 @@ class Book:
                 h_ = -(-len(parts) // 2)
                 rk = [0 if re.match(r'\s*(차종|등급)', d.text()) else 1 if '운행' in d.text() else 2 for d in legend]
                 if 2 in rk and rk.count(2) < len(rk): h_ = rk.index(2)     # 그 밖의 해설(병결 등)은 둘째 줄로
-                body = r'\hskip 1em plus 0.5em '.join(r'\mbox{%s}' % p for p in parts[:h_]) + r'\\' + \
-                       r'\hskip 1em plus 0.5em '.join(r'\mbox{%s}' % p for p in parts[h_:])
+                if all(x == 2 for x in rk): h_ = 0
+                body = (r'\hskip 1em plus 0.5em '.join(r'\mbox{%s}' % p for p in parts[:h_]) + r'\\' if h_ else '') + \
+                       r'\hskip 1.2em plus 0.5em '.join(r'\mbox{%s}' % p for p in parts[h_:])
             else:
                 body = r'\mbox{%s}' % parts[0]
             box = r'\parbox[b]{%.3fbp}{\fontsize{%.3fbp}{%.3fbp}\selectfont%s %s}' % (
