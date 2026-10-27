@@ -1950,12 +1950,6 @@ class Book:
             blk = Tc[b:]
             if self.fixed_w(T, 'B') + len(blk) * self.P0 * self.squeeze > half + 0.01: return None
             parts.append((T, blk, rows, self.piece_h(T, rows, False, bwh)))
-        if self.cfg.get('ruleStack', True):
-            # 덩어리는 다음 쪽에 본표와 같은 단 높이로 위(하행)·아래(상행)에 좁게 (남는 폭에는 다른 작은 표가 들어간다)
-            md, mu = main[id(Td)], main[id(Tu)]
-            st = {'T': Td, 'kind': 'stackc', 'parts': [(Td, parts[0][1], md['rows'], md['h']), (Tu, parts[1][1], mu['rows'], mu['h'])],
-                  'h': md['h'] + mu['h'] - self.frame_w, 'trs': parts[0][1], 'rows': md['rows'], 'notes': False, 'bw': bwf}
-            return [md, mu, st], None
         side = {'T': Td, 'Tu': Tu, 'kind': 'side', 'parts': parts, 'h': max(q[3] for q in parts), 'trs': parts[0][1],
                 'rows': parts[0][2], 'notes': False, 'bw': bwh, 'nosplit': True}
         return [main[id(Td)], side], [main[id(Tu)]]
@@ -2084,74 +2078,9 @@ class Book:
             return pc
         placed = collections.defaultdict(list)
 
-        def beside(job, c):
-            """작은 좌우 짝을, 좁은 조각만 있는 단의 남는 폭에 나란히 (단 높이 안에서)"""
-            pg = page(c)
-            if job['kind'] != 'side' or not pg['pieces']: return False
-            # 남는 폭에 나란히: 위 띠 그대로 안 들면 제목을 왼쪽 세로 띠로 (폭이 바뀐다)
-            def band_ok(T_, trs_):        # 위 띠의 가운데(구간)가 조각 폭에 드는가
-                if T_.head is None: return True
-                parts_, color_ = self.band_nodes(T_)
-                ls = self.inl.lines(parts_[1], Ctx('DM', 1.0, color_))
-                return self.inl.line_w(ls[0] if ls and ls[0] else []) * self.fs <= self.band_w(self.fixed_w(T_, 'B') + len(trs_) * self.P0)
-            # 좁은 조각만 있는 단이 둘 이상이면: 하행은 위 단, 상행은 아래 단에 하나씩 (남는 폭을 다 쓴다)
-            tiers_ = []
-            for y_ in sorted({round(q['y'], 3) for q in pg['pieces']}):
-                tier = [q for q in pg['pieces'] if abs(q['y'] - y_) < 0.01]
-                if all(q['narrow'] for q in tier): tiers_.append(tier)
-            if len(tiers_) >= len(job['parts']) >= 2:
-                plan_ = []
-                for (T_, trs_, rows_, h_), tier in zip(job['parts'], tiers_):
-                    x = max(q['x'] + (q.get('fixw') or q['nat']) for q in tier) + TWh + gapX
-                    n_ = self.fixed_w(T_, 'B') + len(trs_) * self.P0
-                    if x + n_ > self.cw + 0.01 or h_ > max(q['h'] for q in tier) + 0.01: plan_ = None; break
-                    plan_.append((T_, trs_, rows_, h_, tier[0]['y'], x))
-                if plan_:
-                    for T_, trs_, rows_, h_, y_, x in plan_:
-                        pc_ = put(T_, c, trs_, rows_, y_, False, h_, x, True, 'B', self.band_w(self.cw - x))
-                        pc_['fixw'] = self.cw - x
-                    return True
-            if all(band_ok(T_, trs_) for T_, trs_, _, _ in job['parts']) and self._beside(job, c, job['parts'], pg): return True
-            olds = [(T_, getattr(T_, 'band_left', False)) for T_, _, _, _ in job['parts']]
-            for T_, _ in olds: T_.band_left = T_.head is not None
-            parts = [(T_, trs_, rows_, self.piece_h(T_, rows_, False, self.band_w(self.cw))) for T_, trs_, rows_, h_ in job['parts']]
-            if self._beside(job, c, parts, pg): return True
-            for T_, b_ in olds: T_.band_left = b_
-            return False
-
-        self._beside = lambda job, c, parts, pg: _beside(job, c, parts, pg)
-        def _beside(job, c, parts, pg):
-            nats = [self.fixed_w(T_, 'B') + len(trs_) * self.P0 for T_, trs_, rows_, h_ in parts]
-            need = sum(nats) + (len(nats) - 1) * (TWh + gapX)
-            cands = []
-            for y_ in sorted({round(q['y'], 3) for q in pg['pieces']}):
-                tier = [q for q in pg['pieces'] if abs(q['y'] - y_) < 0.01]
-                if not all(q['narrow'] for q in tier): continue
-                th = max(q['h'] for q in tier)
-                if max(h_ for _, _, _, h_ in parts) > th + 0.01: continue
-                x = max(q['x'] + (q.get('fixw') or q['nat']) for q in tier) + TWh + gapX
-                if x + need > self.cw + 0.01: continue
-                cands.append((self.cw - x - need, x, tier))       # 가장 꼭 맞는 단에
-            if cands:
-                _, x, tier = min(cands, key=lambda t: t[0])
-                for (T_, trs_, rows_, h_), n_ in zip(parts, nats):
-                    pc_ = put(T_, c, trs_, rows_, tier[0]['y'], False, h_, x, True, 'B', self.band_w(n_))
-                    pc_['fixw'] = n_
-                    x += n_ + TWh + gapX
-                return True
-            return False
-
         def try_place(job, c):
             """지금 쪽 c 에 (짝이면 c 와 c+1 에) 그대로 들면 싣고 True"""
             T, trs, rows, h, notes = job['T'], job['trs'], job['rows'], job['h'], job['notes']
-            if job['kind'] == 'stackc':           # 앞 쪽 본표와 같은 단 높이로 위·아래에 좁게
-                y = top(c)
-                if y + h > PH + 0.01: return False
-                for T_, trs_, rows_, h_ in job['parts']:
-                    put(T_, c, trs_, rows_, y, False, h_, 0.0, True, 'B', job['bw'])
-                    y += h_ - fw
-                ys[c] = y + fw
-                return True
             if job['kind'] == 'side':
                 y = top(c)
                 # 왼쪽 면에서 두 면의 높이가 같으면: 하행은 왼쪽 면, 상행은 오른쪽 면에 (펼침면 좌우로)
@@ -2325,9 +2254,7 @@ class Book:
                     rj = self.rule_jobs(dn[0], up[0])
                     if rj:
                         dn[0].custom_jobs, up[0].custom_jobs = rj
-                        if rj[1] is None: up[0].stacked = True        # 하행 일감에 상행까지 (본표 둘 → 다음 쪽 덩어리)
-                        else:
-                            for T in ts: T.pull_first = True      # 본표만 먼저 당겨 올 수 있다 (덩어리는 제 차례에)
+                        for T in ts: T.pull_first = True      # 본표만 먼저 당겨 올 수 있다 (덩어리는 제 차례에)
                         continue
                     for T, (f, b) in zip(ts, old): T.fold, T.band_left = f, b
             # 하행·상행 짝이 펼침면에 위아래로 들면 그렇게 (하행 위, 상행 아래, 가로로 이어 읽는다)
@@ -2398,15 +2325,11 @@ class Book:
                         while unit[-1] + 1 < len(pend) and rkey(bunch[unit[-1] + 1]) == rkey(bunch[qi]): unit.append(unit[-1] + 1)
                         js = [pend[k][0] for k in unit if pend[k]]
                         held = any(getattr(bunch[k], 'hold_after', None) and any(pend[m] for m in range(len(bunch)) if bunch[m].line == bunch[k].hold_after) for k in unit)
-                        ok_ = js and not held and all((whole[k] or getattr(bunch[k], 'pull_first', False)) and len(pend[k]) == init[k] for k in unit) \
-                                and all(j['kind'] in ('single', 'side') for j in js)
-                        if ok_ and top(c) + sum(j['h'] for j in js) - (len(js) - 1) * fw <= PH + 0.01:
+                        if js and not held and all((whole[k] or getattr(bunch[k], 'pull_first', False)) and len(pend[k]) == init[k] for k in unit) \
+                                and all(j['kind'] in ('single', 'side') for j in js) \
+                                and top(c) + sum(j['h'] for j in js) - (len(js) - 1) * fw <= PH + 0.01:
                             for k in unit:
                                 if pend[k]: try_place(pend[k][0], c); pend[k].popleft()
-                            filled = True
-                        elif ok_ and len(js) == 1 and beside(js[0], c):      # 좁은 조각 옆 남는 폭에
-                            for k in unit:
-                                if pend[k]: pend[k].popleft()
                             filled = True
                         qi = unit[-1] + 1
                     if not filled: advance(job, c)
