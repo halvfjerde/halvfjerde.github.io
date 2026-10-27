@@ -81,6 +81,7 @@ KEEP_STATIONS = {('gen', '목포보성선'): {'조성'}}
 SPLIT_SUSEO = {('ktx', '경부선'), ('ktx', '호남선')}
 # 순환 열차(시발역＝종착역: 홍성–천안–서화성–홍성 ITX-마음)는 따로 표로 (다른 표에서는 뺀다)
 SPLIT_LOOP = {('gen', '서해선')}
+LINE_STATIONS = {}      # (cat, 노선) → 역 이름들 (main 에서 채운다)
 LOOP_NAME = {('gen', '서해선'): '평택선'}
 def is_loop(tr): return bool(tr.get('from')) and clean_name(tr.get('from')) == clean_name(tr.get('to') or '')
 # 노선 띠에 적을 역(하행 차례. 상행은 뒤집는다). 없으면 자동
@@ -431,7 +432,7 @@ class Table:
         L.append('[footer]')
         if has_to: L.append(f'to   {lbl("to")} r={LBL["to"][1]}')
         if cp and cp['pos'] == 'foot': L.append(cpl_row)
-        cpn = any(self.cpl_note(tr) for tr in self.trains)
+        cpn = any(self.cpl_note(tr) for tr in self.trains) or any(self.from_line(tr) for tr in self.trains)
         # 운행일은 제 행에 (기호 ◆◇ 또는 요일), 비고 행에는 병결·그 밖의 주. 모든 표의 끝은 비고 행 (인쇄에서 쪽의 남는 자리를 받는다)
         isday = lambda s: bool(s) and all(ch in WEEK for ch in s)
         days = {tr['note'] for tr in self.trains if isday(tr['note'])}
@@ -535,7 +536,9 @@ class Table:
                 else: ft.append(q(esc_txt(day_short(nt))))      # 운행일 행: 요일 글자만 가로로 (이어지는 셋 이상은 월∼목), 넘치면 좁힌다
             if has_day:
                 cn = self.cpl_note(tr)
+                fl = self.from_line(tr)
                 if cn: ft.append(q(cn))
+                elif fl and not (nt and '경유' in nt): ft.append(q(vert(f'↑{fl}/경유')))     # 표의 첫 역에서 다른 선에서 들어온 열차: 위 화살표 밑에 세로쓰기(…선 | 경유)
                 elif nt and not isday(nt): ft.append(q(vert(day_range(nt))))
                 else: ft.append('_')
             elif self.rem_row: ft.append('_')
@@ -603,7 +606,8 @@ class Table:
         """어버이 열차의 비고(가로, 줄마다): 「381/분리」(하행)·「382/연결」(상행). 짝이 요일로 바뀌면 「668/672/연결」. 열차번호는 명조"""
         gs = self.cpl_main(tr)
         if not gs: return None
-        return '/'.join(f'N{{{x}}}' for x in gs) + '/' + ('분리' if self.dir == 'down' else '연결')
+        at = COUPLE.get((self.cat, self.line), (None, None, ''))[2]      # 갈림역(동대구·익산)을 앞에
+        return (f'{at}/' if at else '') + '/'.join(f'N{{{x}}}' for x in gs) + '/' + ('분리' if self.dir == 'down' else '연결')
 
     def cpl_note_old(self, tr):
         """병결 짝이 요일로 바뀌는 열차의 비고: 짝마다 요일과 번호 「월∼목 668/금∼일 672」"""
@@ -616,6 +620,17 @@ class Table:
         cp = getattr(self, 'cpl', None)
         gs = cp['map'].get(tr['no'], []) if cp else []
         return sorted(gs, key=lambda x: -len(week_days(cp['days'][x])))
+
+    def from_line(self, tr):
+        """표의 첫 역에서부터 서는데 시발역은 표 밖: 들어온 다른 노선(시발역과 첫 역을 함께 지나는 노선) 이름"""
+        idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
+        if not idx or idx[0] != 0 or tr.get('via_in') or tr.get('ktx'): return None
+        o, _ = self.ends_of(tr)
+        s0 = self.st[0]
+        if o == s0 or o in self.st: return None
+        for (c, ln), sts in LINE_STATIONS.items():
+            if ln.split('(')[0] != self.line and o in sts and s0 in sts and c == self.cat: return ln.split('(')[0]
+        return None
 
     def is_suseo(self, tr):
         o, d = self.ends_of(tr)
@@ -849,6 +864,7 @@ def main():
     outdir = sys.argv[2]
     os.makedirs(outdir, exist_ok=True)
     tabs = {(t['cat'], t['line'], t['dir']): t for t in data['tables']}
+    for t in data['tables']: LINE_STATIONS.setdefault((t['cat'], t['line']), set()).update(clean_name(x) for x in t['stations'])
     book_items = []
     index = []
     for line, parts in BOOK:

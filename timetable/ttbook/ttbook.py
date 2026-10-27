@@ -549,7 +549,7 @@ class Inline:
             c2 = ctx
             for cl, f in FONT_OF_CLASS.items():
                 if cl in cls: c2 = c2.but(font=f)
-            if 'jtt-no' in cls and len(re.sub(r'\D', '', k.text())) >= 4: c2 = c2.but(hscale=0.92)   # 네 자리 열차번호는 장평을 조금 좁게
+            if 'jtt-no' in cls and len(re.sub(r'\D', '', k.text())) >= 4: c2 = c2.but(size=c2.size * 0.92, hscale=0.95)   # 네 자리 열차번호는 조금 작게·장평 조금 좁게 (괘선에 붙지 않게)
             if 'jtt-lit' in cls and ctx.font in ('DGB', 'GB'): c2 = c2.but(font='GB')   # 굵은 글 안의 로마자(KTX 등)는 고딕 굵게 그대로
             if 'jtt-j' in cls:
                 chars = [self.run(x.text(), c2) for x in k.kids if isinstance(x, Node)]
@@ -571,6 +571,11 @@ class Inline:
                                   0.36 * c2.size, 1.25 * c2.size, c2.size)); continue
             if 'tt-small' in cls: c2 = c2.but(size=c2.size * 0.75)
             if 'tt-bold' in cls: c2 = c2.but(font='GB')
+            if 'tt-uarrow' in cls:          # 들어옴 화살표(➡ 를 위로)
+                em_ = c2.size * self.fs
+                lines[-1].append(('obj', r'\vbox{\hbox to %.3fbp{\hss\rotatebox{90}{%s}\hss}\kern%.3fbp}' % (
+                    1.0 * em_, self.run('➡', c2.but(font='DG')), 0.1 * em_), 1.0 * c2.size, 1.2 * c2.size, c2.size))
+                continue
             if 'tt-darrow' in cls:          # 이어짐 화살표(모듈의 굵은 화살표 ➡ 를 아래로)
                 em_ = c2.size * self.fs
                 # 위 괘선에 붙이고 밑에 반 줄 비운다
@@ -914,6 +919,13 @@ class Book:
             if cl.r in dayrows:
                 cl.style = dict(cl.style)
                 cl.style['vertical-align'] = 'middle' if T.kind[cl.c][0] in ('L', 'R') else 'top'
+        for cl in T.cells:             # 비고의 「↑ / …선 / 경유」(가로): 맨 위 ↑ 는 굵은 위 화살표로
+            if cl.r in dayrows and cl.c > 0 and not cl.node.find(lambda n: 'jtt-v' in n.cls):
+                mu = re.fullmatch(r'↑(.+선)경유', re.sub(r'\s', '', cl.node.text()))
+                if mu:
+                    nd = Node('td', []); nd.kids += [Node('span', [('class', 'tt-uarrow')]), Node('br', []), mu.group(1), Node('br', []), '경유']
+                    cl.node = nd
+                    cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
         if self.cfg.get('daysCompact', True):
             for cl in T.cells:
                 if cl.r in dayrows and cl.c > 0 and cl.node.find(lambda n: 'jtt-v' in n.cls):
@@ -921,9 +933,10 @@ class Book:
                     if '연결' in t or '분리' in t: continue          # 병결 비고(개조식)는 적은 그대로 세로쓰기
                     # 요일 뭉치만 작은 가로 글씨로(세 자까지 한 줄, 넷~여섯 자는 두 자씩 세 줄까지).
                     # 나머지(「운행」, 「…선 경유」 등)는 관습대로 보통 크기 세로쓰기
-                    mv = re.match(r'(.+선)경유$', t)
-                    if mv:          # 「…선 경유」: 굵은 화살표 밑에 두 줄 세로쓰기(…선 | 경유)
-                        ar = Node('span', [('class', 'tt-darrow')])
+                    mv = re.match(r'(↑?)(.+선)경유$', t)
+                    if mv:          # 「…선 경유」: 굵은 화살표 밑에 두 줄 세로쓰기(…선 | 경유). ↑: 표의 첫 역 앞 다른 선에서 들어옴(위 화살표)
+                        ar = Node('span', [('class', 'tt-uarrow' if mv.group(1) else 'tt-darrow')])
+                        mv = re.match(r'↑?(.+선)경유$', t)
                         vt = Node('span', [('class', 'jtt-v tt-rl')]); vt.kids += [mv.group(1), Node('br', []), '경유']
                         nd = Node('td', []); nd.kids += [ar, Node('br', []), vt]
                         cl.node = nd
@@ -979,6 +992,8 @@ class Book:
                 if cl in cell.cls: c = c.but(font=f)
             if ('jtt-ad' in cell.cls or 'jtt-mk' in cell.cls) and 'jtt-th' not in cell.cls: c = c.but(size=0.8)
             if 'jtt-r-ad' in cell.cls and 'jtt-th' not in cell.cls: c = c.but(size=0.8)
+            if 'jtt-no' in cell.cls and len(re.sub(r'\D', '', cell.node.text() or '')) >= 4:
+                c = c.but(size=c.size * 0.92, hscale=0.95)       # 네 자리 열차번호(칸 자체가 jtt-no): 조금 작게·장평 조금 좁게, 괘선에서 띄운다
             # 칸의 글자 색(fc=)·굵기(fw=b): 재래선 표에 합친 KTX 열차 등
             col = (cell.style or {}).get('color', '')
             if col.startswith('#'):
@@ -1007,10 +1022,16 @@ class Book:
                     if T.hEnd <= rr < T.fStart and nb is not None and not isinstance(nb, Ghost) and nb.rs == 1 \
                             and nb.node.text().strip() == '║' and not getattr(nb, 'refhost', False):
                         host = nb; break
-            if host is not None:
+            if host is not None:      # 그 ║ 칸을 주 칸에 합쳐(한 병합 칸 안에) 주 밑에 표지
                 self.refs[mk]['host'] = self.inl.flat(host.lines[0]) if host.lines else ''
-                host.lines = [item]; host.refhost = True
-                host.need = self.cell_need(T, host, host.lines)
+                host.refhost = True
+                if host.r < cell.r: cell.r = host.r
+                cell.rs += 1
+                T.cells.remove(host)
+                for rr_ in range(cell.r, cell.r + cell.rs): T.occ[(rr_, cell.c)] = cell
+                cell.lines = cell.lines + [item]
+                cell.refin = True
+                cell.need = self.cell_need(T, cell, cell.lines)
             else:                     # 주 칸 끝에 한 줄 더: 세로쓰기의 띄어쓰기는 빼고(표지가 사이를 띄운다) 높이를 아낀다
                 def nospace(n):
                     n.kids = [k.replace(' ', '') if isinstance(k, str) else (nospace(k) or k) for k in n.kids]
@@ -1507,9 +1528,14 @@ class Book:
         if ta: al = {'left': 'l', 'right': 'r', 'center': 'c'}.get(ta, al)
         va = {'top': 't', 'bottom': 'b', 'middle': 'm'}.get(st.get('vertical-align', 'middle'), 'm')
         # 가로 명조 열차번호·세로쓰기 주: 글자 양옆 여백(글리프의 곁)이 이미 있으니 칸 폭을 거의 다 쓴다 (넘칠 때만 좁힌다)
-        isno = cell.node.find(lambda n: 'jtt-no' in n.cls) is not None
+        isno = 'jtt-no' in cls or cell.node.find(lambda n: 'jtt-no' in n.cls) is not None
         isv = any(it[0] == 'obj' and len(it) > 5 for ln in cell.lines for it in ln)
-        if isno or isv: pad = 0.03
+        tight = False
+        if isv: pad = 0.03
+        elif isno: pad = 0.14           # 네 자리 열차번호도 괘선에 붙지 않게 양옆을 조금 비운다
+        elif 'jtt-th' not in cls and 'jtt-st' not in cls and any(
+                ln and not any(it[0] == 'just' for it in ln) and self.inl.line_w(ln) * fs > w - 2 * (pad + 0.06) * fs for ln in cell.lines):
+            pad, tight = 0.05, True      # 칸에 넘쳐 가로로 좁히는 글(동대구·금토일 등): 양옆 여백을 줄여 덜 좁힌다
         W = w - 2 * pad * fs
         lts = []
         jn = None
@@ -1526,7 +1552,7 @@ class Book:
                     t = r'\hbox to %.3fbp{%s\hfill %s\hfill}' % (W, strut(ln[0][2], fs), r'\hfill '.join(chars))
             if t is None:
                 # 열차 번호(네 자리)는 괘선에 닿지 않게 양옆을 조금 더 비운다
-                pe = 0.0 if (isno or isv) else 0.06
+                pe = 0.0 if (isno or isv or tight) else 0.06
                 t = line_tex(ln, W, al, fs, self.inl, sqc, pe)
             if t: lts.append(t)
         if not lts: return
@@ -1534,7 +1560,7 @@ class Book:
         vmargin = 0
         if has_v:
             vmargin = (0.2 if rc & {'jtt-f1', 'jtt-fr'} else 0.1) * fs
-        if cell.node.find(lambda n: 'tt-darrow' in n.cls): vmargin = 0.1 * fs  # 이어짐 화살표는 위 괘선 가까이
+        if cell.node.find(lambda n: 'tt-darrow' in n.cls or 'tt-uarrow' in n.cls): vmargin = 0.1 * fs  # 이어짐 화살표는 위 괘선 가까이
         box = r'\vbox{\offinterlineskip %s}' % ''.join(lts)
         tex.append(self.put_box(x + pad * fs, y + (vmargin if va == 't' else 0), W, h - (vmargin if va in 't' else 0) - (vmargin if va == 'b' else 0), box, 'l', va))
 
@@ -1614,7 +1640,7 @@ class Book:
         """열차 칸의 주가 다른 표를 가리키면 {kind: via|train, ...}: 「…선 경유」(그 노선 표의 같은 열차), 「…로 연결·분리」「…/발/654」(그 번호의 열차)"""
         if T.kind[cell.c][0] != 'T' or cell.r < T.hEnd: return None
         t = re.sub(r'\s', '', cell.node.text())
-        m = re.fullmatch(r'(.+선)경유', t)
+        m = re.fullmatch(r'↑?(.+선)경유', t)
         if m: return {'kind': 'via', 'name': m.group(1)}
         if re.search(r'연결|분리', t) or re.fullmatch(r'\D+(발|착)\d+', t):
             nos = []
