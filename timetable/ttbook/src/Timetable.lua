@@ -829,7 +829,12 @@ local function render_grid(frame, rows, H, L, F, title, opt)
       local va = match(" " .. hd.style .. " ", "%sva=(%a)%s")
       if va then sty[#sty + 1] = "align-items:" .. (({ t = "flex-start", b = "flex-end" })[va] or "center") end
     end
-    out[#out + 1] = '<div class="jtt-head jtt-head--x' .. (wrap and " jtt-head--wrap" or "") .. '"' .. (#sty > 0 and (' style="' .. concat(sty, ";") .. '"') or "") .. '>'
+    -- 折り返すとき、中央は左・右のうちある方の反対側に寄せる
+    local side = ""
+    if wrap then
+      if pw.l > 0 and pw.r == 0 then side = " jtt-head--cr" elseif pw.r > 0 and pw.l == 0 then side = " jtt-head--cl" end
+    end
+    out[#out + 1] = '<div class="jtt-head jtt-head--x' .. (wrap and " jtt-head--wrap" or "") .. side .. '"' .. (#sty > 0 and (' style="' .. concat(sty, ";") .. '"') or "") .. '>'
       .. '<div class="jtt-hl">' .. hl .. '</div><div class="jtt-hm">' .. hm
       .. '</div><div class="jtt-hrt">' .. hr .. '</div></div>'
   end

@@ -322,7 +322,7 @@ HFULL = {'(': '（', '（': '（', '︵': '（', ')': '）', '）': '）', '︶'
          '―': '―', '—': '―', '︱': '―', '〔': '〔', '︹': '〔', '〕': '〕', '︺': '〕'}
 SUBST = {'∼': ['～', '〜', '~'], '～': ['〜', '∼', '~'], '〜': ['～', '∼', '~'], '―': ['—', '─'], '—': ['―', '─'], '・': ['·'], '·': ['・']}
 VALT = {'―': ['—', '─', '－'], '(': ['（'], ')': ['）']}
-VROT = {'〔': '〔', '〕': '〕', '︵': '(', '︶': ')', '︱': '―', '︹': '〔', '︺': '〕', '(': '(', ')': ')', '（': '(', '）': ')', '―': '―', '—': '―'}
+VROT = {'∼': '∼', '～': '～', '〜': '〜', '〔': '〔', '〕': '〕', '︵': '(', '︶': ')', '︱': '―', '︹': '〔', '︺': '〕', '(': '(', ')': ')', '（': '(', '）': ')', '―': '―', '—': '―'}
 
 class Metrics:
     """글꼴에서 잰 값: 기준 중심(명조 한자), 글꼴마다 옮길 양"""
@@ -533,7 +533,7 @@ class Inline:
             if 'jtt-bd' in cls:
                 lines[-1].append(self.badge(k, c2)); continue
             if 'jtt-v' in cls and 'jtt-vbox' not in cls:
-                lines[-1].append(self.vert(k, c2, lr=True)); continue
+                lines[-1].append(self.vert(k, c2, lr='tt-rl' not in cls)); continue
             if 'jtt-vbox' in cls:
                 lines[-1].append(self.vbox(k, c2)); continue
             if 'jtt-sq' in cls:
@@ -682,7 +682,7 @@ def line_tex(line, W, halign, fs, inl, sqcenter=False):
     size = max(it[-1] if it[0] != 'obj' else it[4] for it in line)
     has_v = any(it[0] == 'obj' and len(it) > 5 for it in line)
     st = '' if has_v else strut(size, fs)
-    pad = 0.15 * size * fs                # 칸 양옆에 남길 여백: 넘치면 글자를 가로로 좁힌다
+    pad = 0.06 * size * fs                # 칸 양옆에 남길 여백: 넘치는 것만 글자를 가로로 좁힌다 (시각·두 글자는 그대로)
     if len(line) == 1 and line[0][0] == 'just':
         chars = line[0][1]
         wj = sum(inl.wc.get(x, 1.0) for x in chars) * fs if inl else 0
@@ -701,7 +701,7 @@ def line_tex(line, W, halign, fs, inl, sqcenter=False):
             al = r'\hss' if sqcenter else r'\hss'
             body.append(r'\hbox to %.3fbp{%s\scalebox{%.3f}[1]{%s}%s}' % (w2, al, it[2], it[1], r'\hss' if sqcenter else ''))
     b = ''.join(body)
-    wl = inl.line_w(line) * fs if inl else 0
+    wl = inl.line_w(line) * fs if inl and not any(it[0] == 'sq' for it in line) else 0
     if wl > W - 2 * pad and wl > 0:
         b = r'\scalebox{%.3f}[1]{%s}' % ((W - 2 * pad) / wl, b)
     if halign == 'l': return r'\hbox to %.3fbp{%s%s\hss}' % (W, st, b)
@@ -844,6 +844,13 @@ class Book:
                     m = re.match(r'[월화수목금토일∼~·]+', t)
                     if not m: continue
                     days, rest = m.group(0), t[m.end():]
+                    if len(days) <= 3:               # 범위(금∼일)·두 자 이하: 보통 크기 세로쓰기로 「…운행」
+                        # 두 줄 세로쓰기(오른쪽 줄이 먼저): 요일 | 운행
+                        vt = Node('span', [('class', 'jtt-v tt-rl')]); vt.kids += [days, Node('br', []), rest or '운행']
+                        nd = Node('td', []); nd.kids.append(vt)
+                        cl.node = nd
+                        cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
+                        continue
                     per = 3 if len(days) <= 3 or len(days) > 6 else 2
                     sm = Node('span', [('class', 'tt-small')])
                     for i in range(0, len(days), per):
@@ -880,6 +887,19 @@ class Book:
             if n > tot: rows[cell.r + cell.rs - 1] += n - tot
         T.rowH = [n * self.R for n in rows]
         T.colW = self.col_widths(T)
+
+    def dir_badge(self, t, down, hollow, size, colw):
+        """방향 표지(모듈의 jtt-dir: 뾰족한 오각형 안에 하행·상행). (tex, 높이 bp)"""
+        em = size * self.fs
+        bs = 0.84 * em
+        bw = bs * 1.16
+        bh = bs * (len(t) + 0.36 + 0.6)
+        P = 0.4 * em
+        top = (bh - P - len(t) * bs) / 2 + (0 if down else P)
+        stack = ''.join(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (
+            bw, -0.12 * bs, bs, self.inl.run(ch, Ctx('GB', size * 0.84, None if hollow else 'FFFFFF'), True)) for ch in t)
+        return r'\hbox to %.3fbp{\hss\ttdir{%.3f}{%.3f}{%d}{%d}{%.3f}{%.3f}{%s}\hss}' % (
+            colw, bw, bh, 1 if down else 0, 1 if hollow else 0, P, top, stack), bh
 
     # ── 제목(세로) ──
     def title_tex(self, T, drop=None, part=None):
@@ -1031,9 +1051,11 @@ class Book:
         else:
             plan = []
             if L[0] or R[0]: plan.append((L[0], '', R[0], max(L[2], R[2], 1.25)))
+            # 줄이 바뀌면 가운데(주요 역)는 다른 한쪽이 있는 반대편으로 민다
+            al = 'r' if (L[0] and not R[0]) else 'l' if (R[0] and not L[0]) else 'c'
             for node in self.split_center(parts[1], W, ctx):
                 t = seg(node)
-                plan.append(('', t[0], '', max(t[2], 1.25)))
+                plan.append(('', t[0], '', max(t[2], 1.25), al))
         self._bands[key] = plan
         return plan
 
@@ -1213,9 +1235,10 @@ class Book:
         if hb:
             W = xs[-1] - xs[0] - 2 * self.band_inset
             plan = self.band_plan(T, W, part)
-            def row(l, c, r, h):
+            def row(l, c, r, h, al='c'):
                 st = strut(h / 1.25, fs)
-                if c and not (l or r): return r'\hbox to %.3fbp{%s\hss %s\hss}' % (W, st, c)
+                if c and not (l or r):
+                    return r'\hbox to %.3fbp{%s%s %s%s}' % (W, st, '' if al == 'l' else r'\hss', c, '' if al == 'r' else r'\hss')
                 if not c: return r'\hbox to %.3fbp{%s%s\hskip 1em plus 1fill %s}' % (W, st, l, r)
                 # 왼쪽(방향·노선)·가운데(주요 역)·오른쪽(몇째)을 한 줄에. 사이를 늘이고 줄여 가운데를 맞춘다
                 return r'\hbox to %.3fbp{%s%s\hskip 1em plus 1fill %s\hskip 1em plus 1fill %s}' % (W, st, l, c, r)
@@ -1465,7 +1488,7 @@ class Book:
         def dmark(key):
             d = dirs.get(key, set())
             if len(d) != 1 or '' in d: return []
-            return [({'하행': '↓', '상행': '↑'}[next(iter(d))], c)]     # 쪽에 한 방향만: 화살표
+            return [(next(iter(d)), 'DIR')]           # 쪽에 한 방향만: 모듈의 방향 표지(오각형)
         # KTX 표의 노선은 「KTX 경부선·호남선」으로 묶는다. 쪽에 한 방향만 실렸으면 노선 이름 뒤에 그 방향을
         segs_all = []
         ktx = [(k, ln) for k, ln in lines if k == 'KTX']
@@ -1482,6 +1505,10 @@ class Book:
         for k, sg in enumerate(segs_all):
             if k: dot()
             for ln, cc in sg:
+                if cc == 'DIR':
+                    t_, _ = self.dir_badge(ln, ln == '하행', False, size * 0.8, 1.2 * em)
+                    items.append(r'\kern%.3fbp' % (0.25 * em)); items.append(t_)
+                    continue
                 e2 = cc.size * self.fs
                 if cc is cd: items.append(r'\kern%.3fbp' % (0.15 * em))
                 i = 0

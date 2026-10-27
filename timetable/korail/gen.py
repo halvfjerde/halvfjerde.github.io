@@ -70,6 +70,7 @@ BRANCH = {
 
 # 착발을 나누지 않는 역: 연결선으로 애매하게 붙는 역
 NOSPLIT_ALL = {'행신'}
+SPLIT_ALL = {'수서'}         # 서는 열차가 있으면 늘 착발을 나눈다
 # KTX 에서 착발을 나누는 역
 #  1) 여러 계통이 지나도 모든 열차가 서는 역 (열차 20편 이상인 표에서, 지나는 열차가 모두 서는 역) — 자동
 #  2) 그 밖에 주요역이라 보는 역 (손으로)
@@ -106,6 +107,14 @@ def esc_txt(s):
 
 def vert(s):
     return f'r{esc_txt(s)}.' if s else '_'
+
+WEEK = '월화수목금토일'
+def day_range(s):
+    """이어지는 요일 셋 이상은 범위로: 금토일 → 금∼일, 월화수목금 → 월∼금 (주를 넘어가도: 금토일월 → 금∼월)"""
+    if len(s) < 3 or any(ch not in WEEK for ch in s): return s
+    k = WEEK.index(s[0])
+    if all(WEEK[(k + i) % 7] == ch for i, ch in enumerate(s)): return f'{s[0]}∼{s[-1]}'
+    return s
 
 # 따로 조사한 도착 시각 {(열차번호, 역): 분}. arrivals.json 이 있으면 읽는다
 ARR = {}
@@ -335,6 +344,7 @@ class Table:
                 if N >= 20 and trav and stop == trav and stop >= 0.3 * N:      # 지나는 열차가 모두 서는 역만 (직관적 주요역 KTX_MAJOR 은 인쇄 쪽수 때문에 한 줄로)
                     self.split.add(i)
         self.split -= {i for i, s in enumerate(self.st) if s in NOSPLIT_ALL}
+        self.split |= {i for i, s in enumerate(self.st) if s in SPLIT_ALL and self.stops(i)}
         # 상행·하행이 같은 주요역·착발역을 쓰도록 main 에서 두 방향을 모아 정한 값(shared)으로 덮어쓴다
         self.cand = {self.st[i]: (self.stops(i) + ends[i]) / N for i in major}
         self.split_names = {self.st[i] for i in self.split}
@@ -372,7 +382,7 @@ class Table:
                 ft.append(q(f'{esc_txt(d)}/{hm(self.end_times(tr)[1])}'))
             if has_day:
                 nt = tr['note']
-                ft.append('_' if not nt else self.daysym[nt] if self.daysym else q(vert(nt)))
+                ft.append('_' if not nt else self.daysym[nt] if self.daysym else q(vert(day_range(nt))))
             if self.rem_empty: ft.append('_')
             line = ' '.join(hdr) + ' : ' + ' '.join(cells)
             if ft: line += ' : ' + ' '.join(ft)
