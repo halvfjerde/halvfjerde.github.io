@@ -933,15 +933,16 @@ class Book:
         P = self.P0 * (self.squeeze if squeeze else 1.0)
         return max(1, int((self.cw - self.fixed_w(T, side)) / P + 1e-6))
 
-    def make_chunk(self, T, side, trains, avail=None):
+    def make_chunk(self, T, side, trains, avail=None, ncol=None):
         """면(side)에 실을 열차들로 조각을 만든다. avail: 조각이 쓸 폭(없으면 판면 폭).
         모자란 자리는 빈 열로 avail 끝까지, 남는 폭은 역명 칸에. 한두 편 넘치면 열 폭을 고르게 좁힌다"""
         L, Tc, R = self.blocks(T)
         room = (self.cw if avail is None else avail) - self.fixed_w(T, side)
         cap = max(1, int(room / self.P0 + 1e-6))
-        if len(trains) > cap:
-            P = room / len(trains)
-            cols, extra = list(trains), 0
+        n = max(len(trains), ncol or 0)        # ncol: 위아래로 맞붙은 조각과 열 수를 같게 (세로 괘선이 이어지도록)
+        if n > cap:
+            P = room / n
+            cols, extra = list(trains) + [('G', Tc[-1], g) for g in range(n - len(trains))], 0
         else:
             P = self.P0
             cols = list(trains) + [('G', Tc[-1], g) for g in range(cap - len(trains))]
@@ -1551,12 +1552,34 @@ class Book:
         nd, nu = len(self.blocks(Td)[1]), len(self.blocks(Tu)[1])
         G = max(-(-nd // C(Td, False)), -(-nu // C(Tu, False)))
         if G > 1 and nd <= (G - 1) * C(Td, True) and nu <= (G - 1) * C(Tu, True): G -= 1
+        # 앞 펼침면은 가득, 끝에 남는 몇 편은: 양쪽 다 한 쪽에 들면 한 쪽에 하행 위·상행 아래로
+        def parts(T, n):
+            _, Tc, _ = self.blocks(T)
+            cL, cR = self.cap(T, 'L'), self.cap(T, 'R')
+            out, ti = [], 0
+            for g in range(G - 1):
+                k = cL + cR
+                out.append((Tc[ti:ti + cL], Tc[ti + cL:ti + k])); ti += k
+            rest = Tc[ti:]
+            return out, rest
+        pd_, rd_ = parts(Td, nd); pu_, ru_ = parts(Tu, nu)
+        sBd, sBu = self.cap(Td, 'B', True), self.cap(Tu, 'B', True)
+        tail_single = G > 1 and len(rd_) <= sBd and len(ru_) <= sBu and len(rd_) and len(ru_)
+        if not tail_single:
+            pd_, pu_ = self.stack_parts(Td, G), self.stack_parts(Tu, G)
+            rd_ = ru_ = None
         if any(len(a) > self.cap(T, 'L', True) or len(b) > self.cap(T, 'R', True)
-               for T in (Td, Tu) for a, b in self.stack_parts(T, G)): return None
+               for T, ps in ((Td, pd_), (Tu, pu_)) for a, b in ps): return None
         jobs = []
-        for (da, db), (ua, ub) in zip(self.stack_parts(Td, G), self.stack_parts(Tu, G)):
+        for (da, db), (ua, ub) in zip(pd_, pu_):
             jobs.append({'T': Td, 'Tu': Tu, 'kind': 'stack', 'd': (da, db, rows[id(Td)], hd), 'u': (ua, ub, rows[id(Tu)], hu),
                          'h': hd + hu - fw, 'trs': da + db, 'rows': rows[id(Td)], 'notes': False, 'bw': bw})
+        if tail_single:
+            for T, tr_, sB in ((Td, rd_, sBd), (Tu, ru_, sBu)):
+                jobs.append({'T': T, 'kind': 'single', 'trs': tr_, 'rows': rows[id(T)], 'notes': False, 'sB': sB,
+                             'side': 'B', 'narrow': self.fixed_w(T, 'B') + len(tr_) * self.P0 < self.cw * 0.62,
+                             'nat': self.fixed_w(T, 'B') + len(tr_) * self.P0, 'bw': bw,
+                             'h': self.piece_h(T, rows[id(T)], False, bw)})
         return jobs
 
     def jobs_of(self, T):
@@ -1688,10 +1711,10 @@ class Book:
                 if y + h > PH + 0.01: return False
                 da, db, rd, hd = job['d']; ua, ub, ru, hu = job['u']
                 Tu = job['Tu']
-                for p_, tr_ in ((c, da), (c + 1, db)):
-                    if tr_: put(T, p_, tr_, rd, y, False, hd)
-                for p_, tr_ in ((c, ua), (c + 1, ub)):
-                    if tr_: put(Tu, p_, tr_, ru, y + hd - fw, False, hu)
+                for p_, a_, b_ in ((c, da, ua), (c + 1, db, ub)):
+                    n_ = max(len(a_), len(b_))
+                    if a_: put(T, p_, a_, rd, y, False, hd)['ncol'] = n_
+                    if b_: put(Tu, p_, b_, ru, y + hd - fw, False, hu)['ncol'] = n_
                 ys[c] = ys[c + 1] = y + h
                 return True
             if job['kind'] == 'single':
@@ -1725,7 +1748,7 @@ class Book:
 
         def advance(job, c):
             if job['kind'] == 'stack':
-                cur['c'] = c + 1 if c % 2 == 1 else c + 2
+                cur['c'] = c + 1          # 오른쪽 면에서는 다른 작은 표로 채울 수 있게 한 쪽씩
             elif job['kind'] == 'pair' and c % 2 == 0:
                 # 왼쪽 면에 자리가 없고 오른쪽 면이 비었으면 오른쪽 면에서 시작해 넘겨 잇는다
                 cur['c'] = c + 1 if (ys[c + 1] == 0 and job['h'] <= PH + 0.01) else c + 2
@@ -1806,6 +1829,7 @@ class Book:
                     jl = self.jobs_of(T)
                     ok = ok and all(self.vband(T, '열넷째' if len(jl) > 1 else None, 100)[1] <= j['h'] - 2 * (fw + self.frame_pad) - 0.6 * self.fs for j in jl)
                 for T in ts: T.band_left = ok
+        rkey = lambda T: (T.line, self.is_ktx(T), route(T))
         for bunch in bunches:
             pend = [collections.deque(self.jobs_of(T)) for T in bunch]
             whole = [len(q) == 1 for q in pend]          # 한 번에 다 실리는 표만 당겨 올 수 있다
@@ -1816,10 +1840,19 @@ class Book:
                     c = cur['c']
                     if try_place(job, c):
                         pend[pi].popleft(); break
+                    # 당겨 올 것: 하행·상행 짝을 한 덩어리로 (짝이 다 한 쪽 조각이고, 함께 위아래로 들 때만)
                     filled = False
-                    for qi in range(pi + 1, len(pend)):
-                        if pend[qi] and whole[qi] and try_place(pend[qi][0], c):
-                            pend[qi].popleft(); filled = True; break
+                    qi = pi + 1
+                    while qi < len(pend) and not filled:
+                        unit = [qi]
+                        while unit[-1] + 1 < len(pend) and rkey(bunch[unit[-1] + 1]) == rkey(bunch[qi]): unit.append(unit[-1] + 1)
+                        js = [pend[k][0] for k in unit if pend[k]]
+                        if len(js) == len(unit) and all(whole[k] for k in unit) and all(j['kind'] == 'single' for j in js) \
+                                and top(c) + sum(j['h'] for j in js) - (len(js) - 1) * fw <= PH + 0.01:
+                            for k in unit:
+                                try_place(pend[k][0], c); pend[k].popleft()
+                            filled = True
+                        qi = unit[-1] + 1
                     if not filled: advance(job, c)
         for T in tables:
             ps = placed[id(T)]
@@ -1830,7 +1863,7 @@ class Book:
             for pc in pg['pieces']:
                 others = sorted([q for q in pg['pieces'] if q is not pc and abs(q['y'] - pc['y']) < 0.01 and q['x'] > pc['x']], key=lambda q: q['x'])
                 avail = min(others[0]['x'] - TWh - gapX - pc['x'], pc['nat']) if others else (self.cw - pc['x'])
-                pc['ch'] = self.make_chunk(pc['T'], pc['side'], pc['trains'], avail)
+                pc['ch'] = self.make_chunk(pc['T'], pc['side'], pc['trains'], avail, pc.get('ncol'))
         # 붙은 조각 사이의 괘선: 위 조각과 같은 표면 띠 사이 괘선, 다른 표면 표 사이 괘선. 아래에 붙은 조각이 있으면 아래 변은 그 조각이 긋는다
         for pg in pages:
             ps = pg['pieces']
