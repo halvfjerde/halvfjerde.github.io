@@ -1132,14 +1132,9 @@ class Book:
             return ''.join(items), L
         base = Ctx('DM', scale, color)
         # 이름(노선)과 방향: 띠 왼쪽 부분에서 〔하행〕 앞까지가 이름, 방향은 모듈의 방향 표지(하행 속 빈·상행 속 찬)로
-        sg0, cut = [], False
-        for t, c in segs(parts[0], base, []):
-            if cut: continue
-            if '〔' in t:
-                t = t[:t.index('〔')].rstrip(); cut = True
-            if t: sg0.append((t, c))
-        mdir = re.search(r'〔(하행|상행)〕', parts[0].text())
-        route = re.sub(r'\s+', ' ', parts[1].text()).strip()
+        sg0 = segs(parts[0], base, [])            # 노선 〔하행〕 (방향은 명조 괄호 그대로)
+        mdir = None
+        route = re.sub(r'\s+', ' ', parts[1].text()).strip().strip('（）()')
         two = colw >= 3.5 * fs                     # 넓은 칸: 두 줄 (오른쪽 줄이 먼저)
         cw = colw / 2 if two else colw
         a, la = stack(sg0, cw)
@@ -1153,8 +1148,9 @@ class Book:
         if two:
             need = max(la + lc, lb) + fs * scale
             if lb > H: b = ''
-            right = r'\vbox to %.3fbp{\offinterlineskip %s\vfil %s}' % (H, a, c)
-            left = r'\vbox to %.3fbp{\offinterlineskip\vfil %s\vfil}' % (H, b)
+            # 오른쪽 줄(먼저 읽는 줄)에 구간, 왼쪽 줄에 노선·방향·몇째
+            right = r'\vbox to %.3fbp{\offinterlineskip\vfil %s\vfil}' % (H, b)
+            left = r'\vbox to %.3fbp{\offinterlineskip %s\vfil %s}' % (H, a, c)
             tex = r'\hbox to %.3fbp{%s%s}' % (colw, left, right)
         else:
             need = la + lb + lc + 2 * fs * scale

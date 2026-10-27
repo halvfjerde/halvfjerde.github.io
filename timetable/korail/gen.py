@@ -288,7 +288,7 @@ class Table:
         dirw = '하행' if self.dir == 'down' else '상행'
         # 방향은 노선 이름 뒤에 명조로
         L.append(f'headl "b' + ('`KTX` ' if ktx else '') + f'{self.line_disp}{vlab}. 〔{dirw}〕"')
-        L.append(f'head "b{hd}."')
+        L.append(f'head "（{hd}）"')          # 구간: 명조로 괄호에
         L.append('headheight 48')
         if ktx: L.append(f'headstyle "fc={KTX_COLOR}"')
         L.append('cols st ad')
