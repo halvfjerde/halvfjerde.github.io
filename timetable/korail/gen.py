@@ -36,7 +36,7 @@ if TOUR: BOOK.append(('관광열차', [('tour', t['line'], None) for t in TOUR['
 # 관광열차 표는 상하행을 한 표에 (가운데 역명, 왼쪽 하행·오른쪽 상행). 열차 옆 주석 열 (표 이름 → 세로 두 줄)
 TOUR_COLNOTE = {}
 LEGEND_PAGE = True      # 책 앞에 범례: 표마다 등급·운행일 해설을 적지 않고, 운행일은 기호 없이 요일로
-BOTH_TABLES = {('gen', '서해선', '순환')}       # 상하행을 한 표에 적는 그 밖의 표 (평택선)
+BOTH_TABLES = {('gen', '서해선', '순환'), ('gen', '서해선', None), ('gen', '태백선', None), ('gen', '목포보성선', None)}       # 상하행을 한 표에 적는 그 밖의 표 (평택선·서해선·태백선·목포보성선)
 TOUR_HEADR = {'정선아리랑': '토·일과 2, 7, 12, 17, 22, 27일 운행'}      # 표 머리띠 오른쪽에 적는 주      # 칸 문법 그대로 (세로 덩어리를 위에서 아래로)
 # 노선마다 재래선(일반열차) 표를 먼저, KTX 는 그 뒤에
 BOOK = [(line, sorted(parts, key=lambda p: 0 if p[0] == 'gen' else 1)) for line, parts in BOOK]
@@ -630,6 +630,7 @@ class Table:
         prev_block = 0
         prev_fl = None
         nft = (1 if has_to else 0) + (1 if cp and cp['pos'] == 'foot' else 0) + (1 if self.has_days else 0) + (1 if (has_day or self.rem_row) else 0)
+        flip_ = getattr(self, 'both', False) and self.dir == 'up'
         for tr in self.trains:
             if tr.get('block', 0) != prev_block: L.append('---'); prev_block = tr.get('block', 0)   # 덧붙인 덩어리 앞에 굵은 세로줄
             fl = self.from_line(tr) if self.notecol else None
@@ -641,7 +642,8 @@ class Table:
                 for k in range(len(self.st)):
                     ps = []
                     for p_ in range(2 if k in self.split else 1):
-                        ps.append(q(f'^{need} va=t; ↱/VR{{{esc_txt(fl)}/경유}}') if j == 0 else '!' if j < need else 'x')
+                        if flip_: ps.append(q(f'^{need} va=b; VR{{{esc_txt(fl)}/경유}}/⬏') if j == need - 1 else '!' if j < need else 'x')   # 상하병기의 상행: 모듈이 뒤집으므로 합친 칸은 차례의 끝에 (보이기는 아래)
+                        else: ps.append(q(f'^{need} va=t; ↱/VR{{{esc_txt(fl)}/경유}}') if j == 0 else '!' if j < need else 'x')
                         j += 1
                     toks.append(','.join(ps) if len(ps) > 1 and ps != ['x', 'x'] else ps[0])
                 ph = ['_', '_'] + (['_'] if has_fr else []) + (['_'] if cp and cp['pos'] == 'head' else [])
@@ -694,7 +696,8 @@ class Table:
                 for k in range(len(self.st)):
                     ps = []
                     for p_ in range(2 if k in self.split else 1):
-                        ps.append(q(f'^{need} va=b; VR{{{esc_txt(tl)}/경유}}/⬏') if j == s0 else '!' if j > s0 else 'x')
+                        if flip_: ps.append(q(f'^{need} va=t; ↱/VR{{{esc_txt(tl)}/경유}}') if j == len(slots) - 1 else '!' if j >= s0 else 'x')   # 상하병기의 상행: 보이기는 위
+                        else: ps.append(q(f'^{need} va=b; VR{{{esc_txt(tl)}/경유}}/⬏') if j == s0 else '!' if j > s0 else 'x')
                         j += 1
                     toks.append(','.join(ps) if len(ps) > 1 and ps != ['x', 'x'] else ps[0])
                 ph = ['_', '_'] + (['_'] if has_fr else []) + (['_'] if cp and cp['pos'] == 'head' else [])
