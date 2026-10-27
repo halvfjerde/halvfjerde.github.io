@@ -1556,7 +1556,7 @@ class Book:
                     _, _, _, ba = self.borders(T, a)
                     _, _, tb, _ = self.borders(T, b)
                     w = wmax(ba, tb)
-                    if id(a) in nrun and id(b) in nrun: w = 0
+                    if (id(a), id(b)) in nrun: w = 0
                     if band_start: w = 'd'
                     elif rows[i] != rows[i - 1] + 1 and w == 0: w = 1
                 x0, x1 = xs[k], xs[k + 1]
@@ -1579,25 +1579,16 @@ class Book:
             T.colW[j] = min(T.colW[j], need)
 
     def note_runs(self, T):
+        """경유 등 세로 주와 바로 앞뒤 한 칸(║) 사이의 구획선은 긋지 않는다 → {(위 칸 id, 아래 칸 id)}"""
         if getattr(T, '_nrun', None) is not None: return T._nrun
         out = set()
-        for j in range(T.ncol):
-            if T.kind[j][0] != 'T': continue
-            run, has = [], False
-            def flush():
-                if has and len(run) > 1: out.update(id(c) for c in run)
-            r = T.hEnd
-            while r < T.fStart:
-                c = T.occ.get((r, j))
-                if c is None or isinstance(c, Ghost): flush(); run, has = [], False; r += 1; continue
-                t = c.node.text().strip()
-                isnote = c.rs > 1 and any(it[0] == 'obj' and len(it) > 5 for ln in (c.lines or []) for it in ln)
-                if t == '║' or isnote:
-                    run.append(c); has = has or isnote
-                else:
-                    flush(); run, has = [], False
-                r = c.r + c.rs
-            flush()
+        isv = lambda c: c.rs > 1 and any(it[0] == 'obj' and len(it) > 5 for ln in (c.lines or []) for it in ln)
+        for c in T.cells:
+            if T.kind[c.c][0] != 'T' or not (T.hEnd <= c.r < T.fStart) or not isv(c): continue
+            up = T.occ.get((c.r - 1, c.c)) if c.r - 1 >= T.hEnd else None
+            dn = T.occ.get((c.r + c.rs, c.c)) if c.r + c.rs < T.fStart else None
+            if up is not None and not isinstance(up, Ghost) and up.node.text().strip() == '║': out.add((id(up), id(c)))
+            if dn is not None and not isinstance(dn, Ghost) and dn.node.text().strip() == '║': out.add((id(c), id(dn)))
         T._nrun = out
         return out
 
