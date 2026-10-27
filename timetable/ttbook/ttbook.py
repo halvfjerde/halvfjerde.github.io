@@ -1455,7 +1455,18 @@ class Book:
         else: x = self.mo - gapm - 1.2 * em
         return [self.put_box(x, self.mt, 1.2 * em, 10, box, 'l', 't')]
 
-    def page_furniture(self, folio, recto, runhead, part):
+    def page_legend(self, tables):
+        """그 쪽에 실린 표들의 기호 해설(표의 주기)을 모은다. 같은 것·다른 것에 들어 있는 것은 뺀다"""
+        items = []
+        for T in tables:
+            nd = getattr(T, 'legend', None)
+            if nd is None: continue
+            for d in [k for k in nd.kids if isinstance(k, Node)]:
+                t = re.sub(r'\s+', ' ', d.text()).strip()
+                if t and all(t != x[0] for x in items): items.append((t, d))
+        return [d for t, d in items if not any(t != u and t in u for u, _ in items)]
+
+    def page_furniture(self, folio, recto, runhead, part, legend=None):
         fs = self.fs
         tex = []
         x0 = self.mi if recto else self.mo
@@ -1472,6 +1483,18 @@ class Book:
         else:
             tex.append(r'\put(%.3f,%.3f){\rlap{%s}}' % (x0 + 12 * MM, Yr, rh))
             tex.append(r'\put(%.3f,%.3f){\rlap{%s}}' % (x0, Y, fo))
+        # 기호 해설: 쪽 번호 안쪽에 작은 글씨로 (두 줄 남짓). 끝 줄을 쪽 번호의 글줄에 맞춘다
+        if legend:
+            sz = self.cfg.get('legendSize', 5.0) / fs
+            parts = [self.inl.flat(self.inl.lines(d, Ctx('M', sz))[0]) for d in legend]
+            fw_ = (self.inl.wc.get(fo, 2.0)) * fs
+            gap = 3 * MM
+            W = self.cw - fw_ - gap
+            body = r'\hskip 1em plus 0.5em '.join(r'\mbox{%s}' % p for p in parts)
+            box = r'\parbox[b]{%.3fbp}{\fontsize{%.3fbp}{%.3fbp}\selectfont%s %s}' % (
+                W, sz * fs, sz * fs * 1.3, r'\raggedleft' if recto else r'\raggedright', body)
+            if recto: tex.append(r'\put(%.3f,%.3f){%s}' % (x0, Y, box))
+            else: tex.append(r'\put(%.3f,%.3f){%s}' % (x0 + fw_ + gap, Y, box))
         return tex
 
     # ── 표 읽기 ──
@@ -1487,7 +1510,7 @@ class Book:
             T = build_table(wrap)
             self.prepare(T)
             T.line = item.get('line') or os.path.splitext(os.path.basename(src))[0]
-            if not self.notes: T.notes = None
+            if self.notes is not True: T.legend, T.notes = T.notes, None     # 표 밑 주기 대신 (notes: 'header' 면 쪽 머리에)
             out.append(T)
         return out
 
@@ -1949,7 +1972,7 @@ class Book:
             # 머리글은 노선 이름만 (책을 넘기며 찾는 자리). 몇째 조각인지는 표의 세로 제목 끝에
             if self.page_title:
                 tex += self.page_side_title(recto, pg['lines'])
-                tex += self.page_furniture(folio, recto, '', '')
+                tex += self.page_furniture(folio, recto, '', '', self.page_legend([pc['T'] for pc in pg['pieces']]))
             else:
                 tex += self.page_furniture(folio, recto, '·'.join(ln for _, ln in pg['lines']), '')
             body.append(r'\begin{picture}(%.3f,%.3f)' % (self.W, self.H))

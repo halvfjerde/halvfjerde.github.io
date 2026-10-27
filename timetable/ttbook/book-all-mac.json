@@ -59,7 +59,7 @@
   "교외선"
  ],
  "pageTitle": true,
- "notes": false,
+ "notes": "header",
  "ktxFirst": true,
  "bandPos": "auto",
  "fold": "auto",
