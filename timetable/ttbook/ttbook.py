@@ -1617,7 +1617,14 @@ class Book:
         m = re.fullmatch(r'(.+선)경유', t)
         if m: return {'kind': 'via', 'name': m.group(1)}
         if re.search(r'연결|분리', t) or re.fullmatch(r'\D+(발|착)\d+', t):
-            nums = re.findall(r'\d{2,5}', t)
+            nos = []
+            def walk(n):
+                for k in n.kids:
+                    if isinstance(k, str): continue
+                    if 'jtt-no' in k.cls: nos.append(re.sub(r'\D', '', k.text()))
+                    else: walk(k)
+            walk(cell.node)
+            nums = [x for x in nos if x] or re.findall(r'\d{2,5}', t)       # N{668}/N{672} 은 열차번호 꼴마다
             if nums: return {'kind': 'train', 'nums': nums}
         return None
 
@@ -1631,6 +1638,13 @@ class Book:
                     if d: T._colno[c.c] = d
         return T._colno
 
+    def page_badge(self, n, size, color):
+        """쪽 번호 네모 표지 (무궁화 등급 표지처럼 속 빈 네모)"""
+        sm = size * 0.76
+        inner = self.inl.run(str(n), Ctx('DG', sm, color))
+        w = max(1.3, len(str(n)) * 0.55 + 0.4)
+        return r'\ttbadge{%.3f}{%.3f}{0}{1.000}{%.3f}{%s}' % (w * sm * self.fs, 1.3 * sm * self.fs, self.inl.c * size * self.fs, inner)
+
     def resolve_refs(self, body):
         """짠 뒤: 쪽마다 실린 열차로 찾아 \\TTREF{k} 를 쪽 번호 네모 표지로"""
         first = self.cfg.get('firstFolio', 2)
@@ -1640,11 +1654,13 @@ class Book:
                 cn = self.colno(pc['T'])
                 for j in pc['trains']:
                     if not isinstance(j, tuple) and j in cn: where[cn[j]].append((p, pc['T']))
-        def badge(n, size, color):
-            sm = size * 0.76
-            inner = self.inl.run(str(n), Ctx('DG', sm, color))
-            w = max(1.3, len(str(n)) * 0.55 + 0.4)
-            return r'\ttbadge{%.3f}{%.3f}{0}{1.000}{%.3f}{%s}' % (w * sm * self.fs, 1.3 * sm * self.fs, self.inl.c * size * self.fs, inner)
+        badge = self.page_badge
+        par = collections.defaultdict(list)            # 「381/분리」 주에 적힌 열차 번호 → 그 주(어버이 열차)가 실린 쪽
+        for r in self.refs.values():
+            if r['kind'] != 'train': continue
+            pno = self.colno(r['T']).get(r['col'])
+            for n in r['nums']:
+                par[n] += [p for p, X in where.get(pno, []) if X is r['T']]
         out = {}
         for mk, r in self.refs.items():
             T = r['T']
@@ -1653,6 +1669,9 @@ class Book:
                 nm = r['name']
                 ok = (lambda X: self.is_ktx(X) and nm.replace('고속선', '고속철도') in X.title.text()) if nm.endswith('고속선') else (lambda X: X.line == nm)
                 ps = sorted(p for p, X in where.get(no, []) if ok(X) and X is not T)
+                # 그 노선 표에 없으면: 다른 표에 실린 같은 열차(홍성 순환 열차 등), 그것도 없으면 이 열차로 나뉘고 합치는 어버이 열차(병결)의 쪽
+                if not ps: ps = sorted(p for p, X in where.get(no, []) if X is not T)
+                if not ps: ps = sorted(par.get(no, []))
                 fol = [ps[0] + first] if ps else []
             else:
                 fol = []
@@ -1849,6 +1868,12 @@ class Book:
         if legend:
             sz = self.cfg.get('legendSize', 5.0) / fs
             parts = [self.inl.flat(self.inl.lines(d, Ctx('M', sz))[0]) for d in legend]
+            # 「…는 ○○ 표에」: 그 표가 실린 쪽 번호를 네모 표지로 덧붙인다
+            for i_, d in enumerate(legend):
+                m = re.search(r'.*는 (.+?) 표에\s*$', re.sub(r'\s+', ' ', d.text()))
+                if not m: continue
+                ps = [p for p, X in getattr(self, '_tpages', []) if m.group(1) in X.title.text()]
+                if ps: parts[i_] += r'\kern%.3fbp ' % (0.3 * sz * fs) + self.page_badge(min(ps) + self.cfg.get('firstFolio', 2), sz / 0.76 * 0.9, None)
             fw_ = (self.inl.wc.get(fo, 2.0)) * fs
             gap = 3 * MM
             W = self.cw - fw_ - gap
@@ -2377,7 +2402,14 @@ class Book:
                 ys[c] = ya + h; ys[c + 1] = yb + h
                 if bes:                               # 오른쪽 면의 끝 몇 편 옆에 다음 노선
                     wR, ys_ = bes[:2]; pr_['fixw'], pr_['ncol'] = wR, bes[2]; yy = yb
-                    for Y, Yc, ry, hy in ys_:
+                    for q in ys_:
+                        if q[0] == 'row':             # 좌우로 한 줄
+                            xx = wR - fw
+                            for Y, Yc, ry, hy, wy in q[1]:
+                                put(Y, c + 1, Yc, ry, yy, False, q[2], xx, False, 'B', self.band_w(wy))
+                                xx += wy - fw
+                            yy += q[2] - fw; continue
+                        Y, Yc, ry, hy = q
                         put(Y, c + 1, Yc, ry, yy, False, hy, wR - fw, False, 'B', self.band_w(self.cw + fw - wR))
                         yy += hy - fw
                 if c % 2 == 1: cur['c'] = c + 1
@@ -2605,7 +2637,9 @@ class Book:
         # besideRight: 펼침면 짝(하행 위·상행 아래)의 오른쪽 면 끝 몇 편 옆에 다음 노선의 하행·상행을 나란히 (그 노선의 한 쪽을 아낀다)
         for br in self.cfg.get('besideRight', []):
             kx = br.get('ktx', False)            # KTX 표끼리 (KTX밖에 없는 노선)
-            pick = lambda ln, d: [T for T in tables if T.line == ln and self.is_ktx(T) == kx and d in T.title.text()]
+            nots = br.get('not', [])           # 이 말이 제목에 든 표는 빼고 (순환 표 등)
+            pick = lambda ln, d: [T for T in tables if T.line == ln and self.is_ktx(T) == kx and d in T.title.text()
+                                  and not any(x in T.title.text() for x in nots)]
             blank = br.get('blank', 0)          # 끝 몇 편 뒤에 남길 빈 열 (표가 거기서 끝남을 보이게)
             if br.get('kind') == 'pair':
                 # 방향마다 펼침면 하나: 왼쪽 면 가득 + 오른쪽 면에 끝 몇 편(rest), 그 옆에 다른 노선의 하행·상행을 위아래로
@@ -2630,10 +2664,26 @@ class Book:
                         if self.fixed_w(Y, 'B') + len(Yc) * self.P0 > wY + 0.01: break
                         ry = list(range(Y.nrow))
                         ys_.append((Y, Yc, ry, self.piece_h(Y, ry, False, self.band_w(wY))))
-                    if len(ys_) != 2 or sum(q[3] for q in ys_) - fw > PH + 0.01: break
+                    if len(ys_) != 2: break
+                    # upRow/downRow: 그 밑에 같은 노선의 다른 표(순환 등) 하행·상행을 좌우로 한 줄
+                    kw = br.get('upRow' if T is Tu else 'downRow')
+                    if kw:
+                        rr = [[X for X in tables if X.line == ln and kw in X.title.text() and d in X.title.text()] for d in ('하행', '상행')]
+                        if not all(len(x) == 1 for x in rr): break
+                        parts_ = []
+                        for (X,) in rr:
+                            X.fold = False; X.band_left = False
+                            _, Xc, _ = self.blocks(X)
+                            wx = self.fixed_w(X, 'B') + len(Xc) * self.P0
+                            rx = list(range(X.nrow))
+                            parts_.append((X, Xc, rx, self.piece_h(X, rx, False, self.band_w(wx)), wx))
+                        if sum(q[4] for q in parts_) - fw > wY + 0.01: break
+                        ys_.append(('row', parts_, max(q[3] for q in parts_)))
+                    hsum = sum(q[2] if q[0] == 'row' else q[3] for q in ys_) - (len(ys_) - 1) * fw
+                    if hsum > PH + 0.01: break
                     js_.append({'T': T, 'kind': 'pair', 'trs': Tc, 'kA': kL, 'rows': rows, 'h': h, 'notes': False, 'bw': bwf,
                                 'beside': (wR, ys_, nR)})
-                    ys_all += [q[0] for q in ys_]
+                    ys_all += [x[0] for q in ys_ for x in (q[1] if q[0] == 'row' else [q])]
                 if len(js_) != 2: continue
                 for T in [Td, Tu] + ys_all: T.custom_jobs = None; T.stack_with = None; T.side_with = None; T.stacked = False
                 Td.custom_jobs, Tu.custom_jobs = [js_[0]], [js_[1]]
@@ -2847,6 +2897,10 @@ class Book:
                         if not nx: break
                         chain.append(min(nx, key=lambda r: r['y']))
                     for r in chain: done.add(id(r))
+                    sib = {id(r): [q2 for q2 in ps if id(q2) not in done and abs(q2['y'] - r['y']) < 0.5 and not xover(q2, r)
+                                   and any(xover(q2, r2) for r2 in chain if r2 is not r)] for r in chain}     # 좌우로 한 줄인 짝
+                    for v in sib.values():
+                        for q2 in v: done.add(id(q2))
                     y_ = chain[0]['y']
                     tot = sum(r['h'] for r in chain) - (len(chain) - 1) * fw
                     slack = PH - (y_ + tot)
@@ -2855,6 +2909,7 @@ class Book:
                     for r in chain:
                         e = slack * r['h'] / hsum if (r in cs_ and hsum > 0 and slack > 0) else 0.0
                         r['y'] = y_; r['h'] += e; r['stretch'] = e
+                        for q2 in sib[id(r)]: q2['y'] = y_; q2['stretch'] = r['h'] - q2['h']; q2['h'] = r['h']
                         y_ += r['h'] - fw
         # 붙은 조각 사이의 괘선: 위 조각과 같은 표면 띠 사이 괘선, 다른 표면 표 사이 괘선. 아래에 붙은 조각이 있으면 아래 변은 그 조각이 긋는다
         for pg in pages:
@@ -2882,6 +2937,7 @@ class Book:
 
     def emit(self, out_tex):
         first = self.cfg.get('firstFolio', 2)
+        self._tpages = [(p, pc['T']) for p, pg in enumerate(self.pages) for pc in pg['pieces']]
         body = []
         for pi, pg in enumerate(self.pages):
             folio = first + pi

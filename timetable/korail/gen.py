@@ -79,8 +79,13 @@ def merge_into(g, k, insert=True, via=None):
 KEEP_STATIONS = {('gen', '목포보성선'): {'조성'}}
 # 수서를 드나드는 열차(옛 SRT)를 따로 표로 내는 KTX 노선 (그 열차가 3분의 1 남짓 되는 곳)
 SPLIT_SUSEO = {('ktx', '경부선'), ('ktx', '호남선')}
+# 순환 열차(시발역＝종착역: 홍성–천안–서화성–홍성 ITX-마음)는 따로 표로 (다른 표에서는 뺀다)
+SPLIT_LOOP = {('gen', '서해선')}
+LOOP_NAME = {('gen', '서해선'): '장항선·서해선 순환'}
+def is_loop(tr): return bool(tr.get('from')) and clean_name(tr.get('from')) == clean_name(tr.get('to') or '')
 # 노선 띠에 적을 역(하행 차례. 상행은 뒤집는다). 없으면 자동
 HEADS = {
+    ('gen', '서해선', None): '서화성 안중 홍성', ('gen', '서해선', '순환'): '홍성 천안 평택 홍성',
     ('ktx', '경부선', '수서'): '수서 대전 동대구 부산', ('ktx', '호남선', '수서'): '수서 익산 광주송정 목포',
     ('ktx', '경부선'): '서울 대전 동대구 부산', ('gen', '경부선'): '서울 대전 동대구 부산',
     ('ktx', '호남선'): '용산 익산 광주송정 목포', ('gen', '호남선'): '용산 서대전 익산 광주송정 목포',
@@ -225,6 +230,7 @@ class Table:
         self.variant = t.get('variant')
         self.merged = t.get('merged')       # 합친 노선 (경전선·전라선)
         self.skipped = t.get('skipped', [])  # 합치지 않은 KTX: 이 표에서 한 역에만 서는 것 [(역, 고속선)]
+        self.loop_note = t.get('loop_note')  # 순환 열차를 뺀 표: 「홍성 순환 열차는 … 표에」
         st = [clean_name(s) for s in t['stations']]
         self.hanja = hanja
         trains = []
@@ -390,6 +396,7 @@ class Table:
         dirmark = 'k하행.' if self.dir == 'down' else 'n상행.'
         vlab = (' 수서발' if self.dir == 'down' else ' 수서행') if self.variant == '수서' else ''
         if self.merged: vlab = f'·{self.merged}' + vlab           # 경부선·경전선 수서발
+        if self.variant == '순환': self.line_disp = LOOP_NAME.get((self.cat, self.line), self.line + ' 순환')
         cp = getattr(self, 'cpl', None)      # 병결: {열차번호: [짝 열차번호]}, 행 자리(head: 시발역 밑 / foot: 종착역 밑)
         hsr = HSR_NAME.get((self.cat, self.line))
         name = (hsr + vlab) if hsr else ('KTX ' if ktx else '') + (self.line_disp) + vlab
@@ -526,7 +533,7 @@ class Table:
                 else: ft.append(q(esc_txt(day_short(nt))))      # 운행일 행: 요일 글자만 가로로 (이어지는 셋 이상은 월∼목), 넘치면 좁힌다
             if has_day:
                 cn = self.cpl_note(tr)
-                if cn: ft.append(q(vert(cn)))
+                if cn: ft.append(q(cn))
                 elif nt and not isday(nt): ft.append(q(vert(day_range(nt))))
                 else: ft.append('_')
             elif self.rem_row: ft.append('_')
@@ -568,6 +575,7 @@ class Table:
             notes.append('굵은 줄 오른쪽은 수서 발착')
         elif (self.cat, self.line) in COUPLE_GUEST and self.variant != '수서':
             notes.append(f'수서 발착 열차는 수서 발착 병결 표에')
+        if self.loop_note: notes.append(self.loop_note)
         for st_, via_ in self.skipped:
             notes.append(f"{st_}에만 서는 KTX({via_} 경유)는 {via_.replace('고속선', '고속철도')} 표에")
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
@@ -590,10 +598,10 @@ class Table:
         return False
 
     def cpl_note(self, tr):
-        """어버이 열차의 비고: 「381로 분리」(하행)·「382로 연결」(상행). 짝이 요일로 바뀌면 「668・672로 연결」"""
+        """어버이 열차의 비고(가로, 줄마다): 「381/분리」(하행)·「382/연결」(상행). 짝이 요일로 바뀌면 「668/672/연결」. 열차번호는 명조"""
         gs = self.cpl_main(tr)
         if not gs: return None
-        return f"{'・'.join(gs)}{ro(gs[-1])} {'분리' if self.dir == 'down' else '연결'}"
+        return '/'.join(f'N{{{x}}}' for x in gs) + '/' + ('분리' if self.dir == 'down' else '연결')
 
     def cpl_note_old(self, tr):
         """병결 짝이 요일로 바뀌는 열차의 비고: 짝마다 요일과 번호 「월∼목 668/금∼일 672」"""
@@ -850,9 +858,11 @@ def main():
             if (cat, sheet) in MERGE_KTX: continue          # 재래선 표에 합침
             if (cat, sheet) in SPLIT_SUSEO or ((cat, sheet) in COUPLE_GUEST and (cat, sheet) not in MERGE_GUEST):
                 expanded += [(cat, sheet, sub, None), (cat, sheet, sub, '수서')]
+            elif (cat, sheet) in SPLIT_LOOP:
+                expanded += [(cat, sheet, sub, None), (cat, sheet, sub, '순환')]
             else: expanded.append((cat, sheet, sub, None))
         for cat, sheet, sub, variant in expanded:
-            head = (HSR_NAME.get((cat, sheet)) or ('KTX' if cat == 'ktx' else '일반열차')) + (f" ({sub.replace(' ─ ', '–')})" if sub else '') + (' (수서 발착)' if variant == '수서' else '')
+            head = (HSR_NAME.get((cat, sheet)) or ('KTX' if cat == 'ktx' else '일반열차')) + (f" ({sub.replace(' ─ ', '–')})" if sub else '') + (' (수서 발착)' if variant == '수서' else '') + (f" ({LOOP_NAME.get((cat, sheet), '순환')})" if variant == '순환' else '')
             if variant == '수서' and (cat, sheet) in COUPLE_GUEST: head = 'KTX (수서 발착 병결)'
             P.append(f'== {head} ==')
             pair = {}
@@ -923,6 +933,13 @@ def main():
                         t = dict(t, trains=t['trains'] + via_trains(t, gtr, g['stations'], gk[1]))
                 if (cat, sheet) in BRANCH_AT and variant is None:
                     t = branch_only(t, BRANCH_AT[(cat, sheet)])
+                if cat == 'gen':                   # 순환 열차는 순환 표에만 (뺀 표에는 주로 어디 있는지)
+                    out_ = [tr for tr in t['trains'] if is_loop(tr)] if variant != '순환' else []
+                    t = dict(t, trains=[tr for tr in t['trains'] if is_loop(tr) == (variant == '순환')])
+                    if variant == '순환': t['variant'] = '순환'
+                    elif out_: t['loop_note'] = f"{clean_name(out_[0]['from'])} 순환 열차는 {next(iter(LOOP_NAME.values()))} 표에"
+                    if (cat, sheet) in SPLIT_LOOP and variant is None and any(is_loop(tr) for tr in tabs[(cat, sheet, d)]['trains']):
+                        t['loop_note'] = f"{clean_name(next(tr for tr in tabs[(cat, sheet, d)]['trains'] if is_loop(tr))['from'])} 순환 열차는 {LOOP_NAME[(cat, sheet)]} 표에"
                 T = Table(t, data['hanja']); T.line_disp = line; T.cpl = cpl
                 T.wiki(sub); pair[d] = T
             shared = share(list(pair.values()))
