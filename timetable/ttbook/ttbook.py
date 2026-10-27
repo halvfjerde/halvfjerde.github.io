@@ -3481,28 +3481,24 @@ class Book:
                     else: ln_ = t_
                 ent.append(('p', '', ln_))
             if c0 != cur:
-                cur = c0; units.append([('h', c0, '')] + ent)
+                cur = c0; units.append([('b', '', ''), ('h', c0, '')] + ent)      # 자음 머리 위는 한 줄 비운다 (단 맨 위면 안 비움)
             else: units.append(ent)
         def fill(us, c_):
-            cols, col = [], []
-            for u in us:
-                if col and len(col) + len(u) > c_: cols.append(col); col = []
-                col += u
-            if col: cols.append(col)
-            return cols
-        cols = fill(units, cap)
+            cols, col, cu, ucs = [], [], [], []
+            for ui, u in enumerate(us):
+                if col and len(col) + len(u) > c_: cols.append(col); ucs.append(cu); col, cu = [], []
+                col += u[1:] if (not col and u[0][0] == 'b') else u; cu.append(ui)
+            if col: cols.append(col); ucs.append(cu)
+            return cols, ucs
+        cols, ucs = fill(units, cap)
         pages = [cols[i:i + NC] for i in range(0, len(cols), NC)]
         # 마지막 쪽: 단을 고르게, 아래에 판권
         colo = self.cfg.get('colophon', [])
         hc = (len(colo) + 2) * lh if colo else 0
-        n_before = sum(len(c) for p in pages[:-1] for c in p)
-        # 마지막 쪽에 든 단위들
-        cnt, idx = 0, 0
-        while idx < len(units) and cnt < n_before: cnt += len(units[idx]); idx += 1
-        rest = units[idx:]
+        rest = units[ucs[(len(pages) - 1) * NC][0]:]
         t = max(1, math.ceil(sum(len(u) for u in rest) / NC))
         while True:
-            lc = fill(rest, t)
+            lc, _ = fill(rest, t)
             if len(lc) <= NC: break
             t += 1
         pages[-1] = lc
@@ -3514,6 +3510,96 @@ class Book:
         if colo and not fit: self.back.append({'cols': [], 'colophon': True, 'h': 0})
         self._ix = (colw, pad, lh)
         for i in range(len(self.back)): self.pages.append({'pieces': [], 'lines': [], 'back': i})
+
+    def dots(self, a_, b_, yl):
+        """이름과 쪽 번호를 잇는 점: 글줄 가운데 높이에 둥근 점"""
+        p = 0.32 * self.fs
+        n = int((b_ - a_) / p)
+        a2 = b_ - n * p                                 # 오른쪽(쪽 번호) 끝에 맞춘다
+        return 'q 0.55 w 1 J 0 G [0 %.3f] 0 d %.3f %.3f m %.3f %.3f l S Q' % (p, a2, self.H - yl, b_, self.H - yl)
+
+    def title_page(self):
+        """속표지 (1쪽, 쪽 번호 없음): 위에 책 이름, 아래에 목차와 범례를 모아"""
+        fs, H = self.fs, self.H
+        first = self.cfg.get('firstFolio', 2)
+        x0, y0, W = self.mi, self.mt, self.cw
+        R = self.R
+        tex, ops, rects = [], [], []
+        wd = lambda t: self.inl.wc.get(t, 1.0) * fs
+        tp = self.cfg.get('titlePage', {})
+        tex.append(self.put_box(x0, y0, W, 4.6 * fs, self.inl.run(tp.get('title', '시각표'), Ctx('GB', 4.6)), 'l', 't'))
+        tex.append(self.put_box(x0, y0 + 5.6 * fs, W, 1.6 * fs, self.inl.run(tp.get('sub', ''), Ctx('M', 1.6)), 'l', 't'))
+        gut = 3 * fs
+        hh, ih, sg = 2 * R, 1.5 * R, 1.5 * R             # 갈래 머리 행, 항목 행, 갈래 사이
+        ind = 1.0 * fs                                   # 항목 들여쓰기
+        rng_ = lambda a, b: ('%d' % a) if a == b else ('%d∼%d' % (a, b))
+        def head(xx, yy, w, name, pg=None):
+            nt = self.inl.run(name, Ctx('GB', 1.1))
+            tex.append(self.put_box(xx, yy, w, hh, nt, 'l', 'm'))
+            if pg:
+                pt = self.inl.run(pg, Ctx('M', 1.1))
+                tex.append(self.put_box(xx, yy, w, hh, pt, 'r', 'm'))
+                ops.append(self.dots(xx + wd(nt) + 0.6 * fs, xx + w - wd(pt) - 0.6 * fs, yy + hh / 2))
+            rects.append(('h', xx, xx + w, yy + hh, 2))
+        # 목차: 두 단
+        lp = self.line_pages(first)
+        bk_ = [i for i, pg in enumerate(self.pages) if 'back' in pg and self.back[pg['back']]['cols']]
+        hsr = [(nm, a, b, T) for nm, (a, b, T) in lp.items() if nm.endswith('고속철도') or nm.startswith('KTX ')]
+        tour = [(nm, a, b, T) for nm, (a, b, T) in lp.items() if nm == '관광열차']
+        gen_ = [x for x in ((nm, a, b, T) for nm, (a, b, T) in lp.items()) if x not in hsr + tour]
+        span = lambda xs: rng_(min(x[1] for x in xs), max(x[2] for x in xs))
+        cols_ = [[('노선별 시각표', span(gen_), gen_)],
+                 [('고속철도', span(hsr), hsr)] + ([('관광열차', span(tour), [])] if tour else [])
+                 + ([('역명 색인', rng_(bk_[0] + first, bk_[-1] + first), [])] if bk_ else [])]
+        sec_h = lambda secs: sum(hh + (0.5 * R + len(it) * ih if it else 0) for _, _, it in secs) + (len(secs) - 1) * sg
+        # 범례: 세 단 (등급 · KTX · 관광열차)
+        lg = self.cfg.get('legend', [])
+        groups, flat = [], []
+        for head_, body_ in lg:
+            if head_ or not groups: groups.append([head_, []])
+            for it in [x.strip() for x in body_.split('　') if x.strip()]:
+                m_ = re.match(r'^(B?S\{[^}]*\})\s+(.*)$', it)
+                if m_: groups[-1][1].append((len(flat), m_.group(2).replace('`', ''))); flat.append(m_.group(1))
+                else: groups[-1][1].append((None, it))
+        rows_ = []
+        if flat:
+            html = run_module('title "x"\n\n[stations]\n가\n\n[notes]\n' + '\n'.join(flat), os.path.join(HERE, 'src', 'Timetable.lua'), os.path.join(HERE, 'build'))
+            nd = parse_html(html).find(lambda n: 'jtt-notes' in n.cls)
+            rows_ = [k_ for k_ in nd.kids if isinstance(k_, Node)] if nd is not None else []
+        lg_h = max([hh + 0.5 * R + len(it) * ih for _, it in groups] + [0])
+        bottom = y0 + self.ch
+        yl0 = bottom - lg_h
+        yc0 = yl0 - 2 * R - max(sec_h(c) for c in cols_)
+        cw2 = (W - gut) / 2
+        for c_i, secs in enumerate(cols_):
+            xx = x0 + c_i * (cw2 + gut); yy = yc0
+            for s_i, (nm, pg, items) in enumerate(secs):
+                if s_i: yy += sg
+                head(xx, yy, cw2, nm, pg); yy += hh
+                if items: yy += 0.5 * R
+                for inm, ia, ib, T in items:
+                    kt = T is not None and self.is_ktx(T)
+                    it = self.inl.run(inm, Ctx('M', 1.0, '0A5FE0' if kt else None)); ip = self.inl.run(rng_(ia, ib), Ctx('M', 1.0))
+                    tex.append(self.put_box(xx + ind, yy, cw2 - ind, ih, it, 'l', 'm'))
+                    tex.append(self.put_box(xx, yy, cw2, ih, ip, 'r', 'm'))
+                    ops.append(self.dots(xx + ind + wd(it) + 0.6 * fs, xx + cw2 - wd(ip) - 0.6 * fs, yy + ih / 2))
+                    yy += ih
+        nG = max(1, len(groups))
+        cw3 = (W - (nG - 1) * gut) / nG
+        bw_ = 4.2 * fs
+        for g_, (head_, items) in enumerate(groups):
+            xx = x0 + g_ * (cw3 + gut); yy = yl0
+            head(xx, yy, cw3, head_); yy += hh + 0.5 * R
+            for n_, name in items:
+                if n_ is None:
+                    tex.append(self.put_box(xx, yy, cw3, ih, self.inl.run(name, Ctx('M', 1.0)), 'l', 'm'))
+                else:
+                    ln_ = self.inl.lines(rows_[n_], Ctx('M', 1.0)) if n_ < len(rows_) else []
+                    if ln_: tex.append(self.put_box(xx, yy, bw_, ih, self.inl.flat(ln_[0]), 'l', 'm'))
+                    tex.append(self.put_box(xx + bw_, yy, cw3 - bw_, ih, self.inl.run(name, Ctx('M', 1.0)), 'l', 'm'))
+                yy += ih
+        if rects: ops.append(self.pdf_ops(rects))
+        return [r'\begin{picture}(%.3f,%.3f)' % (self.W, self.H), r'\put(0,0){\pdfextension literal{%s}}' % ' '.join(ops)] + tex + [r'\end{picture}', r'\newpage']
 
     def back_page(self, k, x0, recto):
         fs = self.fs
@@ -3529,7 +3615,8 @@ class Book:
             xx = ix + ci * colw + pad; ww = colw - 2 * pad
             for li, (kind, nm, ps) in enumerate(col):
                 yy = iy + li * lh
-                yl = yy + lh / 2 + 0.4 * fs
+                yl = yy + lh / 2
+                if kind == 'b': continue
                 if kind == 'h':
                     ht = self.inl.run(nm, Ctx('GB', 1.0))
                     tex.append(self.put_box(xx, yy, ww, lh, ht, 'l', 'm'))
@@ -3542,7 +3629,7 @@ class Book:
                 if ps: tex.append(self.put_box(xx, yy, ww, lh, pt, 'r', 'm'))
                 if kind == 'e':
                     a_, b_ = xx + wd(nt) + 0.5 * fs, xx + ww - wd(pt) - 0.5 * fs
-                    if b_ - a_ > fs: ops.append('q 0.3 w 0 G [0.6 1.6] 0 d %.3f %.3f m %.3f %.3f l S Q' % (a_, H - yl, b_, H - yl))
+                    if b_ - a_ > fs: ops.append(self.dots(a_, b_, yl))
         if bp['colophon']:
             colo = self.cfg.get('colophon', [])
             yb = y0 + self.ch - len(colo) * lh
@@ -3560,6 +3647,7 @@ class Book:
         seqno = collections.defaultdict(dict)
         for pi, pg in enumerate(self.pages):
             for k in pg['lines']: seqno[k][pi] = len(seqno[k]) + 1
+        if self.cfg.get('titlePage'): body += self.title_page()      # 속표지 (1쪽)
         for pi, pg in enumerate(self.pages):
             folio = first + pi
             recto = folio % 2 == 1
