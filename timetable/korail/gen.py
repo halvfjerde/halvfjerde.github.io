@@ -33,17 +33,22 @@ BOOK = [
 # 노선마다 재래선(일반열차) 표를 먼저, KTX 는 그 뒤에
 BOOK = [(line, sorted(parts, key=lambda p: 0 if p[0] == 'gen' else 1)) for line, parts in BOOK]
 # 재래선과 같은 선로(정차역이 거의 같은)를 달리는 KTX 는 재래선 표에 합친다: 열차는 파란 글씨, 시각은 굵게
-MERGE_KTX = {('ktx', '동해선(부전-강릉)'): ('gen', '동해선'), ('ktx', '중앙선'): ('gen', '중앙선')}
-MERGE_INTO = {g: k for k, g in MERGE_KTX.items()}
+# 고속선에서 갈라지는 KTX(경전선·전라선·동해선 서울–포항)는 갈림역부터만 남기고 재래선 표에 (고속선 구간은 고속철도 표에)
+MERGE_KTX = {('ktx', '동해선(부전-강릉)'): ('gen', '동해선'), ('ktx', '중앙선'): ('gen', '중앙선'),
+             ('ktx', '경전선'): ('gen', '경전선'), ('ktx', '전라선'): ('gen', '전라선'), ('ktx', '동해선(서울~포항)'): ('gen', '동해선')}
+MERGE_INTO = {}
+for _k, _g in MERGE_KTX.items(): MERGE_INTO.setdefault(_g, []).append(_k)
+VIA_HSR = {('ktx', '경전선'): '경부고속철도', ('ktx', '전라선'): '호남고속철도', ('ktx', '동해선(서울~포항)'): '경부고속철도'}
 KTX_STYLE = ['style=fc=' + KTX_COLOR, 'tstyle=fw=b']
 
-def merge_into(g, k):
-    """재래선 표 g 에 KTX 표 k 의 열차를 합친다. k 에만 있는 역은 k 의 차례대로 g 사이에 끼운다"""
+def merge_into(g, k, insert=True, via=None):
+    """재래선 표 g 에 KTX 표 k 의 열차를 합친다. k 에만 있는 역은 k 의 차례대로 g 사이에 끼운다(insert).
+    via: 표 밖(고속선)에서 들어오고 나가는 열차에 「…고속철도 경유」"""
     gn = [clean_name(x) for x in g['stations']]
     kn = [clean_name(x) for x in k['stations']]
     st = list(g['stations'])
     for j, x in enumerate(kn):
-        if x in [clean_name(y) for y in st]: continue
+        if not insert or x in [clean_name(y) for y in st]: continue
         nxt = next((y for y in kn[j + 1:] if y in [clean_name(z) for z in st]), None)
         pos = [clean_name(z) for z in st].index(nxt) if nxt else len(st)
         st.insert(pos, k['stations'][j])
@@ -53,7 +58,16 @@ def merge_into(g, k):
         for j, x in enumerate(names):
             if x in sn: tt[sn.index(x)] = tr['times'][j]
         return dict(tr, times=tt, **(extra or {}))
-    trs = [remap(tr, gn) for tr in g['trains']] + [remap(tr, kn, {'ktx': True}) for tr in k['trains']]
+    trs = [remap(tr, gn) for tr in g['trains']]
+    for tr in k['trains']:
+        r = remap(tr, kn, {'ktx': True, **real_ends_of(tr, k['stations'])})
+        ix = [i for i, x in enumerate(r['times']) if isinstance(x, int)]
+        if not ix: continue
+        if via:
+            lab = f'{via} 경유'
+            if clean_name(r['from']) != sn[ix[0]] and ix[0] >= 1: r['times'][ix[0] - 1] = lab
+            if clean_name(r['to']) != sn[ix[-1]] and ix[-1] + 1 < len(sn): r['times'][ix[-1] + 1] = lab
+        trs.append(r)
     return dict(g, stations=st, trains=trs)
 
 # 서는 열차가 없어도 남길 역 (하행·상행의 역을 맞춰 나란히 놓을 때 행이 어긋나지 않게. 모든 열차 통과로)
@@ -513,7 +527,8 @@ class Table:
             if 'ITX-마음' in types: parts.append('BS{k마음.}은 `ITX-마음`')
             if any(tr.get('ktx') for tr in self.trains):
                 ks = sorted({tr['type'] for tr in self.trains if tr.get('ktx')})
-                parts.append(', '.join(f'S{{{KIND.get(x, x)}}}' for x in ks) + '은 ' + ', '.join(f'`{x}`' for x in ks) + '(파란 글씨)')
+                sub_ = [f'S{{{KIND[x]}}}은 `{x}`' for x in ks if KIND.get(x)]
+                parts.append('파란 글씨는 KTX' + (f"({', '.join(sub_)})" if sub_ else ''))
             if parts: notes.append('등급 ' + ', '.join(parts))
         if has_day:   # 운행일 관련은 한 줄로
             dn = []
@@ -814,8 +829,15 @@ def main():
             for d in ('down', 'up'):
                 t = tabs.get((cat, sheet, d))
                 if not t: continue
-                if (cat, sheet) in MERGE_INTO and tabs.get(MERGE_INTO[(cat, sheet)] + (d,)):
-                    t = merge_into(t, tabs[MERGE_INTO[(cat, sheet)] + (d,)])
+                for kk in MERGE_INTO.get((cat, sheet), []):
+                    kt = tabs.get(kk + (d,))
+                    if not kt: continue
+                    if kk in BRANCH_AT:            # 고속선 구간은 고속철도 표에: 갈림역부터만
+                        gt_, gmap_ = GUEST_SUSEO.get(kk + (d,), ({'trains': []}, {}))
+                        gby_ = {x['no']: x for x in gt_['trains']}
+                        kt = dict(kt, trains=[dict(tr, arr_at=gby_.get(tr['no'], {}).get('arr_at', {})) for tr in kt['trains']])
+                        kt = branch_only(kt, BRANCH_AT[kk])
+                    t = merge_into(t, kt, insert=kk not in BRANCH_AT, via=VIA_HSR.get(kk))
                 if (cat, sheet) in SPLIT_SUSEO or (cat, sheet) in SUSEO_TO:
                     k = next(i for i, x in enumerate(t['stations']) if clean_name(x) == '수서')
                     t = dict(t, variant=variant, trains=[tr for tr in t['trains'] if isinstance(tr['times'][k], int) == (variant == '수서')])
