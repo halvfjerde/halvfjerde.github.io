@@ -1698,6 +1698,15 @@ class Book:
             m = 0
             while (m + 1) * h - m * fw <= PH + 0.01: m += 1
             return m
+        def band_pos(T):
+            if T.head is None or mode == 'top': return
+            jt = self.jobs_of(T)
+            T.band_left = True
+            jl = self.jobs_of(T)
+            ht, hl = max(j['h'] for j in jt), max(j['h'] for j in jl)
+            fits = all(self.vband(T, '열넷째' if len(jl) > 1 else None, 100)[1] <= j['h'] - 2 * (fw + self.frame_pad) - 0.6 * self.fs for j in jl)
+            if mode == 'left': T.band_left = fits
+            else: T.band_left = fits and len(jl) <= len(jt) and 2 * hl - fw <= PH + 0.01 < 2 * ht - fw
         for T in tables:
             T.band_left = False; T.fold = False
             if self.fold != 'off':
@@ -1712,14 +1721,26 @@ class Book:
                 if self.fold == 'on' or (ok and pf <= pt + 0.01):
                     continue
                 T.band_left = False; T.fold = False
-            if T.head is None or mode == 'top': continue
-            jt = self.jobs_of(T)
-            T.band_left = True
-            jl = self.jobs_of(T)
-            ht, hl = max(j['h'] for j in jt), max(j['h'] for j in jl)
-            fits = all(self.vband(T, '열넷째' if len(jl) > 1 else None, 100)[1] <= j['h'] - 2 * (fw + self.frame_pad) - 0.6 * self.fs for j in jl)
-            if mode == 'left': T.band_left = fits
-            else: T.band_left = fits and len(jl) <= len(jt) and 2 * hl - fw <= PH + 0.01 < 2 * ht - fw
+            band_pos(T)
+        # 같은 노선의 같은 종류(KTX끼리, 일반끼리) 표는 하행·상행이 같은 짜임으로: 하나라도 접지 못하면 모두 펼침면으로
+        def route(T):        # 띠 가운데의 역 이름들 (하행·상행 짝을 찾는 데)
+            if T.head is None: return frozenset()
+            parts, _ = self.band_nodes(T)
+            return frozenset(re.findall(r'[가-힣]+', parts[1].text()))
+        grp = collections.defaultdict(list)
+        for T in tables: grp[(T.line, self.is_ktx(T), route(T))].append(T)
+        for ts in grp.values():
+            if any(T.fold for T in ts) and not all(T.fold for T in ts):
+                for T in ts:
+                    T.fold = False; T.band_left = False
+                    band_pos(T)
+            if any(T.band_left for T in ts) and not all(T.band_left for T in ts):
+                ok = True
+                for T in ts:
+                    T.band_left = True
+                    jl = self.jobs_of(T)
+                    ok = ok and all(self.vband(T, '열넷째' if len(jl) > 1 else None, 100)[1] <= j['h'] - 2 * (fw + self.frame_pad) - 0.6 * self.fs for j in jl)
+                for T in ts: T.band_left = ok
         for bunch in bunches:
             pend = [collections.deque(self.jobs_of(T)) for T in bunch]
             whole = [len(q) == 1 for q in pend]          # 한 번에 다 실리는 표만 당겨 올 수 있다

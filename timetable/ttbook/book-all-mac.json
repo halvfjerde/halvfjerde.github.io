@@ -62,5 +62,6 @@
  "notes": false,
  "ktxFirst": true,
  "bandPos": "auto",
- "fold": "auto"
+ "fold": "auto",
+ "dropEnds": false
 }
