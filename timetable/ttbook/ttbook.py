@@ -933,6 +933,16 @@ class Book:
                     if '연결' in t or '분리' in t: continue          # 병결 비고(개조식)는 적은 그대로 세로쓰기
                     # 요일 뭉치만 작은 가로 글씨로(세 자까지 한 줄, 넷~여섯 자는 두 자씩 세 줄까지).
                     # 나머지(「운행」, 「…선 경유」 등)는 관습대로 보통 크기 세로쓰기
+                    m2 = re.fullmatch(r'↑(.+?선)경유(.+선)경유', t)
+                    if m2:          # 들어온 선(↑)과 나간 선(↓)을 함께: 위 화살표·세로 두 줄, 아래 화살표·세로 두 줄
+                        nd = Node('td', [])
+                        for cls_, ln_ in (('tt-uarrow', m2.group(1)), ('tt-darrow', m2.group(2))):
+                            vt = Node('span', [('class', 'jtt-v tt-rl')]); vt.kids += [ln_, Node('br', []), '경유']
+                            nd.kids += [Node('span', [('class', cls_)]), Node('br', []), vt, Node('br', [])]
+                        nd.kids.pop()
+                        cl.node = nd
+                        cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
+                        continue
                     mv = re.match(r'(↑?)(.+선)경유$', t)
                     if mv:          # 「…선 경유」: 굵은 화살표 밑에 두 줄 세로쓰기(…선 | 경유). ↑: 표의 첫 역 앞 다른 선에서 들어옴(위 화살표)
                         ar = Node('span', [('class', 'tt-uarrow' if mv.group(1) else 'tt-darrow')])
@@ -1641,7 +1651,7 @@ class Book:
         """열차 칸의 주가 다른 표를 가리키면 {kind: via|train, ...}: 「…선 경유」(그 노선 표의 같은 열차), 「…로 연결·분리」「…/발/654」(그 번호의 열차)"""
         if T.kind[cell.c][0] != 'T' or cell.r < T.hEnd: return None
         t = re.sub(r'\s', '', cell.node.text())
-        m = re.fullmatch(r'[↑↱]?(.+선)경유', t)
+        m = re.fullmatch(r'[↑↱]?(.+?선)경유(?:.+선경유)?', t)
         if m: return {'kind': 'via', 'name': m.group(1)}
         if re.search(r'연결|분리', t) or re.fullmatch(r'\D+(발|착)\d+', t):
             nos = []

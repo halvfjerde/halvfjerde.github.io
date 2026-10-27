@@ -83,6 +83,7 @@ SPLIT_SUSEO = {('ktx', '경부선'), ('ktx', '호남선')}
 SPLIT_LOOP = {('gen', '서해선')}
 LINE_STATIONS = {}      # (cat, 노선) → 역 이름들 (main 에서 채운다)
 NOTE_COL_MAX = 21       # 주석 열을 더해도 이 열 수 안이면 주석 열, 넘치면 비고에
+NOTES_TO_REM = {('gen', '대구선')}      # 칸이 빡빡한 표: 표 안의 경유 주도 모두 비고로
 LOOP_NAME = {('gen', '서해선'): '평택선'}
 def is_loop(tr): return bool(tr.get('from')) and clean_name(tr.get('from')) == clean_name(tr.get('to') or '')
 # 노선 띠에 적을 역(하행 차례. 상행은 뒤집는다). 없으면 자동
@@ -438,7 +439,7 @@ class Table:
         fls = [self.from_line(tr) for tr in self.trains]
         runs = sum(1 for i, f in enumerate(fls) if f and (i == 0 or fls[i - 1] != f))
         self.notecol = bool(runs) and len(self.trains) + runs <= NOTE_COL_MAX
-        cpn = any(self.cpl_note(tr) for tr in self.trains) or (any(fls) and not self.notecol)
+        cpn = any(self.cpl_note(tr) for tr in self.trains) or (any(fls) and not self.notecol) or any(self.rem_via(tr) for tr in self.trains)
         # 운행일은 제 행에 (기호 ◆◇ 또는 요일), 비고 행에는 병결·그 밖의 주. 모든 표의 끝은 비고 행 (인쇄에서 쪽의 남는 자리를 받는다)
         isday = lambda s: bool(s) and all(ch in WEEK for ch in s)
         days = {tr['note'] for tr in self.trains if isday(tr['note'])}
@@ -560,7 +561,9 @@ class Table:
             if has_day:
                 cn = self.cpl_note(tr)
                 fl = self.from_line(tr)
+                rv = self.rem_via(tr)
                 if cn: ft.append(q(cn))
+                elif rv: ft.append(q(vert(rv)))
                 elif fl and not self.notecol and not (nt and '경유' in nt): ft.append(q(vert(f'↑{fl}/경유')))     # 표의 첫 역에서 다른 선에서 들어온 열차: 위 화살표 밑에 세로쓰기(…선 | 경유)
                 elif nt and not isday(nt): ft.append(q(vert(day_range(nt))))
                 else: ft.append('_')
@@ -644,6 +647,18 @@ class Table:
         gs = cp['map'].get(tr['no'], []) if cp else []
         return sorted(gs, key=lambda x: -len(week_days(cp['days'][x])))
 
+    def rem_via(self, tr):
+        """NOTES_TO_REM 표: 비고에 적을 경유 (↑들어온 선/경유, 나간 선/경유)"""
+        if (self.cat, self.line) not in NOTES_TO_REM: return None
+        o, d = self.ends_of(tr)
+        idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
+        up = tr.get('via_in') if tr.get('via_in') and o != self.st[idx[0]] else None
+        up = up.replace(' 경유', '').replace('경유', '').strip() if up else self.from_line(tr)
+        dn = tr.get('via_out') if tr.get('via_out') and d != self.st[idx[-1]] else None
+        dn = dn.replace(' 경유', '').replace('경유', '').strip() if dn else None
+        parts = ([f'↑{up}/경유'] if up else []) + ([f'{dn}/경유'] if dn else [])
+        return '/'.join(parts) or None
+
     def from_line(self, tr):
         """표의 첫 역에서부터 서는데 시발역은 표 밖: 들어온 다른 노선(시발역과 첫 역을 함께 지나는 노선) 이름"""
         idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
@@ -720,6 +735,8 @@ class Table:
             return {k: ','.join(v) if len(v) > 1 and v != ['i', 'i'] else v[0] for k, v in parts.items()}
         tail = note_slots(tail_at, n - 1, tr['via_out'], 'm') if d != self.st[b] and tr.get('via_out') and tail_at < n else None
         head = note_slots(0, head_at, tr['via_in'], 'm') if o != self.st[a] and tr.get('via_in') and head_at >= 0 else None
+        rem_mode = (self.cat, self.line) in NOTES_TO_REM          # 표 안의 경유 주를 모두 비고로 (칸은 ‥)
+        if rem_mode: head = tail = None
         for i, x in enumerate(T):
             sp = i in self.split
             if head and i <= head_at:
@@ -735,6 +752,8 @@ class Table:
             elif i < a or i > b + 1 or (i == b + 1 and bar):
                 out.append('x')
             elif i == b + 1 and tr.get('pass_from') is not None:   # 수서 직결: 표 밖(수서)으로 나가니 끝 표시 없이
+                out.append('x')
+            elif i == b + 1 and rem_mode and tr.get('via_out'):   # 비고로 옮긴 경유: 끝 표시 없이 ‥
                 out.append('x')
             elif i == b + 1:                              # 마지막 정차역 다음 칸: 끝 표시
                 out.append('-,x' if sp else '-')
