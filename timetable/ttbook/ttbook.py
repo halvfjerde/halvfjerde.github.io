@@ -1987,14 +1987,6 @@ class Book:
                     tex.append(self.put_box(x0, yy, 60, 12, self.inl.run(head_, Ctx('GB', 1.1)), 'l', 'm'))
                     tex.append(self.put_box(x0 + 62, yy, W - 62, 12, self.inl.flat(ln_[0]) if ln_ else '', 'l', 'm'))
                     yy += 15
-            # 표 속 기호 (DiaPro 글리프 그대로)
-            sy = [('‥', '그 역을 지나지 않음'), ('║', '다른 선을 달림'), ('↓', '통과'), ('▔', '여기서 끝남')]
-            tex.append(self.put_box(x0, yy, 60, 12, self.inl.run('기호', Ctx('GB', 1.1)), 'l', 'm'))
-            for i_, (g_, t_) in enumerate(sy):
-                if g_ == '━': continue
-                tex.append(self.put_box(x0 + 62, yy, 14, 12, self.inl.run(g_, Ctx('DM', 1.1)), 'c', 'm'))
-                tex.append(self.put_box(x0 + 80, yy, W - 80, 12, self.inl.run(t_, Ctx('M', 1.1)), 'l', 'm'))
-                yy += 13
         return tex, ' '.join(ops)
 
     def page_side_title(self, recto, lines, dirs=None, nos=None):
@@ -2138,16 +2130,28 @@ class Book:
                 return n
             while len(legend) > 1 and nlines([est(d) for d in legend]) > 3 and re.sub(r'\s+', '', legend[-1].text()).startswith('→'):
                 legend = legend[:-1]; parts = parts[:-1]
-            # 두 줄이 되면 두 줄로: 항목을 앞뒤 반으로 나눠 줄을 바꾼다
-            if len(parts) >= 2:
-                h_ = -(-len(parts) // 2)
-                rk = [0 if re.match(r'\s*(차종|등급)', d.text()) else 1 if '운행' in d.text() else 2 for d in legend]
-                if 2 in rk and rk.count(2) < len(rk): h_ = rk.index(2)     # 그 밖의 해설(병결 등)은 둘째 줄로
-                if all(x == 2 for x in rk): h_ = 0
-                body = (r'\hskip 1em plus 0.5em '.join(r'\mbox{%s}' % p for p in parts[:h_]) + r'\\' if h_ else '') + \
-                       r'\hskip 1.2em plus 0.5em '.join(r'\mbox{%s}' % p for p in parts[h_:])
-            else:
-                body = r'\mbox{%s}' % parts[0]
+            # 줄 나누기: 그 밖의 해설(순환·병결 등)을 먼저 한 줄에, 같은 구간·환승 안내(→)는 남은 줄(셋까지)에 폭을 고르게 나눠
+            isx = [re.sub(r'\s+', '', d.text()).startswith('→') for d in legend]
+            oth = [p for p, x in zip(parts, isx) if not x]
+            xs_ = [(p, est(d)) for p, d, x in zip(parts, legend, isx) if x]
+            lines_ = []
+            if oth: lines_.append(oth)
+            if xs_:
+                # 같은 구간(갑∼을)은 앞 줄들에 폭을 고르게, 환승(역)은 끝 줄에. 세 줄을 기본으로
+                sec = [(p, w) for (p, w), d in zip(xs_, [d for d, x in zip(legend, isx) if x]) if '∼' in d.text()]
+                jun = [(p, w) for (p, w), d in zip(xs_, [d for d, x in zip(legend, isx) if x]) if '∼' not in d.text()]
+                room = 3 - len(lines_)
+                k_ = max(1, min(room - (1 if jun else 0), len(sec)))
+                if sec:
+                    tgt = sum(w for _, w in sec) / k_
+                    cur_, acc, made = [], 0.0, 0
+                    for p, w in sec:
+                        if cur_ and made < k_ - 1 and acc + w / 2 > tgt:
+                            lines_.append(cur_); cur_, acc = [], 0.0; made += 1
+                        cur_.append(p); acc += w
+                    if cur_: lines_.append(cur_)
+                if jun: lines_.append([p for p, _ in jun])
+            body = r'\\'.join(r'\hskip 1.2em plus 0.5em '.join(r'\mbox{%s}' % p for p in ln) for ln in lines_)
             box = r'\parbox[b]{%.3fbp}{\fontsize{%.3fbp}{%.3fbp}\selectfont%s %s}' % (
                 W, sz * fs, sz * fs * 1.3, r'\raggedleft' if recto else r'\raggedright', body)
             if recto: tex.append(r'\put(%.3f,%.3f){%s}' % (x0, Y, box))
