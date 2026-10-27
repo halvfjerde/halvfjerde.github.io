@@ -98,6 +98,10 @@
   {
    "line": "동해선",
    "title": "KTX"
+  },
+  {
+   "line": "강릉선",
+   "title": "KTX"
   }
  ],
  "besideRight": [
@@ -106,10 +110,13 @@
    "kind": "pair",
    "down": "경북선",
    "up": "서해선",
-   "rest": [
-    4,
-    3
-   ]
+   "blank": 4
+  },
+  {
+   "line": "강릉선",
+   "with": "중부내륙선",
+   "ktx": true,
+   "blank": 4
   }
  ],
  "hsrLast": true

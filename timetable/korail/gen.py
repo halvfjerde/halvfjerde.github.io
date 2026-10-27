@@ -179,12 +179,12 @@ def vert(s):
 
 WEEK = '월화수목금토일'
 def day_range(s):
-    """이어지는 요일 셋 이상은 범위로: 금토일 → 금∼일, 월화수목금 → 월∼금 (주를 넘어가도: 금토일월 → 금∼월)"""
+    """이어지는 요일 넷 이상은 범위로: 월화수목금 → 월∼금 (주를 넘어가도: 금토일월 → 금∼월). 셋은 금토일 그대로"""
     if s.endswith(' 경유'): return s[:-3] + '/경유'        # 「중앙선/경유」 두 줄 세로쓰기
     if any(ch not in WEEK for ch in s): return s
     if len(s) >= 3:
         k = WEEK.index(s[0])
-        if all(WEEK[(k + i) % 7] == ch for i, ch in enumerate(s)): s = f'{s[0]}∼{s[-1]}'
+        if all(WEEK[(k + i) % 7] == ch for i, ch in enumerate(s)): s = f'{s[0]}∼{s[-1]}' if len(s) >= 4 else s   # 셋은 금토일
         else: s = '・'.join(s)
     elif len(s) == 2: s = '・'.join(s)                     # 금・토 (일본식 가운뎃점. 「금토」는 한 낱말처럼 읽힌다)
     else: s += '요일'                                      # 월요일 (「월 운행」은 달로도 읽힌다)
@@ -192,7 +192,7 @@ def day_range(s):
 
 def day_short(s):
     """운행일 행: 요일 한 글자씩 붙여(금토·월수금·월), 이어지는 셋 이상만 범위(월∼목)"""
-    if len(s) >= 3:
+    if len(s) >= 4:                                       # 이어지는 넷 이상만 범위 (셋은 금토일처럼 늘어놓는다)
         k = WEEK.index(s[0])
         if all(WEEK[(k + i) % 7] == ch for i, ch in enumerate(s)): return f'{s[0]}∼{s[-1]}'
     return s

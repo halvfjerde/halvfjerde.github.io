@@ -1968,6 +1968,10 @@ class Book:
         half = self.half_w()
         bwf, bwh = self.band_w(self.cw), self.band_w(half)
         # 하행 끝 몇 편은 제 폭만큼(빈 열 없이), 상행은 남은 폭을 앞에서부터 가득 채운다 (나눈 첫째에 빈 열이 남지 않게)
+        # 한 쪽에 좌우로 놓는 하행 끝·상행 앞의 행(줄)이 맞지 않으면 하지 않는다 (하행·상행 각각 펼침면으로)
+        if [round(x, 2) for x in Td.rowH] != [round(x, 2) for x in Tu.rowH]: return None
+        lnrows = lambda T: [r for r in range(T.nrow) if 'jtt-ln' in T.rowcls[r]]      # 구획선 자리
+        if lnrows(Td) != lnrows(Tu): return None
         _, Tcd, _ = self.blocks(Td); _, Tcu, _ = self.blocks(Tu)
         capd, capu = self.cap(Td, 'B', True), self.cap(Tu, 'B', True)
         fd, rd = divmod(len(Tcd), capd)
@@ -1994,6 +1998,8 @@ class Book:
         if any(j['h'] > PH + 0.01 for js in fulls for j in js): return None
         rems = [(Td, Tcd[fd * capd:], rows_d, self.piece_h(Td, rows_d, False, self.band_w(wd))),
                 (Tu, Tcu[:ku], rows_u, self.piece_h(Tu, rows_u, False, self.band_w(wu)))]
+        if abs(self.headband_h(Td, self.band_w(wd), '열넷째' if self.page_title else None)
+               - self.headband_h(Tu, self.band_w(wu), '열넷째' if self.page_title else None)) > 0.01: return None   # 띠 줄 수가 달라 행이 어긋난다
         side = {'T': Td, 'Tu': Tu, 'kind': 'side', 'parts': rems, 'h': max(r[3] for r in rems), 'trs': rems[0][1],
                 'rows': rems[0][2], 'notes': False, 'bw': bwh, 'nosplit': True, 'widths': [wd, wu]}
         return fulls[0] + [side] + fulls[1]
@@ -2245,13 +2251,13 @@ class Book:
                     n_ = max(len(a_), len(b_))
                     if a_:
                         pc_ = put(T, p_, a_, rd, y, False, hd); pc_['ncol'] = n_
-                        if bes and p_ == c + 1: pc_['fixw'] = bes[0]
+                        if bes and p_ == c + 1: pc_['fixw'], pc_['ncol'] = bes[0], bes[2]
                     if b_:
                         pc_ = put(Tu, p_, b_, ru, y + hd - fw, False, hu); pc_['ncol'] = n_
-                        if bes and p_ == c + 1: pc_['fixw'] = bes[0]
+                        if bes and p_ == c + 1: pc_['fixw'], pc_['ncol'] = bes[0], bes[2]
                 ys[c] = ys[c + 1] = y + h
                 if bes:                               # 오른쪽 면의 끝 몇 편 옆에 다음 노선을 위아래로
-                    wR, ys_ = bes; yy = y
+                    wR, ys_ = bes[:2]; yy = y
                     for Y, Yc, ry, hy in ys_:
                         put(Y, c + 1, Yc, ry, yy, False, hy, wR - fw, False, 'B', self.band_w(self.cw + fw - wR))
                         yy += hy - fw
@@ -2286,7 +2292,7 @@ class Book:
                 pr_ = put(T, c + 1, trs[kA:], rows, yb, notes, h)
                 ys[c] = ya + h; ys[c + 1] = yb + h
                 if bes:                               # 오른쪽 면의 끝 몇 편 옆에 다음 노선
-                    wR, ys_ = bes; pr_['fixw'] = wR; yy = yb
+                    wR, ys_ = bes[:2]; pr_['fixw'], pr_['ncol'] = wR, bes[2]; yy = yb
                     for Y, Yc, ry, hy in ys_:
                         put(Y, c + 1, Yc, ry, yy, False, hy, wR - fw, False, 'B', self.band_w(self.cw + fw - wR))
                         yy += hy - fw
@@ -2356,7 +2362,8 @@ class Book:
                 k = rest[:at + 1] + held + rest[at + 1:]
             if k: bunches.append(k)
         # hsrLast: 고속철도만 있는 표(경부고속철도·호남고속철도)는 책 끝으로 (노선마다 한 묶음)
-        hsr = lambda T: self.cfg.get('hsrLast', False) and self.is_ktx(T) and '고속철도' in T.title.text()
+        ktx_only = {T.line for T in tables} - {T.line for T in tables if not self.is_ktx(T)}     # KTX밖에 없는 노선 (강릉선·중부내륙선)
+        hsr = lambda T: self.cfg.get('hsrLast', False) and self.is_ktx(T) and ('고속철도' in T.title.text() or T.line in ktx_only)
         for T in tables:
             if self.cfg.get('ktxFirst', False) and self.is_ktx(T): continue
             if hsr(T): continue
@@ -2509,7 +2516,9 @@ class Book:
             if T.line in self.cfg.get('bandLeftLines', []) and self.is_ktx(T) and T.head is not None and not T.fold: T.band_left = True
         # besideRight: 펼침면 짝(하행 위·상행 아래)의 오른쪽 면 끝 몇 편 옆에 다음 노선의 하행·상행을 나란히 (그 노선의 한 쪽을 아낀다)
         for br in self.cfg.get('besideRight', []):
-            pick = lambda ln, d: [T for T in tables if T.line == ln and not self.is_ktx(T) and d in T.title.text()]
+            kx = br.get('ktx', False)            # KTX 표끼리 (KTX밖에 없는 노선)
+            pick = lambda ln, d: [T for T in tables if T.line == ln and self.is_ktx(T) == kx and d in T.title.text()]
+            blank = br.get('blank', 0)          # 끝 몇 편 뒤에 남길 빈 열 (표가 거기서 끝남을 보이게)
             if br.get('kind') == 'pair':
                 # 방향마다 펼침면 하나: 왼쪽 면 가득 + 오른쪽 면에 끝 몇 편(rest), 그 옆에 다른 노선의 하행·상행을 위아래로
                 lns = [br['line'], br['down'], br['up']]
@@ -2523,7 +2532,8 @@ class Book:
                     kL = len(Tc) - rest if rest else min(len(Tc) - 1, self.cap(T, 'L'))
                     rows = list(range(T.nrow)); h = self.piece_h(T, rows, False, bwf)
                     if kL < 1 or kL > self.cap(T, 'L', True) or h > PH + 0.01: break
-                    wR = self.fixed_w(T, 'R') + (len(Tc) - kL) * self.P0
+                    nR = len(Tc) - kL + blank
+                    wR = self.fixed_w(T, 'R') + nR * self.P0
                     wY = self.cw + fw - wR
                     ys_ = []
                     for Y in (pick(ln, '하행')[0], pick(ln, '상행')[0]):
@@ -2534,7 +2544,7 @@ class Book:
                         ys_.append((Y, Yc, ry, self.piece_h(Y, ry, False, self.band_w(wY))))
                     if len(ys_) != 2 or sum(q[3] for q in ys_) - fw > PH + 0.01: break
                     js_.append({'T': T, 'kind': 'pair', 'trs': Tc, 'kA': kL, 'rows': rows, 'h': h, 'notes': False, 'bw': bwf,
-                                'beside': (wR, ys_)})
+                                'beside': (wR, ys_, nR)})
                     ys_all += [q[0] for q in ys_]
                 if len(js_) != 2: continue
                 for T in [Td, Tu] + ys_all: T.custom_jobs = None; T.stack_with = None; T.side_with = None; T.stacked = False
@@ -2547,18 +2557,21 @@ class Book:
             sj = self.stack_jobs(Td, Tu)
             if not sj or len(sj) != 1 or sj[0]['kind'] != 'stack': continue
             da, db, rd, hd = sj[0]['d']; ua, ub, ru, hu = sj[0]['u']
-            wR = max(self.fixed_w(Td, 'R') + len(db) * self.P0, self.fixed_w(Tu, 'R') + len(ub) * self.P0)
-            bwf = self.band_w(self.cw)
             ys_ = []
-            for Y in (Yd, Yu):
-                _, Yc, _ = self.blocks(Y)
+            for b_ in range(blank, -1, -1):           # 빈 열은 들 만큼 (모자라면 줄인다)
+                nR = max(len(db), len(ub)) + b_
+                wR = max(self.fixed_w(Td, 'R'), self.fixed_w(Tu, 'R')) + nR * self.P0
                 wY = self.cw + fw - wR
-                if self.fixed_w(Y, 'B') + len(Yc) * self.P0 > wY + 0.01: break
-                ry = list(range(Y.nrow))
-                ys_.append((Y, Yc, ry, self.piece_h(Y, ry, False, self.band_w(wY))))
+                ys_ = []
+                for Y in (Yd, Yu):
+                    _, Yc, _ = self.blocks(Y)
+                    if self.fixed_w(Y, 'B') + len(Yc) * self.P0 > wY + 0.01: break
+                    ry = list(range(Y.nrow))
+                    ys_.append((Y, Yc, ry, self.piece_h(Y, ry, False, self.band_w(wY))))
+                if len(ys_) == 2: break
             if len(ys_) != 2 or ys_[0][3] + ys_[1][3] - fw > PH + 0.01: continue
             for T in (Td, Tu, Yd, Yu): T.custom_jobs = None; T.stack_with = None; T.side_with = None; T.stacked = False
-            Td.custom_jobs = [dict(sj[0], beside=(wR, ys_))]
+            Td.custom_jobs = [dict(sj[0], beside=(wR, ys_, nR))]
             Tu.stacked = Yd.stacked = Yu.stacked = True
         # tailWith: 노선의 KTX 하행·상행에 같은 노선의 작은 별표(수서 발착 병결 등)를 곁들여 한 흐름으로
         for tw in self.cfg.get('tailWith', []):
