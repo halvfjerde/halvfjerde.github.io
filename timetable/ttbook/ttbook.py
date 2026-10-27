@@ -682,8 +682,12 @@ def line_tex(line, W, halign, fs, inl, sqcenter=False):
     size = max(it[-1] if it[0] != 'obj' else it[4] for it in line)
     has_v = any(it[0] == 'obj' and len(it) > 5 for it in line)
     st = '' if has_v else strut(size, fs)
+    pad = 0.15 * size * fs                # 칸 양옆에 남길 여백: 넘치면 글자를 가로로 좁힌다
     if len(line) == 1 and line[0][0] == 'just':
         chars = line[0][1]
+        wj = sum(inl.wc.get(x, 1.0) for x in chars) * fs if inl else 0
+        if wj > W - 2 * pad and wj > 0:
+            return r'\hbox to %.3fbp{%s\hss\scalebox{%.3f}[1]{%s}\hss}' % (W, st, (W - 2 * pad) / wj, ''.join(chars))
         if len(chars) <= 1:
             return r'\hbox to %.3fbp{%s\hss %s\hss}' % (W, st, ''.join(chars))
         return r'\hbox to %.3fbp{%s%s}' % (W, st, r'\hfill '.join(chars))
@@ -697,6 +701,9 @@ def line_tex(line, W, halign, fs, inl, sqcenter=False):
             al = r'\hss' if sqcenter else r'\hss'
             body.append(r'\hbox to %.3fbp{%s\scalebox{%.3f}[1]{%s}%s}' % (w2, al, it[2], it[1], r'\hss' if sqcenter else ''))
     b = ''.join(body)
+    wl = inl.line_w(line) * fs if inl else 0
+    if wl > W - 2 * pad and wl > 0:
+        b = r'\scalebox{%.3f}[1]{%s}' % ((W - 2 * pad) / wl, b)
     if halign == 'l': return r'\hbox to %.3fbp{%s%s\hss}' % (W, st, b)
     if halign == 'r': return r'\hbox to %.3fbp{%s\hss %s}' % (W, st, b)
     return r'\hbox to %.3fbp{%s\hss %s\hss}' % (W, st, b)
@@ -822,7 +829,7 @@ class Book:
         fs = self.fs
         base = Ctx('DM', 1.0)
         # 운행일(비고) 행: 세로쓰기 대신 작은 글자로 가로로 (한 줄에 세 자까지, 고르게 나눠 여러 줄)
-        dayrows = {cl.r for cl in T.cells if cl.c == 0 and re.sub(r'\s', '', cl.node.text()) in ('운행일', '비고')}
+        dayrows = {cl.r for cl in T.cells if cl.c == 0 and re.sub(r'\s', '', cl.node.text()) in ('운행일', '운행일주의', '비고')}
         T.dayrow = max(dayrows) if dayrows else None
         for cl in T.cells:             # 비고 행: 내용은 위에 붙이고(쪽의 남는 자리만큼 늘어난다), 이름 칸은 가운데
             if cl.r in dayrows:
@@ -1457,7 +1464,8 @@ class Book:
         dirs = dirs or {}
         def dmark(key):
             d = dirs.get(key, set())
-            return [('〔%s〕' % next(iter(d)), cd)] if len(d) == 1 and '' not in d else []
+            if len(d) != 1 or '' in d: return []
+            return [({'하행': '↓', '상행': '↑'}[next(iter(d))], c)]     # 쪽에 한 방향만: 화살표
         # KTX 표의 노선은 「KTX 경부선·호남선」으로 묶는다. 쪽에 한 방향만 실렸으면 노선 이름 뒤에 그 방향을
         segs_all = []
         ktx = [(k, ln) for k, ln in lines if k == 'KTX']
@@ -1800,6 +1808,16 @@ class Book:
             T, trs, rows, h, notes = job['T'], job['trs'], job['rows'], job['h'], job['notes']
             if job['kind'] == 'side':
                 y = top(c)
+                # 왼쪽 면에서 두 면의 높이가 같으면: 하행은 왼쪽 면, 상행은 오른쪽 면에 (펼침면 좌우로)
+                if c % 2 == 0 and abs(top(c) - top(c + 1)) < 0.01:
+                    bwf = self.band_w(self.cw)
+                    hs_ = [self.piece_h(T_, rows_, False, bwf) for T_, trs_, rows_, h_ in job['parts']]
+                    hf = max(hs_)
+                    if y + hf <= PH + 0.01:
+                        for k_, (T_, trs_, rows_, h_) in enumerate(job['parts']):
+                            put(T_, c + k_, trs_, rows_, y, False, hf, 0.0, False, 'B', bwf)
+                        ys[c] = ys[c + 1] = y + hf
+                        return True
                 if y + h > PH + 0.01: return False
                 half = self.half_w()
                 for k_, (T_, trs_, rows_, h_) in enumerate(job['parts']):
@@ -1982,7 +2000,7 @@ class Book:
         # 쪽 아래 남는 자리: 단(같은 높이에서 시작하는 조각들)마다 비고 행을 늘여 채운다 (다른 행 높이는 그대로).
         # 낮은 단부터 같은 높이가 되도록 나눠 준다(두 단이면 반반에 가깝게). 펼침면에 걸친 단은 두 쪽에서 같은 만큼
         if self.cfg.get('stretchRemarks', True):
-            smax = self.cfg.get('stretchMax', 12) * self.R
+            smax = self.cfg.get('stretchMax', 999) * self.R
             def tiers(pg):
                 ys_ = sorted({round(q['y'], 2) for q in pg['pieces']})
                 return [[q for q in pg['pieces'] if round(q['y'], 2) == y_] for y_ in ys_]

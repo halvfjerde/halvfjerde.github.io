@@ -85,13 +85,13 @@ KIND = {'KTX': '', 'KTX-산천': '산천', 'KTX산천': '산천', 'KTX_산천': 
 LBL = {  # 머리 이름 (한국어, 국한문)
     'fr': ('시발역', '始發驛'), 'no': ('열차번호', '列車番號'), 'kind': ('등급', '等級'), 'car': ('차종', '車種'),
     'to': ('종착역', '終着驛'), 'day': ('비고', '備考'),   # 운행일 등. 인쇄에서는 쪽의 남는 자리를 이 행이 받는다
-    'days': ('운행일', '運行日'),                         # 기호(◆◇)로 적는 운행일: 한 줄. 그 밑에 빈 비고 행
+    'days': ('운행일주의', '運行日注意'),                         # 기호(◆◇)로 적는 운행일: 한 줄. 그 밑에 빈 비고 행
 }
 def lbl(k): return LBL[k][1 if MIX else 0]
 
 # 역 이름 고침 (위키에서 고친 것): 원본 이름 → 표에 쓸 이름. 한자도 함께
 RENAME = {'판교(경기)': '판교', '진부(오대산)': '진부'}
-RENAME_HANJA = {'진부': '珍富'}
+RENAME_HANJA = {'진부': '珍富', '여수엑스포': '麗水엑스포', '민둥산': '민둥山'}   # 반만 한자인 이름은 한자 부분만
 def clean_name(s):
     s = re.sub(r'\((출발|도착)\)$', '', s)
     return RENAME.get(s, s)
@@ -398,7 +398,7 @@ class Table:
                 used = {tr['note'] for tr in self.trains}
                 if '월화수목금' in used: dn.append('◆ 평일(월∼금) 운행')
                 if '토일' in used: dn.append('◇ 토·일 운행')
-            dn.append(('운행일' if self.daysym else '비고') + ' 무표시는 매일 운행')
+            dn.append(('운행일주의' if self.daysym else '비고') + ' 무표시는 매일 운행')
             notes.append(', '.join(dn))
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
             notes.append('着発 역의 빈 도착 시각은 자료 없음')
