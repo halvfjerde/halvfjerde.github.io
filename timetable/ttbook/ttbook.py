@@ -3435,98 +3435,121 @@ class Book:
         self.plan_air()
         self.plan_back()
 
-    # ── 항공: 편이 행인 목록 (공항 쌍마다 가는 편·오는 편), 세 단으로 흘려 짠다 ──
+    # ── 항공 (JTB 국내선 꼴): 공항 쌍마다 한 덩이 — 머리(번호·쌍·운임), 왼쪽 가는 편·오른쪽 오는 편, 밑에 ※ 주. 두 단으로 흘려 짠다 ──
     def plan_air(self):
         self.air = []
         f = self.cfg.get('air')
         if not f: return
         data = json.load(open(os.path.join(self.base, f), encoding='utf-8'))
-        R = self.R; fs = self.fs
-        NC = 3; gut = 2 * fs
+        R, fs = self.R, self.fs
+        NC = 2; gut = 1.5 * fs
         colw = (self.cw - (NC - 1) * gut) / NC
-        th, rh = 2 * R, R                      # 쌍 머리 행, 편 행
-        cap = self.ch
+        TH, SH = 2 * R, R                                   # 머리 행, 칸 이름 행
+        pad = 0.5 * fs
+        nw = colw - 2 * pad                                 # 주의 글줄 폭
+        wd = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.85)), len(t)) * fs
+        def wrap(text):                                     # 주: 「・」·띄어쓰기에서 (괄호 속은 날 뒤에서만)
+            toks = re.findall(r'(?:\([^)]*\)|[^・ ])+[・ ]?', text)
+            out, cur = [], ''
+            for t_ in toks:
+                if cur and wd((cur + t_).rstrip()) > nw: out.append(cur.rstrip()); cur = '　' + t_
+                else: cur += t_
+            out.append(cur.rstrip())
+            return out
         pages, cols, col, y = [], [], [], 0.0
         def newcol():
             nonlocal col, y, cols
             cols.append(col); col, y = [], 0.0
             if len(cols) == NC: pages.append(cols); cols = []
-        cN, cT = 4.6 * fs, 2.6 * fs                      # 편명 칸, 시각 칸 폭
-        avail = colw - cN - 2 * cT - 0.8 * fs              # 운항일 칸 폭
-        wd = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.9)), len(t)) * fs
-        def wrap(lab):                                     # 운항일이 길면 「・」·띄어쓰기에서 줄을 바꾼다
-            if not lab: return ['']
-            # 괄호(그날의 다른 시각)는 날 뒤에서만 끊는다: 「(월・금 / 645발 800착)」. 날이 한 줄보다 길 때만 날 사이에서도
-            toks, pos = [], 0
-            sp_ = lambda x: re.findall(r'[^・ ]+[・ ]?', x)
-            for m_ in re.finditer(r'\([^)]*\)', lab):
-                toks += sp_(lab[pos:m_.start()])
-                g_ = m_.group(0); k_ = g_.find(' {')
-                d_, t_ = (g_[:k_ + 1], g_[k_ + 1:]) if k_ > 0 else ('', g_)
-                if d_: toks += sp_(d_) if wd(d_.rstrip()) > avail else [d_]
-                toks.append(t_ + ' ')
-                pos = m_.end()
-            toks += sp_(lab[pos:])
-            out, cur = [], ''
-            for t_ in toks:
-                if cur and wd((cur + t_).rstrip()) > avail: out.append(cur.rstrip()); cur = t_
-                else: cur += t_
-            out.append(cur.rstrip())
-            return out
-        for bl in data['blocks']:
-            rows = [(r[0], r[1], r[2], wrap(r[3])) for r in bl['rows']]
+        for P in data['pairs']:
+            n = max(len(P['out']), len(P['in']))
+            items = [('r', k) for k in range(n)]
+            for nos, lab in P['notes']:
+                items += [('n', ln) for ln in wrap('※%s %s' % ('・'.join(nos), lab))]
             i = 0
-            while i < len(rows):
+            while i < len(items):
                 gap = R if col else 0.0
-                avail_h = cap - y - gap - th
-                n, h = 0, 0.0
-                while i + n < len(rows) and h + len(rows[i + n][3]) * rh <= avail_h + 1e-6:
-                    h += len(rows[i + n][3]) * rh; n += 1
-                left = len(rows) - i
-                if n < min(3, left): newcol(); continue
-                if left - n in (1, 2) and n > 3: n = left - 3       # 끝에 한두 편만 넘어가지 않게
-                col.append(('t', bl['title'], y + gap)); y += gap + th
-                for r in rows[i:i + n]:
-                    col.append(('r', r, y)); y += len(r[3]) * rh
-                i += n
-                if i < len(rows): newcol()
+                head = TH + (SH if items[i][0] == 'r' else 0)
+                room = int((self.ch - y - gap - head - pad) / R + 1e-6)
+                left = len(items) - i
+                if room < min(3, left): newcol(); continue
+                k = min(room, left)
+                if left - k in (1, 2) and k > 3: k = left - 3
+                col.append({'P': P, 'y': y + gap, 'items': items[i:i + k], 'first': i == 0})
+                y += gap + head + k * R + pad
+                i += k
+                if i < len(items): newcol()
         if col: newcol()
         if cols: pages.append(cols)
-        self._air = (colw, gut, th, rh, NC)
+        nos_ = [r[0] for P in data['pairs'] for L in (P['out'], P['in']) for r in L]
+        self._air_nw = max([self.inl.wc.get(self.inl.run(x, Ctx('M', 1.0)), len(x)) * fs for x in nos_] + [3 * fs])
+        self._air = (colw, gut, TH, SH, pad)
         for i, p in enumerate(pages):
             self.air.append(p); self.pages.append({'pieces': [], 'lines': [], 'air': i})
 
     def air_page(self, k, x0, recto):
-        fs, H = self.fs, self.H
-        colw, gut, th, rh, NC = self._air
-        tex, rects = [], []
+        fs, H, R = self.fs, self.H, self.R
+        colw, gut, TH, SH, pad = self._air
+        tex, rects, ops = [], [], []
         y0 = self.mt
-        wd = lambda t: self.inl.wc.get(t, 1.0) * fs
-        cN, cT = 4.6 * fs, 2.6 * fs                      # 편명 칸, 시각 칸 폭
+        hw = colw / 2
+        cT, cA, cM = 2.3 * fs, 1.1 * fs, 0.9 * fs            # 시각 칸, 화살표 칸, ※ 칸
+        room_ = hw - 2 * pad - 2 * cT - cA - cM             # 편명에 쓸 폭: 가장 긴 편명이 넘치면 가로로 좁힌다
+        hsN = min(1.0, (room_ - 0.3 * fs) / self._air_nw)
+        cN = cM + min(room_, self._air_nw + 0.3 * fs)
         hmf = lambda t: str(int(t[:2])) + t[2:]
+        rgb0 = '0 0 0'
+        def seg(text, size):                                # {…}: 다른 시각은 표 글꼴
+            return ''.join(self.inl.run(p_, Ctx('DM' if k_ % 2 else 'M', size)) for k_, p_ in enumerate(re.split(r'[{}]', text)) if p_)
         for ci, col in enumerate(self.air[k]):
             xx = x0 + ci * (colw + gut)
-            n_ = 0
-            for it in col:
-                if it[0] == 't':
-                    _, title, yy = it
-                    tex.append(self.put_box(xx, y0 + yy, colw, th, self.inl.run(title, Ctx('GB', 1.1)), 'l', 'm'))
-                    rects.append(('h', xx, xx + colw, y0 + yy + th, 2))
-                    n_ = 0
-                    continue
-                _, (no, t, a, labs), yy = it
-                Y = y0 + yy
-                tex.append(self.put_box(xx, Y, cN, rh, self.inl.run(no, Ctx('M', 1.0)), 'l', 'm'))      # 편명은 본문 글꼴 (DiaPro 는 로마자 둘을 한 글자로 묶는다)
-                tex.append(self.put_box(xx + cN, Y, cT, rh, self.inl.run(hmf(t), Ctx('DM', 1.0)), 'r', 'm'))
-                tex.append(self.put_box(xx + cN + cT, Y, cT, rh, self.inl.run(hmf(a), Ctx('DM', 1.0)), 'r', 'm'))
-                for li, lab in enumerate(labs):
-                    # {…}: 본디와 다른 시각은 표 글꼴(DiaPro)로
-                    body_ = ''.join(self.inl.run(p_, Ctx('DM' if k_ % 2 else 'M', 0.9)) for k_, p_ in enumerate(re.split(r'[{}]', lab)) if p_)
-                    if lab: tex.append(self.put_box(xx + cN + 2 * cT + 0.8 * fs, Y + li * rh, colw - cN - 2 * cT - 0.8 * fs, rh, body_, 'l', 'm'))
-                n_ += 1
-                if n_ % 5 == 0: rects.append(('h', xx, xx + colw, Y + len(labs) * rh, 1))
+            for pc in col:
+                P = pc['P']; Y = y0 + pc['y']
+                # 머리: 검은 바탕 흰 번호, 공항 쌍, 오른쪽에 일반석 운임
+                bt = self.inl.run(str(P['no']), Ctx('GB', 1.0, 'FFFFFF'))
+                bw = max(1.8 * fs, self.inl.wc.get(bt, 1) * fs + 0.8 * fs)
+                ops.append('q %s rg %.3f %.3f %.3f %.3f re f Q' % (rgb0, xx, H - Y - TH + 0.35 * R, bw, TH - 0.7 * R))
+                tex.append(self.put_box(xx, Y, bw, TH, bt, 'c', 'm'))
+                tex.append(self.put_box(xx + bw + 0.6 * fs, Y, colw, TH, self.inl.run('%s ― %s' % (P['a'], P['b']), Ctx('GB', 1.15)), 'l', 'm'))
+                if P.get('fare'):
+                    a_, b_ = P['fare']
+                    ft = ('{:,}'.format(a_) if a_ == b_ else '{:,}∼{:,}'.format(a_, b_)) + '원'
+                    tex.append(self.put_box(xx, Y, colw - pad, TH, self.inl.run(ft, Ctx('M', 0.85)), 'r', 'm'))
+                yy = Y + TH
+                rects.append(('h', xx, xx + colw, yy, 2))
+                rows = [it for it in pc['items'] if it[0] == 'r']
+                if rows:
+                    for side, (o, d) in enumerate(((P['a'], P['b']), (P['b'], P['a']))):
+                        hx = xx + side * hw + pad
+                        lab = Ctx('G', 0.8)
+                        tex.append(self.put_box(hx, yy, cN, SH, self.inl.run('편명', lab), 'l', 'm'))
+                        tex.append(self.put_box(hx + cN, yy, cT, SH, self.inl.run(o, lab), 'r', 'm'))
+                        tex.append(self.put_box(hx + cN + cT + cA, yy, cT, SH, self.inl.run(d, lab), 'r', 'm'))
+                    yy += SH
+                    rects.append(('h', xx, xx + colw, yy, 1))
+                    r0 = yy
+                    for _, r_ in rows:
+                        for side, L in enumerate((P['out'], P['in'])):
+                            if r_ >= len(L): continue
+                            no, t, a, lab_ = L[r_]
+                            hx = xx + side * hw + pad
+                            if lab_: tex.append(self.put_box(hx, yy, cM, R, self.inl.run('※', Ctx('M', 0.8)), 'l', 'm'))
+                            tex.append(self.put_box(hx + cM, yy, cN - cM, R, self.inl.run(no, Ctx('M', 1.0).but(hscale=hsN)), 'l', 'm'))
+                            tex.append(self.put_box(hx + cN, yy, cT, R, self.inl.run(hmf(t), Ctx('DM', 1.0)), 'r', 'm'))
+                            tex.append(self.put_box(hx + cN + cT, yy, cA, R, self.inl.run('→', Ctx('M', 0.8)), 'c', 'm'))
+                            tex.append(self.put_box(hx + cN + cT + cA, yy, cT, R, self.inl.run(hmf(a), Ctx('DM', 1.0)), 'r', 'm'))
+                        yy += R
+                    rects.append(('v', xx + hw, r0 - SH, yy, 1))
+                notes = [it for it in pc['items'] if it[0] == 'n']
+                if notes:
+                    if rows: rects.append(('h', xx, xx + colw, yy, 1))
+                    for _, ln in notes:
+                        tex.append(self.put_box(xx + pad, yy, colw - 2 * pad, R, seg(ln, 0.85), 'l', 'm'))
+                        yy += R
+                yy += pad
+                rects.append(('box', xx, Y, xx + colw, yy, self.rw[1]))
         tex += self.page_side_title(recto, [('', '항공')])
-        return tex, self.pdf_ops(rects) if rects else ''
+        return tex, ' '.join(ops) + ' ' + (self.pdf_ops(rects) if rects else '')
 
     # ── 책 뒤: 역명 색인과 판권 ──
     def station_pages(self, first):

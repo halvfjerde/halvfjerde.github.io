@@ -45,7 +45,7 @@ with cf.ThreadPoolExecutor(4) as ex:
         if r is None: miss.append((a, b, d)); continue
         for f in r:
             out['flights'].append({'dep': a, 'arr': b, 'day': d, 'no': f.get('vihicleId'), 'air': f.get('airlineNm'),
-                                   't': str(f['depPlandTime'])[8:12], 'a': str(f['arrPlandTime'])[8:12]})
+                                   't': str(f['depPlandTime'])[8:12], 'a': str(f['arrPlandTime'])[8:12], 'c': f.get('economyCharge')})
 out['missing'] = miss
 print('flights', len(out['flights']), 'missing', len(miss), file=sys.stderr)
 json.dump(out, sys.stdout, ensure_ascii=False)

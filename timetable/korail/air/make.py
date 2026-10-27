@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """flights-YYYYMM.json(fetch.py) → 책에 싣는 항공 목록 air.json: 공항 쌍마다 가는 편·오는 편, 편마다 운항일
 python3 make.py flights-202611.json > air.json"""
-import json, sys, collections, datetime
+import json, sys, collections, datetime, re
 d = json.load(open(sys.argv[1]))
 ym = d['month']; y, m = int(ym[:4]), int(ym[4:])
 import calendar
@@ -44,44 +44,50 @@ fl = collections.defaultdict(lambda: collections.defaultdict(set))     # (dep,ar
 for f in d['flights']:
     fl[(f['dep'], f['arr'])][(f['no'], f['t'], f['a'])].add(int(f['day'][6:]))
 aps = d['airports']
-# 공항 쌍: 편이 많은 차례
-pairs = {}
-for (a, b), v in fl.items():
-    k = tuple(sorted((a, b)))
-    pairs[k] = pairs.get(k, 0) + sum(len(x) for x in v.values())
+fare = collections.defaultdict(list)
+for f in d['flights']:
+    if f.get('c'): fare[tuple(sorted((f['dep'], f['arr'])))].append(f['c'])
+def rows_of(v):
+    """한 방향의 편 [(편명, 발, 착, 운항일)] (같은 편명이 15분 안쪽으로 시각만 바뀌면 한 줄, 다른 시각은 괄호에)"""
+    mm = lambda x: int(x[:2]) * 60 + int(x[2:])
+    hh_ = lambda x: str(int(x[:2])) + x[2:]
+    byno = collections.defaultdict(list)
+    for (no, t, aa), ds in v.items(): byno[no].append((t, aa, ds))
+    rows = []
+    for no, vs in byno.items():
+        vs.sort(key=lambda x: -len(x[2]))
+        groups = []
+        for t, aa, ds in vs:
+            g = next((g for g in groups if abs(g[0] - mm(t)) <= 15), None)
+            if g: g[1].append((t, aa, ds))
+            else: groups.append((mm(t), [(t, aa, ds)]))
+        for _, gs in groups:
+            t, aa, ds = gs[0]
+            lab = label(set().union(*(x[2] for x in gs)))
+            for t2, a2, d2 in gs[1:]:
+                same_dur = (mm(a2) - mm(t2)) % 1440 == (mm(aa) - mm(t)) % 1440
+                lab = (lab + ' ' if lab else '') + '(%s{%s}발%s)' % ((label(d2) + ' ') if label(d2) else '', hh_(t2), '' if same_dur else ' {%s}착' % hh_(a2))
+            rows.append((no, t, aa, lab.strip()))
+    rows.sort(key=lambda r: (r[1], r[0]))
+    return rows
+def notes_of(rows):
+    """운항일이 붙은 편: 같은 운항일끼리 모아 「※편명・편명 운항일」"""
+    by = collections.OrderedDict()
+    for no, t, aa, lab in rows:
+        if lab: by.setdefault(lab, []).append(no)
+    # 다른 시각 하나뿐이면 괄호 없이: 「※KE1122 수 650발」
+    return [(nos, re.sub(r'^\((.*)\)$', r'\1', lab) if lab.count('(') == 1 and lab.startswith('(') else lab) for lab, nos in by.items()]
+# 공항 쌍: 편이 많은 차례, 쌍 안에서는 편이 많은 공항에서 나가는 쪽을 왼쪽에
+HUB = ['김포', '인천', '김해', '대구', '청주', '광주', '울산', '여수', '사천', '포항', '군산', '원주', '양양', '무안', '제주']   # 앞의 공항이 왼쪽(가는 편)
+rank = lambda ap: HUB.index(short(aps[ap])) if short(aps[ap]) in HUB else len(HUB) - 1
+pairs = collections.Counter()
+for (a, b), v in fl.items(): pairs[tuple(sorted((a, b)))] += sum(len(x) for x in v.values())
 blocks = []
-for (a, b), _ in sorted(pairs.items(), key=lambda x: -x[1]):
-    # 방향: 김포·김해 등 큰 공항에서 나가는 쪽을 먼저 (편 많은 공항 먼저)
-    tot = collections.Counter()
-    for (p, q), v in fl.items():
-        tot[p] += len(v)
-    first, second = (a, b) if tot[a] >= tot[b] else (b, a)
-    for p, q in ((first, second), (second, first)):
-        v = fl.get((p, q))
-        if not v: continue
-        byno = collections.defaultdict(list)
-        for (no, t, aa), ds in v.items(): byno[no].append((t, aa, ds))
-        rows = []
-        for no, vs in byno.items():
-            vs.sort(key=lambda x: -len(x[2]))
-            groups = []                     # 15분 안쪽으로 다른 시각은 한 편으로
-            for t, aa, ds in vs:
-                tm = int(t[:2]) * 60 + int(t[2:])
-                g = next((g for g in groups if abs(g[0] - tm) <= 15), None)
-                if g: g[2].append((t, aa, ds))
-                else: groups.append((tm, None, [(t, aa, ds)]))
-            for _, _, gs in groups:
-                t, aa, ds = gs[0]
-                alls = set().union(*(x[2] for x in gs))
-                lab = label(alls)
-                for t2, a2, d2 in gs[1:]:
-                    mm = lambda x: int(x[:2]) * 60 + int(x[2:])
-                    hh_ = lambda x: str(int(x[:2])) + x[2:]
-                    # 다른 시각은 괄호에 그날과 함께: 「(수 650발)」, 도착이 출발만큼 옮겨지지 않았으면 「(수 650발 805착)」 ({…}: 책에서 표 글꼴로)
-                    same_dur = (mm(a2) - mm(t2)) % 1440 == (mm(aa) - mm(t)) % 1440
-                    lab = (lab + ' ' if lab else '') + '(%s{%s}발%s)' % ((label(d2) + ' ') if label(d2) else '', hh_(t2), '' if same_dur else ' {%s}착' % hh_(a2))
-                rows.append((no, t, aa, lab.strip()))
-        rows.sort(key=lambda r: (r[1], r[0]))
-        blocks.append({'title': '%s → %s' % (short(aps[p]), short(aps[q])), 'rows': rows})
-json.dump({'month': ym, 'blocks': blocks}, sys.stdout, ensure_ascii=False, indent=0)
-print('blocks', len(blocks), 'rows', sum(len(b['rows']) for b in blocks), file=sys.stderr)
+for n, ((a, b), _) in enumerate(pairs.most_common(), 1):
+    first, second = (a, b) if rank(a) <= rank(b) else (b, a)
+    out_ = rows_of(fl.get((first, second), {})); in_ = rows_of(fl.get((second, first), {}))
+    fs_ = fare.get((a, b), [])
+    blocks.append({'no': n, 'a': short(aps[first]), 'b': short(aps[second]), 'out': out_, 'in': in_,
+                   'notes': notes_of(out_) + notes_of(in_), 'fare': [min(fs_), max(fs_)] if fs_ else None})
+json.dump({'month': ym, 'pairs': blocks}, sys.stdout, ensure_ascii=False, indent=0)
+print('pairs', len(blocks), 'rows', sum(len(b['out']) + len(b['in']) for b in blocks), 'notes', sum(len(b['notes']) for b in blocks), file=sys.stderr)
