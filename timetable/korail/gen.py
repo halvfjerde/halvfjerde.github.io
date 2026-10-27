@@ -109,7 +109,7 @@ HEADS = {
 # 갈래(서로 다른 길로 가는 구간). 묶음마다 [기본 갈래, 다른 갈래, …]. 빈 기본 갈래는 막다른 지선
 HS_SPLIT = [['광명'], ['영등포', '수원'], ['수서', '동탄', '평택지제']]
 BRANCH = {
-    ('ktx', '경부선'): [HS_SPLIT, [['경주', '울산'], ['경산', '밀양', '물금', '구포']], [[], ['포항']], [['울산'], ['포항']]],
+    ('ktx', '경부선'): [HS_SPLIT, [['경주', '울산'], ['경산', '밀양', '물금', '구포']], [[], ['포항']]],
     ('ktx', '경전선'): [HS_SPLIT],
     ('ktx', '동해선(서울~포항)'): [HS_SPLIT],
     ('ktx', '호남선'): [HS_SPLIT, [['공주'], ['서대전', '계룡', '논산']]],
@@ -316,6 +316,8 @@ class Table:
                 used = [k for k, grp in enumerate(alt) if any(i in S for i in grp)] or [0]
                 for k, grp in enumerate(alt):
                     if k not in used: off |= set(grp)
+            for sp_, offs_ in SPUR_OFF.get((self.cat, self.line), {}).items():
+                if sp_ in self.st and self.st.index(sp_) in S: off |= {self.st.index(x) for x in offs_ if x in self.st}
             for sp_ in DEAD_SPUR.get((self.cat, self.line), ()):     # 막다른 지선 역(포항)에 가지 않는 열차: ‥
                 if sp_ in self.st and self.st.index(sp_) not in S: dead.add(self.st.index(sp_))
             idx = sorted(S)
@@ -812,7 +814,8 @@ def share(ts):
 HSR_NAME = {('ktx', '경부선'): '경부고속철도', ('ktx', '호남선'): '호남고속철도'}
 # 고속선에서 갈라지는 KTX: 고속철도 표에 「…선 경유」로 빠지는 열차로 넣고, 그 노선 표는 갈림역부터만
 HSR_SPUR = {('ktx', '경부선'): [('울산', '포항')]}      # 고속철도 표에 넣는 막다른 지선 역: (이 역 다음(하행 차례), 지선 끝 역). 서울–포항 KTX 를 끝까지
-DEAD_SPUR = {('ktx', '경부선'): {'포항'}}                # 그 역에 가지 않는 열차는 ‥ (║ 아님)
+DEAD_SPUR = {}                                          # 그 역에 가지 않는 열차는 ‥ (║ 아님). 지금은 없음 (지나가는 열차는 ║ 미경유)
+SPUR_OFF = {('ktx', '경부선'): {'포항': ['울산']}}        # 지선 역에 서는 열차는 이 역들을 지나지 않는다(║): 포항 열차는 경주에서 갈라져 울산 미경유
 HSR_GUESTS = {('ktx', '경부선'): [('ktx', '경전선'), ('ktx', '동해선(서울~포항)')], ('ktx', '호남선'): [('ktx', '전라선')]}
 BRANCH_AT = {('ktx', '경전선'): '동대구', ('ktx', '전라선'): '익산', ('ktx', '동해선(서울~포항)'): '동대구'}
 
