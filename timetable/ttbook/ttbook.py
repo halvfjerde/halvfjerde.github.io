@@ -1921,8 +1921,9 @@ class Book:
                 if self.fixed_w(X, 'B') + len(trs) * self.P0 * self.squeeze > half + 0.01: return None
                 rx = list(range(X.nrow))
                 parts.append((X, trs, rx, self.piece_h(X, rx, False, bwh)))
+            # 본표의 끝 몇 편: 앞 쪽과 펼침면이면(오른쪽 면) 한 표로 보고 역명은 오른쪽에
             jobs.append({'T': T, 'Tu': S, 'kind': 'side', 'parts': parts, 'h': max(q[3] for q in parts), 'trs': parts[0][1],
-                         'rows': parts[0][2], 'notes': False, 'bw': bwh, 'nosplit': True})
+                         'rows': parts[0][2], 'notes': False, 'bw': bwh, 'nosplit': True, 'contR': {0}})
         return jobs
 
     def rule_jobs(self, Td, Tu):
@@ -2095,7 +2096,8 @@ class Book:
                 if y + h > PH + 0.01: return False
                 half = self.half_w()
                 for k_, (T_, trs_, rows_, h_) in enumerate(job['parts']):
-                    pc_ = put(T_, c, trs_, rows_, y, False, h_, k_ * (half - fw), True, 'B', job['bw'])
+                    sd = 'R' if k_ in job.get('contR', ()) and c % 2 == 1 and any(q['T'] is T_ for q in page(c - 1)['pieces']) else 'B'
+                    pc_ = put(T_, c, trs_, rows_, y, False, h_, k_ * (half - fw), True, sd, job['bw'])
                     pc_['fixw'] = half
                 ys[c] = y + h
                 return True
