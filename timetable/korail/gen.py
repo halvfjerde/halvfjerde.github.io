@@ -30,6 +30,8 @@ BOOK = [
     ('목포보성선', [('gen', '목포보성선', None)]),
     ('교외선',     [('gen', '교외선', None)]),
 ]
+# 서는 열차가 없어도 남길 역 (하행·상행의 역을 맞춰 나란히 놓을 때 행이 어긋나지 않게. 모든 열차 통과로)
+KEEP_STATIONS = {('gen', '목포보성선'): {'조성'}}
 # 수서를 드나드는 열차(옛 SRT)를 따로 표로 내는 KTX 노선 (그 열차가 3분의 1 남짓 되는 곳)
 SPLIT_SUSEO = {('ktx', '경부선'), ('ktx', '호남선')}
 # 노선 띠에 적을 역(하행 차례. 상행은 뒤집는다). 없으면 자동
@@ -150,7 +152,8 @@ class Table:
                 times[i] += add; prev = times[i]
             trains.append(dict(tr, times=times))
         # 아무 열차도 서지 않는 역은 뺀다
-        keep = [i for i in range(len(st)) if any(isinstance(tr['times'][i], int) for tr in trains)]
+        kept = KEEP_STATIONS.get((self.cat, self.line), set())
+        keep = [i for i in range(len(st)) if st[i] in kept or any(isinstance(tr['times'][i], int) for tr in trains)]
         self.st = [st[i] for i in keep]
         for tr in trains: tr['times'] = [tr['times'][i] for i in keep]
         self.trains = trains

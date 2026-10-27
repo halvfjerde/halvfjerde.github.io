@@ -522,6 +522,7 @@ class Inline:
             c2 = ctx
             for cl, f in FONT_OF_CLASS.items():
                 if cl in cls: c2 = c2.but(font=f)
+            if 'jtt-lit' in cls and ctx.font in ('DGB', 'GB'): c2 = c2.but(font='GB')   # 굵은 글 안의 로마자(KTX 등)는 고딕 굵게 그대로
             if 'jtt-j' in cls:
                 chars = [self.run(x.text(), c2) for x in k.kids if isinstance(x, Node)]
                 lines[-1].append(('just', chars, c2.size)); continue
