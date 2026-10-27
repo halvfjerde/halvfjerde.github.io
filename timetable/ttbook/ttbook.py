@@ -618,10 +618,14 @@ class Inline:
                 if ch in VROT:
                     t, l = self.vform(ch, c, em)
                     rows.append(t); h += l; i += 1; continue
-                if ch.isdigit():                 # 숫자(열차번호 등): 세로로 한 자씩 세워 명조로
-                    rows.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (
-                        em, -0.1 * em, 0.78 * em, self.run(ch, c.but(font='M'), True)))
-                    h += 0.78; i += 1; continue
+                if ch.isdigit():                 # 숫자(열차번호 등): 명조로, 세로쓰기 안에서 글자를 눕혀(오른쪽으로 90°) 한 덩어리로
+                    j = i
+                    while j < len(txt) and txt[j].isdigit(): j += 1
+                    run = txt[i:j]
+                    wl = 0.52 * len(run) + 0.1
+                    rows.append(r'\kern%.3fbp\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (
+                        0.05 * em, em, self.run(run, c.but(font='M'))))
+                    h += wl; i = j; continue
                 if is_latin(ch):
                     j = i
                     while j < len(txt) and is_latin(txt[j]): j += 1
