@@ -1245,7 +1245,21 @@ class Book:
             plan = [(L[0], C[0], R[0], max(L[2], C[2], R[2], 1.25))]
         else:
             plan = []
-            if L[0] or R[0]: plan.append((L[0], '', R[0], max(L[2], R[2], 1.25)))
+            Ls = [L]
+            if L[0] and L[1] + (R[1] + gap if R[0] else 0) > W + 0.01:      # 노선·방향도 넘치면 마지막 띄어쓰기에서 줄을 바꾼다 (좁은 표)
+                nd = copy.deepcopy(parts[0])
+                def cut(n):
+                    for i in range(len(n.kids) - 1, -1, -1):
+                        k = n.kids[i]
+                        if isinstance(k, str):
+                            j = k.rstrip().rfind(' ')
+                            if j > 0: n.kids[i:i + 1] = [k[:j], Node('br', []), k[j + 1:]]; return True
+                        elif cut(k): return True
+                    return False
+                if cut(nd):
+                    Ls = [(self.inl.flat(ln), self.inl.line_w(ln) * fs, line_height(ln) if ln else 0.0) for ln in self.inl.lines(nd, ctx) if ln]
+            if L[0] or R[0]: plan.append((Ls[0][0], '', R[0], max(Ls[0][2], R[2], 1.25)))
+            for x_ in Ls[1:]: plan.append((x_[0], '', '', max(x_[2], 1.25)))
             # 줄이 바뀌면 가운데(구간)는 다른 한쪽이 있는 반대편으로 민다
             al = 'r' if (L[0] and not R[0]) else 'l' if (R[0] and not L[0]) else 'c'
             cl = [seg(node) for node in self.split_center(parts[1], W, ctx)]
@@ -1966,7 +1980,7 @@ class Book:
         m = re.search(r'([가-힣]+고속철도)', t)
         if m: return ('', m.group(1))
         if not self.is_ktx(T):                      # 노선 안의 다른 이름 표(평택선 등)는 그 이름
-            m = re.search(r'(?:하행|상행)\s*([가-힣·・]+선)', t)
+            m = re.search(r'(?:하행|상행)\s*([가-힣·・]+선)(?![가-힣])', t)
             if m and m.group(1) != T.line: return ('', m.group(1))
         return ('KTX', T.line) if self.is_ktx(T) else ('', T.line)
 
@@ -2717,6 +2731,25 @@ class Book:
         # bandLeftLines: 그 노선(KTX) 표는 제목을 왼쪽 세로 띠로
         for T in tables:
             if T.line in self.cfg.get('bandLeftLines', []) and self.is_ktx(T) and T.head is not None and not T.fold: T.band_left = True
+        # rowGroups: 작은 표 여럿(제목에 이 말이 든 표들의 하행·상행)을 한 단에 같은 폭으로 나란히 (관광열차 등)
+        for rg in self.cfg.get('rowGroups', []):
+            row = [T for t_ in rg['titles'] for d_ in ('하행', '상행') for T in tables
+                   if T.line == rg['line'] and t_ in T.title.text() and d_ in T.title.text()]
+            if len(row) < 2: continue
+            k_ = len(row)
+            w_ = (self.cw + (k_ - 1) * fw) / k_
+            if any(self.fixed_w(T, 'B') + len(self.blocks(T)[1]) * self.P0 * self.squeeze > w_ + 0.01 for T in row): continue
+            parts_ = []
+            for T in row:
+                T.fold = False; T.band_left = False
+                rr = list(range(T.nrow))
+                parts_.append((T, self.blocks(T)[1], rr, self.piece_h(T, rr, False, self.band_w(w_))))
+            hm_ = max(q[3] for q in parts_)
+            parts_ = [(a, b, c, hm_) for a, b, c, _ in parts_]        # 한 단은 높이를 맞춘다 (밑의 표가 가지런히)
+            for T in row: T.custom_jobs = None; T.stack_with = None; T.side_with = None; T.stacked = True
+            row[0].stacked = False
+            row[0].custom_jobs = [{'T': row[0], 'kind': 'side', 'parts': parts_, 'widths': [w_] * k_, 'h': max(q[3] for q in parts_),
+                                   'trs': parts_[0][1], 'rows': parts_[0][2], 'notes': False, 'bw': self.band_w(w_), 'nosplit': True}]
         # besideRight: 펼침면 짝(하행 위·상행 아래)의 오른쪽 면 끝 몇 편 옆에 다음 노선의 하행·상행을 나란히 (그 노선의 한 쪽을 아낀다)
         for br in self.cfg.get('besideRight', []):
             kx = br.get('ktx', False)            # KTX 표끼리 (KTX밖에 없는 노선)

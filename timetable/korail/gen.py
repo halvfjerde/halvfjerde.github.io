@@ -29,6 +29,11 @@ BOOK = [
     ('목포보성선', [('gen', '목포보성선', None)]),
     ('교외선',     [('gen', '교외선', None)]),
 ]
+# 관광열차 (tour.json, parse_tour.py): 따로 한 문서. 표마다 같은 길을 달리는 관광열차를
+TOUR_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tour.json')
+TOUR = json.load(open(TOUR_JSON)) if os.path.exists(TOUR_JSON) else None
+if TOUR: BOOK.append(('관광열차', [('tour', t['line'], None) for t in TOUR['tables'] if t['dir'] == 'down']))
+TOUR_NOTE = {'정선아리랑열차': '2·7일(정선 장날)에도 운행'}
 # 노선마다 재래선(일반열차) 표를 먼저, KTX 는 그 뒤에
 BOOK = [(line, sorted(parts, key=lambda p: 0 if p[0] == 'gen' else 1)) for line, parts in BOOK]
 # 재래선과 같은 선로(정차역이 거의 같은)를 달리는 KTX 는 재래선 표에 합친다: 열차는 파란 글씨, 시각은 굵게
@@ -140,6 +145,7 @@ HEADS = {
     ('gen', '대구선'): '동대구 영천 경주 포항', ('gen', '영동선'): '강릉 동해 철암 영주',
     ('gen', '태백선'): '제천 영월 태백 동해', ('gen', '목포보성선'): '순천 벌교 전남장흥 목포',
     ('gen', '교외선'): '대곡 의정부',
+    ('tour', '백두대간협곡열차・동해산타열차'): '영주 분천 철암 동해 강릉',
 }
 
 # 갈래(서로 다른 길로 가는 구간). 묶음마다 [기본 갈래, 다른 갈래, …]. 빈 기본 갈래는 막다른 지선
@@ -193,9 +199,9 @@ KTX_MAJOR = {'수서', '오송', '익산', '광주송정', '순천', '울산', '
 LINE_HANJA = {'경부선': '京釜線', '호남선': '湖南線', '전라선': '全羅線', '경전선': '慶全線', '동해선': '東海線',
               '강릉선': '江陵線', '중앙선': '中央線', '중부내륙선': '中部內陸線', '장항선': '長項線', '서해선': '西海線',
               '충북선': '忠北線', '경북선': '慶北線', '대구선': '大邱線', '영동선': '嶺東線', '태백선': '太白線',
-              '목포보성선': '木浦寶城線', '교외선': '郊外線'}
+              '목포보성선': '木浦寶城線', '교외선': '郊外線', '관광열차': '觀光列車'}
 # 종별 → 열차명 칸 (KTX 표에서 그냥 KTX는 비운다)
-KIND = {'KTX': 'KTX', 'KTX-산천': '산천', 'KTX산천': '산천', 'KTX_산천': '산천', 'KTX-청룡': '청룡', 'KTX-이음': '이음',
+KIND = {'V-train': 'V', 'S-train': 'S', 'G-train': 'G', 'A-train': 'A', '동해산타열차': '산타', 'KTX': 'KTX', 'KTX-산천': '산천', 'KTX산천': '산천', 'KTX_산천': '산천', 'KTX-청룡': '청룡', 'KTX-이음': '이음',
         'ITX-새마을': '새마을', '새마을': '새마을', 'ITX-마음': '마음', '무궁화': '무궁화', '누리로': '누리로'}
 LBL = {  # 머리 이름 (한국어, 국한문)
     'fr': ('시발역', '始發驛'), 'no': ('열차번호', '列車番號'), 'kind': ('등급', '等級'), 'car': ('차종', '車種'),
@@ -207,7 +213,7 @@ def lbl(k): return LBL[k][1 if MIX else 0]
 
 # 역 이름 고침 (위키에서 고친 것): 원본 이름 → 표에 쓸 이름. 한자도 함께
 RENAME = {'판교(경기)': '판교', '진부(오대산)': '진부'}
-RENAME_HANJA = {'진부': '珍富', '여수엑스포': '麗水엑스포', '민둥산': '민둥山'}   # 반만 한자인 이름은 한자 부분만
+RENAME_HANJA = {'진부': '珍富', '여수엑스포': '麗水엑스포', '민둥산': '민둥山', '나전': '羅田', '선평': '仙坪', '별어곡': '別於谷'}   # 반만 한자인 이름은 한자 부분만
 def clean_name(s):
     s = re.sub(r'\((출발|도착)\)$', '', s)
     return RENAME.get(s, s)
@@ -537,6 +543,9 @@ class Table:
                     self.split.add(i)
         self.split -= {i for i, s in enumerate(self.st) if s in NOSPLIT_ALL}
         self.split |= {i for i, s in enumerate(self.st) if s in SPLIT_ALL and self.stops(i)}
+        if self.cat == 'tour':           # 관광열차: 오래 머무는 역(분천·승부 등 5분 넘게)은 착발을 나눈다
+            self.split |= {i for i, s in enumerate(self.st) for tr in self.trains
+                           if isinstance(tr['times'][i], int) and (tr['no'], s) in ARR and (tr['times'][i] - ARR[(tr['no'], s)]) % 1440 >= 5}
         # 상행·하행이 같은 주요역·착발역을 쓰도록 main 에서 두 방향을 모아 정한 값(shared)으로 덮어쓴다
         self.cand = {self.st[i]: (self.stops(i) + ends[i]) / N for i in major}
         self.split -= {i for i in self.split if self.arr_unknown(i)}     # 도착 시각을 모르는 역(나주 등)은 착발을 합친다
@@ -650,6 +659,12 @@ class Table:
             parts = [f'S{{{k}}}은 `{full}`' for k, full in names if k in kinds]
             if parts: notes.append('차종 ' + ', '.join(parts))
             if any(self.is_suseo(tr) for tr in self.trains): notes.append('자주 글씨는 수서 발착')
+        elif self.cat == 'tour':           # 관광열차: 등급 칸에는 별명 글자(V·S…)
+            seen = {}
+            for tr in self.trains: seen.setdefault(tr['type'], tr.get('name', tr['type']))
+            parts = [f"S{{{KIND.get(k_, k_)}}}는 {nm_.split('(')[0]}" + (f'(`{k_}`)' if k_ != nm_ else '') for k_, nm_ in seen.items()]
+            notes.append('등급 ' + ', '.join(parts))
+            if TOUR_NOTE.get(self.line): notes.append(TOUR_NOTE[self.line])
         else:
             types = {tr['type'] for tr in self.trains}
             parts = []
@@ -686,6 +701,10 @@ class Table:
         L += notes
         return '\n'.join(L)
 
+    def dwell_max(self):
+        """따로 조사한 도착 시각을 믿는 정차 시간의 끝 (관광열차는 오래 머문다)"""
+        return 60 if self.cat == 'tour' else 15
+
     def arr_unknown(self, i):
         """이 역에 서는(떠나거나 끝나지 않는) 열차 가운데 도착 시각을 알 수 없는 것이 있는가 (SPLIT_ALL 역은 늘 나눈다)"""
         st = self.st[i]
@@ -696,7 +715,7 @@ class Table:
             o, d = self.ends_of(tr)
             if st in (o, d): continue
             a = tr.get('arr_at', {}).get(st, ARR.get((tr['no'], st)))
-            if a is not None and 0 <= (x - a) % 1440 <= 15: continue
+            if a is not None and 0 <= (x - a) % 1440 <= self.dwell_max(): continue
             if DWELL.get((grade(tr['type']), st)) is None: return True
         return False
 
@@ -849,7 +868,7 @@ class Table:
                 if not sp: out.append(t); continue
                 st = self.st[i]
                 arr = tr.get('arr_at', {}).get(st, ARR.get((tr['no'], st)))   # 따로 조사한 도착 시각 (TAGO 열차정보, 시발 시각이 맞는 것만)
-                if arr is None or not 0 <= (x - arr) % 1440 <= 15:
+                if arr is None or not 0 <= (x - arr) % 1440 <= self.dwell_max():
                     w = DWELL.get((grade(tr['type']), st))   # 없으면 같은 등급·같은 역의 정차 시간으로
                     arr = x - w if w is not None else None
                 arr = hm(arr) if arr is not None else '_'
@@ -993,13 +1012,18 @@ def main():
     DWELL.update({k: v.most_common(1)[0][0] for k, v in c.items()})
     outdir = sys.argv[2]
     os.makedirs(outdir, exist_ok=True)
+    if TOUR:
+        data['tables'] = data['tables'] + TOUR['tables']
+        for t in TOUR['tables']:
+            for tr in t['trains']:
+                for st_, a_ in tr.get('arr', {}).items(): ARR[(tr['no'], st_)] = a_
     tabs = {(t['cat'], t['line'], t['dir']): t for t in data['tables']}
     for t in data['tables']: LINE_STATIONS.setdefault((t['cat'], t['line']), set()).update(clean_name(x) for x in t['stations'])
     book_items = []
     index = []
     for line, parts in BOOK:
         P = [f'{{{{시각표테마}}}}', f'{{{{상위문서|{PREFIX}}}}}',
-             f"'''{line}'''({LINE_HANJA[line]}) 시각표. {EDITION}(가상), 코레일 2026년 10월 발표 자료 기준." + ''.join(f" {k[1]}(동대구–경주) 열차도 이 표에 함께 싣는다." for k, v in MERGE_GEN.items() if v[1] == line), '']
+             f"'''{line}'''({LINE_HANJA[line]}) 시각표. {EDITION}(가상), 코레일 {'관광열차 시각(2026년 9월 1일)' if line == '관광열차' else '2026년 10월 발표 자료'} 기준." + ''.join(f" {k[1]}(동대구–경주) 열차도 이 표에 함께 싣는다." for k, v in MERGE_GEN.items() if v[1] == line), '']
         book_items.append({'type': 'divider', 'text': line, 'sub': '', 'inline': True})
         idx = 0
         title = f'{PREFIX}/{line}'
@@ -1012,7 +1036,7 @@ def main():
                 expanded += [(cat, sheet, sub, None), (cat, sheet, sub, '순환')]
             else: expanded.append((cat, sheet, sub, None))
         for cat, sheet, sub, variant in expanded:
-            head = (HSR_NAME.get((cat, sheet)) or ('KTX' if cat == 'ktx' else '일반열차')) + (f" ({sub.replace(' ─ ', '–')})" if sub else '') + (' (수서 발착)' if variant == '수서' else '') + (f" ({LOOP_NAME.get((cat, sheet), '순환')})" if variant == '순환' else '')
+            head = (HSR_NAME.get((cat, sheet)) or ('KTX' if cat == 'ktx' else sheet.replace('(', ' (') if cat == 'tour' else '일반열차')) + (f" ({sub.replace(' ─ ', '–')})" if sub else '') + (' (수서 발착)' if variant == '수서' else '') + (f" ({LOOP_NAME.get((cat, sheet), '순환')})" if variant == '순환' else '')
             if variant == '수서' and (cat, sheet) in COUPLE_GUEST: head = 'KTX (수서 발착 병결)'
             P.append(f'== {head} ==')
             pair = {}
@@ -1100,7 +1124,7 @@ def main():
                     elif out_: t['loop_note'] = f"{clean_name(out_[0]['from'])} 순환 열차는 {next(iter(LOOP_NAME.values()))} 표에"
                     if (cat, sheet) in SPLIT_LOOP and variant is None and any(is_loop(tr) for tr in tabs[(cat, sheet, d)]['trains']):
                         t['loop_note'] = f"{clean_name(next(tr for tr in tabs[(cat, sheet, d)]['trains'] if is_loop(tr))['from'])} 순환 열차는 {LOOP_NAME[(cat, sheet)]} 표에"
-                T = Table(t, data['hanja']); T.line_disp = LINE_DISP.get((cat, sheet), line); T.cpl = cpl
+                T = Table(t, data['hanja']); T.line_disp = LINE_DISP.get((cat, sheet), sheet.replace('(', ' (') if cat == 'tour' else line); T.cpl = cpl
                 T.wiki(sub); pair[d] = T
             shared = share(list(pair.values()))
             for d in ('down', 'up'):
@@ -1121,7 +1145,7 @@ def main():
         open(os.path.join(outdir, f'{ln_}.wiki'), 'w').write(f'#REDIRECT [[{PREFIX}/{hl_}]]\n')
     # 목차 문서
     I = ['{{시각표테마}}', f'시각표 {EDITION}(가상). 코레일 2026년 10월 발표 자료(일반열차·고속열차) 기준, JTB 시각표 꼴로 재구성.', '',
-         '* 시각은 분 단위(초 버림)', '* 오른쪽 역명은 한자', '', '== 노선 ==']
+         '* 시각은 분 단위(초 버림)', '* 오른쪽 역명은 한자'] + (['* 관광열차는 코레일 관광열차 시각(2026년 9월 1일) 기준'] if TOUR else []) + ['', '== 노선 ==']
     I += [f'* [[{PREFIX}/{l}|{l}]]' for l in index]
     open(os.path.join(outdir, '_index.wiki'), 'w').write('\n'.join(I) + '\n')
     json.dump(book_items, open(os.path.join(outdir, 'items.json'), 'w'), ensure_ascii=False, indent=1)
