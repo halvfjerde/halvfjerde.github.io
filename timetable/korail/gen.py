@@ -84,7 +84,7 @@ KIND = {'KTX': '', 'KTX-산천': '산천', 'KTX산천': '산천', 'KTX_산천': 
         'ITX-새마을': '새마을', '새마을': '새마을', 'ITX-마음': '마음', '무궁화': '무궁화', '누리로': '누리로'}
 LBL = {  # 머리 이름 (한국어, 국한문)
     'fr': ('시발역', '始發驛'), 'no': ('열차번호', '列車番號'), 'kind': ('등급', '等級'), 'car': ('차종', '車種'),
-    'to': ('종착역', '終着驛'), 'day': ('운행일', '運行日'),
+    'to': ('종착역', '終着驛'), 'day': ('비고', '備考'),   # 운행일 등. 인쇄에서는 쪽의 남는 자리를 이 행이 받는다
 }
 def lbl(k): return LBL[k][1 if MIX else 0]
 
@@ -392,7 +392,7 @@ class Table:
                 used = {tr['note'] for tr in self.trains}
                 if '월화수목금' in used: dn.append('◆ 평일(월∼금) 운행')
                 if '토일' in used: dn.append('◇ 토·일 운행')
-            dn.append('운행일 무표시는 매일 운행')
+            dn.append('비고 무표시는 매일 운행')
             notes.append(', '.join(dn))
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
             notes.append('着発 역의 빈 도착 시각은 자료 없음')

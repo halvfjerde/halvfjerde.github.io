@@ -399,7 +399,8 @@ class Inline:
         out = []
         wsum = 0.0
         for k, chs in segs:
-            t = ''.join(r'\ ' if ch == ' ' else esc(ch) for ch in chs)
+            sp = r'\hskip %.3fbp ' % (0.3 * ctx.size * self.fs)
+            t = ''.join(sp if ch == ' ' else esc(ch) for ch in chs)
             fam = KO_OF[ctx.font] if k in ('ko', 'kp') else ctx.font
             c2 = ctx
             up = self.shift_for(k, ctx.font)
@@ -816,9 +817,10 @@ class Book:
         """칸마다 줄 목록·필요 높이, 행 높이(R 의 배수)"""
         fs = self.fs
         base = Ctx('DM', 1.0)
-        # 운행일 행: 세로쓰기 대신 작은 글자로 가로로 (한 줄에 세 자까지, 고르게 나눠 여러 줄)
+        # 운행일(비고) 행: 세로쓰기 대신 작은 글자로 가로로 (한 줄에 세 자까지, 고르게 나눠 여러 줄)
+        dayrows = {cl.r for cl in T.cells if cl.c == 0 and re.sub(r'\s', '', cl.node.text()) in ('운행일', '비고')}
+        T.dayrow = max(dayrows) if dayrows else None
         if self.cfg.get('daysCompact', True):
-            dayrows = {cl.r for cl in T.cells if cl.c == 0 and re.sub(r'\s', '', cl.node.text()) == '운행일'}
             for cl in T.cells:
                 if cl.r in dayrows and cl.c > 0 and cl.node.find(lambda n: 'jtt-v' in n.cls):
                     t = re.sub(r'\s', '', cl.node.text())
@@ -1049,7 +1051,7 @@ class Book:
                 while i < len(text):
                     ch = text[i]
                     if ch in ' \u00a0　':
-                        items.append(r'\kern%.3fbp' % (0.3 * em)); L += 0.3 * em; i += 1; continue
+                        items.append(r'\kern%.3fbp' % (0.35 * em)); L += 0.35 * em; i += 1; continue
                     if ch in VROT:
                         t, l = self.inl.vform(ch, c, colw)
                         items.append(t); L += l * em; i += 1; continue
@@ -1143,6 +1145,7 @@ class Book:
         ty = y0 + fw + fp
         ys = [ty + hb]
         for r in rows: ys.append(ys[-1] + T.rowH[r])
+        if pc and pc.get('stretch'): ys[-1] += pc['stretch']          # 쪽의 남는 자리를 비고 행이 받는다
         nh = self.notes_h(T) if with_notes else 0
         fy1 = ys[-1] + nh + fp + fw
         # 틀: 왼쪽·오른쪽 변은 굵게. 위 변은 위에 붙은 조각에 따라(같은 표면 띠 사이 괘선, 다른 표면 표 사이 괘선)
@@ -1422,33 +1425,52 @@ class Book:
         return '\\directlua{\n' + '\n'.join(lua) + '\n}\n' + '\n'.join(tex)
 
     # ── 머리글·쪽 번호 ──
-    def page_side_title(self, recto, lines):
+    def page_side_title(self, recto, lines, dirs=None):
         """쪽의 노선 이름: 바깥 여백에 세로로 크게 (쪽마다 하나)"""
         if not lines: return []
-        size = self.cfg.get('pageTitleSize', 11) / self.fs
+        size = self.cfg.get('pageTitleSize', 10) / self.fs
         em = size * self.fs
         c = Ctx('GB', size)
+        cd = Ctx('M', size * 0.8)                  # 방향(하행·상행)은 명조로 작게
         items = []
-        # KTX 표의 노선은 「KTX 경부선·호남선」으로 묶는다
-        ktx = [ln for kind, ln in lines if kind == 'KTX']
-        names = (['KTX ' + '·'.join(ktx)] if ktx else []) + [ln for kind, ln in lines if kind != 'KTX']
+        dirs = dirs or {}
+        def dmark(key):
+            d = dirs.get(key, set())
+            return [('〔%s〕' % next(iter(d)), cd)] if len(d) == 1 and '' not in d else []
+        # KTX 표의 노선은 「KTX 경부선·호남선」으로 묶는다. 쪽에 한 방향만 실렸으면 노선 이름 뒤에 그 방향을
+        segs_all = []
+        ktx = [(k, ln) for k, ln in lines if k == 'KTX']
+        if ktx:
+            sg = [('KTX ', c)]
+            for i, key in enumerate(ktx):
+                if i: sg.append(('·', c))
+                sg += [(key[1], c)] + dmark(key)
+            segs_all.append(sg)
+        for key in [x for x in lines if x[0] != 'KTX']:
+            segs_all.append([(key[1], c)] + dmark(key))
         dot = lambda: items.append(r'\kern%.3fbp\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}\kern%.3fbp' % (
             0.2 * em, 1.2 * em, -0.12 * em, em, self.inl.run('·', c, True), 0.2 * em))
-        for k, ln in enumerate(names):
+        for k, sg in enumerate(segs_all):
             if k: dot()
-            i = 0
-            while i < len(ln):
-                ch = ln[i]
-                if ch == ' ':
-                    items.append(r'\kern%.3fbp' % (0.3 * em)); i += 1; continue
-                if ch == '·': dot(); i += 1; continue
-                if is_latin(ch):          # 로마자는 눕혀서
-                    j = i
-                    while j < len(ln) and is_latin(ln[j]) and ln[j] != ' ': j += 1
-                    items.append(r'\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (1.2 * em, self.inl.run(ln[i:j], c)))
-                    i = j; continue
-                items.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (1.2 * em, -0.12 * em, em, self.inl.run(ch, c, True)))
-                i += 1
+            for ln, cc in sg:
+                e2 = cc.size * self.fs
+                if cc is cd: items.append(r'\kern%.3fbp' % (0.15 * em))
+                i = 0
+                while i < len(ln):
+                    ch = ln[i]
+                    if ch == ' ':
+                        items.append(r'\kern%.3fbp' % (0.3 * em)); i += 1; continue
+                    if ch == '·': dot(); i += 1; continue
+                    if ch in VROT:
+                        t, l = self.inl.vform(ch, cc, 1.2 * em)
+                        items.append(t); i += 1; continue
+                    if is_latin(ch):          # 로마자는 눕혀서
+                        j = i
+                        while j < len(ln) and is_latin(ln[j]) and ln[j] != ' ': j += 1
+                        items.append(r'\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (1.2 * em, self.inl.run(ln[i:j], cc)))
+                        i = j; continue
+                    items.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (1.2 * em, -0.12 * e2, e2, self.inl.run(ch, cc, True)))
+                    i += 1
         box = r'\vbox{\offinterlineskip ' + ''.join(items) + '}'
         gapm = 1.0 * MM
         if recto: x = self.mi + self.cw + gapm
@@ -1746,6 +1768,8 @@ class Book:
             pg['pieces'].append(pc)
             key = ('KTX', T.line) if self.is_ktx(T) else ('', T.line)
             if key not in pg['lines']: pg['lines'].append(key)
+            tt = T.title.text() if T.title is not None else ''
+            pg.setdefault('dirs', collections.defaultdict(set))[key].add('하행' if '하행' in tt else '상행' if '상행' in tt else '')
             placed[id(T)].append(pc)
             return pc
         placed = collections.defaultdict(list)
@@ -1934,6 +1958,27 @@ class Book:
                 avail = min(others[0]['x'] - TWh - gapX - pc['x'], pc['nat']) if others else (self.cw - pc['x'])
                 if pc.get('fixw'): avail = pc['fixw']
                 pc['ch'] = self.make_chunk(pc['T'], pc['side'], pc['trains'], avail, pc.get('ncol'))
+        # 쪽 아래 남는 자리: 맨 아랫단 표의 비고 행을 늘여 채운다 (다른 행 높이는 그대로).
+        # 펼침면에 걸친 표는 두 쪽에서 같은 만큼 (행이 어긋나지 않게)
+        if self.cfg.get('stretchRemarks', True):
+            smax = self.cfg.get('stretchMax', 12) * self.R
+            low = {}
+            for p, pg in enumerate(pages):
+                if pg['pieces']: low[p] = PH - max(q['y'] + q['h'] for q in pg['pieces'])
+            for p, pg in enumerate(pages):
+                if p not in low: continue
+                bottom = max(q['y'] + q['h'] for q in pg['pieces'])
+                for pc in pg['pieces']:
+                    T = pc['T']
+                    if T.dayrow is None or not pc['rows'] or pc['rows'][-1] != T.dayrow: continue
+                    if abs(pc['y'] + pc['h'] - bottom) > 0.05: continue     # 맨 아랫단만
+                    room = low[p]
+                    mate = p + 1 if p % 2 == 0 else p - 1
+                    if mate in low and any(q['T'] is T and abs(q['y'] - pc['y']) < 0.05 for q in pages[mate]['pieces']):
+                        room = min(room, low[mate])
+                    ext = min(room, smax)
+                    if ext > 0.5 * self.R:
+                        pc['stretch'] = ext; pc['h'] += ext
         # 붙은 조각 사이의 괘선: 위 조각과 같은 표면 띠 사이 괘선, 다른 표면 표 사이 괘선. 아래에 붙은 조각이 있으면 아래 변은 그 조각이 긋는다
         for pg in pages:
             ps = pg['pieces']
@@ -1971,7 +2016,7 @@ class Book:
                 tex += t; rects += r
             # 머리글은 노선 이름만 (책을 넘기며 찾는 자리). 몇째 조각인지는 표의 세로 제목 끝에
             if self.page_title:
-                tex += self.page_side_title(recto, pg['lines'])
+                tex += self.page_side_title(recto, pg['lines'], pg.get('dirs'))
                 tex += self.page_furniture(folio, recto, '', '', self.page_legend([pc['T'] for pc in pg['pieces']]))
             else:
                 tex += self.page_furniture(folio, recto, '·'.join(ln for _, ln in pg['lines']), '')
