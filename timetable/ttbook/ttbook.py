@@ -728,7 +728,8 @@ class Book:
         self.page_title = cfg.get('pageTitle', False)              # 표마다의 세로 제목 대신, 쪽마다 노선 이름을 하나 크게 (바깥 여백)
         if self.page_title: self.hang_title = True
         self.band_inset = cfg.get('bandInset', 1.1) * self.fs
-        self.vband_w = cfg.get('leftBandWidth', 2.2) * self.fs      # 띠를 표 왼쪽 끝에 세로로 둘 때의 폭     # 띠의 왼쪽·오른쪽 글을 틀에서 띄우는 만큼
+        self.vband_w = cfg.get('leftBandWidth', 2.2) * self.fs      # 띠를 표 왼쪽 끝에 세로로 둘 때의 폭
+        self.vpad = cfg.get('leftBandPad', 1.2) * self.fs           # 세로 띠 글의 위아래 여백     # 띠의 왼쪽·오른쪽 글을 틀에서 띄우는 만큼
         self.notes = cfg.get('notes', True)                        # false: 표 밑의 주기(공통 범례)를 싣지 않는다
         self._bands = {}
         self.fold = cfg.get('fold', 'off')                          # off | on | auto: 표를 한 쪽 폭의 띠로 접어 위아래로 쌓기
@@ -1170,15 +1171,15 @@ class Book:
             run = pc and pc.get('vrun')
             if run and run[2] > 1:            # 같은 표의 띠 여럿에 걸친 제목칸: 첫 띠에서 한 번에
                 if run[0] == 0:
-                    Hh = run[1] - 2 * (fw + fp) - 0.6 * fs
+                    Hh = run[1] - 2 * (fw + fp) - 2 * self.vpad
                     vt, _ = self.vband(T, None, Hh)
-                    tex.append(self.put_box(bx, ty + 0.3 * fs, VBc, Hh, vt, 'c', 't'))
+                    tex.append(self.put_box(bx, ty + self.vpad, VBc, Hh, vt, 'c', 't'))
                 y_a = y0 if run[0] > 0 else ty
                 y_b = fy1 if run[0] < run[2] - 1 else ys[-1]
                 rects.append(('v', xs[0] if side != 'R' else xs[-1], y_a, y_b, 1))
             else:
-                vt, _ = self.vband(T, part, ys[-1] - ty - 0.6 * fs)
-                tex.append(self.put_box(bx, ty + 0.3 * fs, VBc, ys[-1] - ty - 0.6 * fs, vt, 'c', 't'))
+                vt, _ = self.vband(T, part, ys[-1] - ty - 2 * self.vpad)
+                tex.append(self.put_box(bx, ty + self.vpad, VBc, ys[-1] - ty - 2 * self.vpad, vt, 'c', 't'))
                 rects.append(('v', xs[0] if side != 'R' else xs[-1], ty, ys[-1], 1))
         # 노선 머리띠
         if hb:
@@ -1778,7 +1779,7 @@ class Book:
             T.band_left = True
             jl = self.jobs_of(T)
             ht, hl = max(j['h'] for j in jt), max(j['h'] for j in jl)
-            fits = all(self.vband(T, '열넷째' if len(jl) > 1 else None, 100)[1] <= j['h'] - 2 * (fw + self.frame_pad) - 0.6 * self.fs for j in jl)
+            fits = all(self.vband(T, '열넷째' if len(jl) > 1 else None, 100)[1] <= j['h'] - 2 * (fw + self.frame_pad) - 2 * self.vpad for j in jl)
             if mode == 'left': T.band_left = fits
             else: T.band_left = fits and len(jl) <= len(jt) and 2 * hl - fw <= PH + 0.01 < 2 * ht - fw
         for T in tables:
@@ -1827,7 +1828,7 @@ class Book:
                 for T in ts:
                     T.band_left = True
                     jl = self.jobs_of(T)
-                    ok = ok and all(self.vband(T, '열넷째' if len(jl) > 1 else None, 100)[1] <= j['h'] - 2 * (fw + self.frame_pad) - 0.6 * self.fs for j in jl)
+                    ok = ok and all(self.vband(T, '열넷째' if len(jl) > 1 else None, 100)[1] <= j['h'] - 2 * (fw + self.frame_pad) - 2 * self.vpad for j in jl)
                 for T in ts: T.band_left = ok
         rkey = lambda T: (T.line, self.is_ktx(T), route(T))
         for bunch in bunches:
