@@ -2054,50 +2054,114 @@ class Book:
                 elif dr == 't': tex.append(self.put_box(x - bw / 2, y - 16, bw, 10, body_, 'c', 'm'))
                 else: tex.append(self.put_box(x - bw / 2, y + 6, bw, 10, body_, 'c', 'm'))
         else:
-            # 색인(앞)·범례(뒤): 표처럼 틀 안에 칸을 짓고, 쪽 이름은 바깥 여백의 세로 제목으로
-            recto = (first + k) % 2 == 1
-            tex += self.page_side_title(recto, [('', '색인' if k == 0 else '범례')])
-            fw, fp, pad, R = self.frame_w, self.frame_pad, self.band_inset, self.R
-            ix, iy, iw = x0 + fw + fp, y0 + fw + fp, W - 2 * (fw + fp)
+            # 앞 펼침: 왼쪽 면 범례(JTB 「記号の説明」 꼴), 오른쪽 면 목차(1994년 JTB 목차 꼴: 큰 호수·목차·스피드 인덱스)
+            rgb = lambda h_: ' '.join('%.3f' % (int(h_[i:i + 2], 16) / 255.0) for i in (0, 2, 4))
+            def fill(x, y, w, h, col): ops.append('q %s rg %.3f %.3f %.3f %.3f re f Q' % (rgb(col), x, H - y - h, w, h))
+            def poly(pts, col): ops.append('q %s rg %s h f Q' % (rgb(col), ' '.join('%.3f %.3f %s' % (px, H - py, 'm' if n_ == 0 else 'l') for n_, (px, py) in enumerate(pts))))
+            def pill(x, y, w, h, fc, sc):          # 둥근 끝 띠 (테두리 가는 선)
+                r = h / 2; kq = 0.5523 * r; Y0, Y1 = H - y - h, H - y
+                p = ('%.3f %.3f m %.3f %.3f l %.3f %.3f %.3f %.3f %.3f %.3f c %.3f %.3f %.3f %.3f %.3f %.3f c %.3f %.3f l %.3f %.3f %.3f %.3f %.3f %.3f c %.3f %.3f %.3f %.3f %.3f %.3f c h' %
+                     (x + r, Y0, x + w - r, Y0, x + w - r + kq, Y0, x + w, Y0 + r - kq, x + w, Y0 + r,
+                      x + w, Y0 + r + kq, x + w - r + kq, Y1, x + w - r, Y1,
+                      x + r, Y1, x + r - kq, Y1, x, Y1 - r + kq, x, Y1 - r,
+                      x, Y0 + r - kq, x + r - kq, Y0, x + r, Y0))
+                ops.append('q %s rg %s RG 0.4 w %s B Q' % (rgb(fc), rgb(sc), p))
             wd = lambda t: self.inl.wc.get(t, 1.0) * fs
-            rects = []
-            lh = 2 * R
+            def leader(a_, b_, yl):
+                if b_ - a_ > fs: ops.append('q 0.3 w 0 G [0.6 1.6] 0 d %.3f %.3f m %.3f %.3f l S Q' % (a_, H - yl, b_, H - yl))
             if k == 0:
-                items = list(self.line_pages(first).items())
-                bk_ = [i for i, pg in enumerate(self.pages) if 'back' in pg and self.back[pg['back']]['cols']]
-                if bk_: items.append(('역명 색인', (bk_[0] + first, bk_[-1] + first, None)))
-                per = int(math.ceil(len(items) / 2.0))
-                colw = iw / 2
-                for i_, (nm, (a, b, T)) in enumerate(items):
-                    col, r_ = divmod(i_, per)
-                    xx = ix + col * colw + pad; ww = colw - 2 * pad; yy = iy + r_ * lh
-                    kt = T is not None and self.is_ktx(T)
-                    nt = self.inl.run(nm, Ctx('GB', 1.1, '0A5FE0' if kt else None))
-                    pt = self.inl.run(('%d' % a) if a == b else ('%d∼%d' % (a, b)), Ctx('M', 1.1))
-                    tex.append(self.put_box(xx, yy, ww, lh, nt, 'l', 'm'))
-                    tex.append(self.put_box(xx, yy, ww, lh, pt, 'r', 'm'))
-                    a_, b_ = xx + wd(nt) + 0.5 * fs, xx + ww - wd(pt) - 0.5 * fs
-                    yl = yy + lh / 2 + 0.4 * 1.1 * fs
-                    if b_ - a_ > fs: ops.append('q 0.3 w 0 G [0.6 1.6] 0 d %.3f %.3f m %.3f %.3f l S Q' % (a_, H - yl, b_, H - yl))
-                h = per * lh
-                rects += [('box', x0, y0, x0 + W, iy + h + fw + fp, fw), ('v', ix + colw, iy, iy + h, 1)]
-            else:
                 lg = self.cfg.get('legend', [])
-                if lg:
-                    html = run_module('title "x"\n\n[stations]\n가\n\n[notes]\n' + '\n'.join(x[1] for x in lg), os.path.join(HERE, 'src', 'Timetable.lua'), os.path.join(HERE, 'build'))
-                    nd = parse_html(html).find(lambda n: 'jtt-notes' in n.cls)
-                    rows_ = [k_ for k_ in nd.kids if isinstance(k_, Node)] if nd is not None else []
-                    heads = [self.inl.run(h_, Ctx('GB', 1.1)) for h_, _ in lg]
-                    hw = max(wd(t) for t in heads) + 2 * pad
-                    for i_, ((head_, _), d, ht) in enumerate(zip(lg, rows_, heads)):
-                        yy = iy + i_ * lh
-                        if i_ and head_: rects.append(('h', ix, ix + iw, yy, 1))
-                        ln_ = self.inl.lines(d, Ctx('M', 1.1))
-                        if head_: tex.append(self.put_box(ix + pad, yy, hw - 2 * pad, lh, ht, 'l', 'm'))
-                        tex.append(self.put_box(ix + hw + pad, yy, iw - hw - 2 * pad, lh, self.inl.flat(ln_[0]) if ln_ else '', 'l', 'm'))
-                    h = len(rows_) * lh
-                    rects += [('box', x0, y0, x0 + W, iy + h + fw + fp, fw), ('v', ix + hw, iy, iy + h, 1)]
-            if rects: ops.append(self.pdf_ops(rects))
+                groups, flat = [], []
+                for head_, body_ in lg:              # 한 줄에 여럿(　로 가름)이면 하나씩: 「표지…이름」
+                    if head_ or not groups: groups.append([head_, []])
+                    for it in [x.strip() for x in body_.split('　') if x.strip()]:
+                        it2 = re.sub(r'^((?:B?S\{[^}]*\}))\s+', r'\1…', it)
+                        groups[-1][1].append(len(flat)); flat.append(it2)
+                html = run_module('title "x"\n\n[stations]\n가\n\n[notes]\n' + '\n'.join(flat), os.path.join(HERE, 'src', 'Timetable.lua'), os.path.join(HERE, 'build'))
+                nd = parse_html(html).find(lambda n: 'jtt-notes' in n.cls)
+                rows_ = [k_ for k_ in nd.kids if isinstance(k_, Node)] if nd is not None else []
+                lh = 1.6 * fs
+                colw = (W - 2 * fs) / 2
+                ys_ = [y0, y0]
+                for g_, (head_, idx) in enumerate(groups):
+                    c_i = 0 if g_ < (len(groups) + 1) // 2 else 1
+                    xx = x0 + c_i * (colw + 2 * fs); yy = ys_[c_i]
+                    ht = self.inl.run(head_, Ctx('G', 1.1))
+                    pw = max(wd(ht) + 4 * fs, 9 * fs)
+                    pill(xx, yy, pw, 1.9 * fs, 'DCDCDC', '8C8C8C')
+                    tex.append(self.put_box(xx, yy, pw, 1.9 * fs, ht, 'c', 'm'))
+                    yy += 1.9 * fs + 0.6 * fs
+                    for n_ in idx:
+                        ln_ = self.inl.lines(rows_[n_], Ctx('M', 1.0)) if n_ < len(rows_) else []
+                        if not ln_: continue
+                        tex.append(self.put_box(xx + 0.8 * fs, yy, colw, lh, self.inl.flat(ln_[0]), 'l', 'm'))
+                        yy += lh
+                    ys_[c_i] = yy + 1.2 * fs
+            else:
+                # 왼쪽: 큰 호수와 목차, 오른쪽(책 배 쪽): 스피드 인덱스
+                SW = 0.34 * W                               # 스피드 인덱스 폭
+                sx = x0 + W - SW
+                LW = W - SW - 1.5 * fs
+                ed = re.search(r'(\d+)년\s*(\d+)월', self.cfg.get('edition', '2026년 11월호'))
+                yr, mo = (ed.group(1), ed.group(2)) if ed else ('2026', '11')
+                MON = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'][int(mo) - 1]
+                big = self.inl.run(mo, Ctx('GB', 9.0, '0A5FE0'))
+                tex.append(self.put_box(x0 - 0.04 * 9 * fs, y0 - 0.15 * 9 * fs, 9 * fs * 1.3, 9 * fs, big, 'l', 't'))
+                bx = x0 + wd(big) + 0.4 * fs
+                tex.append(self.put_box(bx, y0 + 0.4 * fs, 30 * fs, 1.6 * fs, self.inl.run(MON, Ctx('M', 1.25)), 'l', 'm'))
+                tex.append(self.put_box(bx, y0 + 2.1 * fs, 30 * fs, 1.6 * fs, self.inl.run(yr, Ctx('M', 1.25)), 'l', 'm'))
+                mt_ = self.inl.run('목차', Ctx('GB', 3.6))
+                tex.append(self.put_box(bx, y0 + 4.3 * fs, 20 * fs, 3.6 * fs, mt_, 'l', 'b'))
+                tex.append(self.put_box(bx + wd(mt_) + 0.6 * fs, y0 + 4.3 * fs, 20 * fs, 3.6 * fs, self.inl.run('CONTENTS', Ctx('M', 1.1)), 'l', 'b'))
+                # 목차: 갈래마다 엷은 바탕
+                lp = self.line_pages(first)
+                bk_ = [i for i, pg in enumerate(self.pages) if 'back' in pg and self.back[pg['back']]['cols']]
+                hsr = [(nm, a, b) for nm, (a, b, T) in lp.items() if nm.endswith('고속철도') or nm.startswith('KTX ')]
+                gen_ = [(nm, a, b) for nm, (a, b, T) in lp.items() if (nm, a, b) not in hsr and nm != '관광열차']
+                tour = [(nm, a, b) for nm, (a, b, T) in lp.items() if nm == '관광열차']
+                rng_ = lambda a, b: ('%d' % a) if a == b else ('%d∼%d' % (a, b))
+                secs = [('범례', first, first, [], 'FFF1A6'),
+                        ('노선별 시각표', min(a for _, a, _ in gen_), max(b for _, _, b in gen_), gen_, 'DCEFC6'),
+                        ('고속철도', min(a for _, a, _ in hsr), max(b for _, _, b in hsr), hsr, 'F9D6DE')]
+                if tour: secs.append(('관광열차', tour[0][1], tour[0][2], [], 'D5E5F7'))
+                if bk_: secs.append(('역명 색인', bk_[0] + first, bk_[-1] + first, [], 'FFF1A6'))
+                yy = y0 + 9.2 * fs
+                sub = 1.45 * fs; hh = 2.4 * fs; pd = 0.6 * fs
+                for nm, a, b, items, col in secs:
+                    h_ = hh + len(items) * sub + (pd if items else 0)
+                    fill(x0, yy, LW, h_, col)
+                    nt = self.inl.run(nm, Ctx('GB', 1.55)); pt = self.inl.run(rng_(a, b), Ctx('M', 1.1))
+                    tex.append(self.put_box(x0 + pd, yy, LW - 2 * pd, hh, nt, 'l', 'm'))
+                    tex.append(self.put_box(x0 + pd, yy, LW - 2 * pd, hh, pt, 'r', 'm'))
+                    leader(x0 + pd + wd(nt) + 0.5 * fs, x0 + LW - pd - wd(pt) - 0.5 * fs, yy + hh / 2 + 0.45 * fs)
+                    for n_, (inm, ia, ib) in enumerate(items):
+                        iy = yy + hh + n_ * sub
+                        it = self.inl.run(inm, Ctx('M', 1.0)); ip = self.inl.run(rng_(ia, ib), Ctx('M', 1.0))
+                        tex.append(self.put_box(x0 + 2 * pd, iy, LW - 3 * pd, sub, it, 'l', 'm'))
+                        tex.append(self.put_box(x0 + 2 * pd, iy, LW - 3 * pd, sub, ip, 'r', 'm'))
+                        leader(x0 + 2 * pd + wd(it) + 0.5 * fs, x0 + LW - pd - wd(ip) - 0.5 * fs, iy + sub / 2 + 0.4 * fs)
+                    yy += h_ + 0.8 * fs
+                # 스피드 인덱스: 머리 띠(주황) + 노선마다 파란 띠 → 첫 쪽(크게)·쪽 범위(작게)
+                tabs = [(nm, a, b) for nm, (a, b, T) in lp.items()]
+                if bk_: tabs.append(('역명 색인', bk_[0] + first, bk_[-1] + first))
+                hd = 2.2 * fs
+                poly([(sx, y0), (sx + SW, y0), (sx + SW, y0 + hd), (sx + SW / 2 + 0.8 * fs, y0 + hd), (sx + SW / 2, y0 + hd + 0.8 * fs),
+                      (sx + SW / 2 - 0.8 * fs, y0 + hd), (sx, y0 + hd)], 'F2A33A')
+                tex.append(self.put_box(sx, y0, SW, hd, self.inl.run('스피드 인덱스', Ctx('GB', 1.1)), 'c', 'm'))
+                ty = y0 + hd + 1.4 * fs
+                step = (y0 + self.ch - ty) / len(tabs)
+                th = min(step - 0.35 * fs, 3.4 * fs)
+                NW = 0.3 * SW; AW = 0.9 * fs                 # 쪽 칸 폭, 화살 촉 폭
+                for n_, (nm, a, b) in enumerate(tabs):
+                    yy = ty + n_ * step
+                    fill(sx, yy, SW - NW, th, '22408F')
+                    fill(sx + SW - NW, yy, NW, th, '3567D6')
+                    poly([(sx + SW - NW, yy), (sx + SW - NW + AW, yy + th / 2), (sx + SW - NW, yy + th)], '22408F')
+                    tex.append(self.put_box(sx + 0.7 * fs, yy, SW - NW - fs, th, self.inl.run(nm, Ctx('GB', 1.05, 'FFFFFF')), 'l', 'm'))
+                    nb_ = self.inl.run('%d' % a, Ctx('GB', 1.75, 'FFFFFF'))
+                    if b != a: tex.append(self.put_box(sx + SW - NW + AW, yy - 0.15 * fs, NW - AW, th * 0.68, nb_, 'c', 'm'))
+                    else: tex.append(self.put_box(sx + SW - NW + AW, yy, NW - AW, th, nb_, 'c', 'm'))
+                    if b != a: tex.append(self.put_box(sx + SW - NW + AW, yy + th * 0.6, NW - AW, th * 0.4, self.inl.run('%d∼%d' % (a, b), Ctx('M', 0.72, 'FFFFFF')), 'c', 'm'))
         return tex, ' '.join(ops)
 
     def page_side_title(self, recto, lines, dirs=None, nos=None):
@@ -3486,10 +3550,6 @@ class Book:
         bp = self.back[k]
         wd = lambda t: self.inl.wc.get(t, 1.0) * fs
         c_ = Ctx('M', 1.0)
-        if bp['cols']:
-            rects.append(('box', x0, y0, x0 + self.cw, y0 + bp['h'], fw))
-            NC = self.cfg['stationIndex'].get('cols', 4)
-            for ci in range(1, NC): rects.append(('v', ix + ci * colw, iy, y0 + bp['h'] - fw - fp, 1))
         for ci, col in enumerate(bp['cols']):
             xx = ix + ci * colw + pad; ww = colw - 2 * pad
             for li, (kind, nm, ps) in enumerate(col):
