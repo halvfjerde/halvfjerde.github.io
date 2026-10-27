@@ -3632,13 +3632,15 @@ class Book:
             c0 = CHO[(ord(nm[0]) - 0xAC00) // 588] if '가' <= nm[0] <= '힣' else nm[0]
             ps = rng(sp[nm])
             if wd(nm, Ctx('M', 1.0)) + wd(ps, Ctx('M', 1.0)) + 2 * fs <= ww: ent = [('e', nm, ps)]
-            else:                          # 쪽이 많으면 이름 아래에 쪽을 몇 줄로 (단 폭에 맞춰 쉼표에서)
-                ent = [('n', nm, '')]; ln_ = ''
+            else:                          # 쪽이 많으면 첫 줄은 이름에 점으로 이어 채우고, 나머지는 다음 줄에 (쉼표에서)
+                ent, ln_ = [], ''
+                lim = ww - wd(nm, Ctx('M', 1.0)) - 2 * fs        # 첫 줄에 쪽을 적을 폭
                 for part in ps.split(', '):
                     t_ = (ln_ + ', ' + part) if ln_ else part
-                    if ln_ and wd(t_ + ',', Ctx('M', 1.0)) > ww - fs: ent.append(('p', '', ln_ + ',')); ln_ = part
+                    if ln_ and wd(t_ + ',', Ctx('M', 1.0)) > (lim if not ent else ww - fs):
+                        ent.append(('e', nm, ln_ + ',') if not ent else ('p', '', ln_ + ',')); ln_ = part
                     else: ln_ = t_
-                ent.append(('p', '', ln_))
+                ent.append(('e', nm, ln_) if not ent else ('p', '', ln_))
             if c0 != cur:
                 cur = c0; units.append([('b', '', ''), ('h', c0, '')] + ent)      # 자음 머리 위는 한 줄 비운다 (단 맨 위면 안 비움)
             else: units.append(ent)
