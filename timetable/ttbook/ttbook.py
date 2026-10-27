@@ -559,6 +559,7 @@ class Inline:
                 lines[-1].append(('obj', r'\hbox to %.3fbp{\hss %s\hss}' % (0.36 * c2.size * self.fs, self.run(k.text(), c2.but(font='M'))),
                                   0.36 * c2.size, 1.25 * c2.size, c2.size)); continue
             if 'tt-small' in cls: c2 = c2.but(size=c2.size * 0.75)
+            if 'tt-bold' in cls: c2 = c2.but(font='GB')
             if 'tt-darrow' in cls:          # 이어짐 화살표(모듈의 굵은 화살표 ➡ 를 아래로)
                 em_ = c2.size * self.fs
                 # 위 괘선에 붙이고 밑에 반 줄 비운다
@@ -863,6 +864,23 @@ class Book:
         """칸마다 줄 목록·필요 높이, 행 높이(R 의 배수)"""
         fs = self.fs
         base = Ctx('DM', 1.0)
+        # 오른쪽 역명을 한글로 (왼쪽 역명과 같은 글, 주요역은 키우지 않고 굵게만)
+        if self.cfg.get('rightHangul', False):
+            left = {cl.r: cl for cl in T.cells if 'jtt-st' in cl.cls and 'jtt-th' not in cl.cls and T.kind[cl.c][0] == 'L'}
+            # 머리·꼬리 행의 이름(열차번호·시발역·종착역·비고 …)도 왼쪽 것으로
+            for cl in T.cells:
+                if 'jtt-th' in cl.cls and T.kind[cl.c][0] == 'L' and cl.r not in left: left[cl.r] = cl
+            def unbig(n):
+                for k in n.kids:
+                    if isinstance(k, Node):
+                        if 'jtt-b' in k.cls: k.cls = (k.cls - {'jtt-b'}) | {'tt-bold'}
+                        unbig(k)
+            for cl in T.cells:
+                if T.kind[cl.c][0] == 'R' and cl.r in left and ('jtt-r-st' in cl.cls or 'jtt-th' in cl.cls) and \
+                        ('jtt-th' in cl.cls) == ('jtt-th' in left[cl.r].cls):
+                    nd = copy.deepcopy(left[cl.r].node)
+                    unbig(nd)
+                    cl.node = nd
         # 운행일(비고) 행: 세로쓰기 대신 작은 글자로 가로로 (한 줄에 세 자까지, 고르게 나눠 여러 줄)
         dayrows = {cl.r for cl in T.cells if cl.c == 0 and re.sub(r'\s', '', cl.node.text()) in ('운행일', '운행일주의', '비고')}
         T.dayrow = max(dayrows) if dayrows else None
@@ -1011,11 +1029,15 @@ class Book:
                 T.Rc = [j for j in reversed(T.Lc) if T.kind[j][1] in ('st', 'ad')]
         return T.Lc, T.Tc, T.Rc
 
+    def b_right(self, T):
+        """한 쪽에 홀로 실리는 조각의 오른쪽 역명 (rightStubSingle: false 면 없앤다)"""
+        return self.blocks(T)[2] if self.cfg.get('rightStubSingle', True) else []
+
     def fixed_w(self, T, side):
         L, _, R = self.blocks(T)
         TW = 0 if self.hang_title else self.title_tex(T)[2]
         fw = self.frame_w + self.frame_pad
-        blk = sum(T.colW[j] for j in (L if side == 'L' else R if side == 'R' else L + R))
+        blk = sum(T.colW[j] for j in (L if side == 'L' else R if side == 'R' else L + self.b_right(T)))
         return TW + 2 * fw + blk + (self.vband_for(side) if getattr(T, 'band_left', False) else 0)
 
     def wide_band_w(self, scale=1.0):
@@ -1047,7 +1069,7 @@ class Book:
             P = self.P0
             cols = list(trains) + [('G', Tc[-1], g) for g in range(cap - len(trains))]
             extra = room - cap * self.P0
-        keep = (L + cols) if side == 'L' else (cols + R) if side == 'R' else (L + cols + R)
+        keep = (L + cols) if side == 'L' else (cols + R) if side == 'R' else (L + cols + self.b_right(T))
         return {'side': side, 'cols': keep, 'trains': cols, 'extra': max(0, extra), 'mirror': T.mirror, 'P': P}
 
     # ── 행 자르기: 착발 두 줄 등 여러 행에 걸친 칸을 가르지 않는 자리에서만 ──

@@ -64,5 +64,7 @@
  "ktxFirst": true,
  "bandPos": "auto",
  "fold": "auto",
- "dropEnds": false
+ "dropEnds": false,
+ "rightHangul": true,
+ "rightStubSingle": false
 }
