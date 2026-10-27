@@ -1755,9 +1755,16 @@ class Book:
     #    끝에 몇 편만 남으면 열 폭을 조금(squeeze) 좁혀 앞 무리에 싣는다
     #  · 좁은 표(한 면을 다 채우지 않는 것)는 앞의 좁은 표 옆에 나란히 (하행 | 상행)
     #  · 읽는 차례를 지킨다: 앞 쪽의 빈자리로 되돌아가 채우지 않는다
+    def line_key(self, T):
+        """쪽 바깥 노선 표지의 열쇠: 고속철도 표는 그 이름(경부고속철도), KTX 는 ('KTX', 노선), 그 밖은 ('', 노선)"""
+        t = T.title.text() if T.title is not None else ''
+        m = re.search(r'([가-힣]+고속철도)', t)
+        if m: return ('', m.group(1))
+        return ('KTX', T.line) if self.is_ktx(T) else ('', T.line)
+
     def is_ktx(self, T):
         t = (T.title.text() if T.title is not None else '') + (T.head.text() if T.head is not None else '')
-        return 'KTX' in t
+        return 'KTX' in t or '고속철도' in t
 
     def redundant_ends(self, T):
         """시발역·종착역 행이 표 안의 시각과 겹치면(모든 열차가 표에 실린 역에서 떠나고 닿으면) 그 행들.
@@ -2096,7 +2103,7 @@ class Book:
                   'narrow': narrow, 'nat': self.fixed_w(T, side) + len(trains) * self.P0,
                   'hb': self.headband_h(T, bw if bw is not None else self.band_w(self.cw), '열넷째' if self.page_title else None)}
             pg['pieces'].append(pc)
-            key = ('KTX', T.line) if self.is_ktx(T) else ('', T.line)
+            key = self.line_key(T)
             if key not in pg['lines']: pg['lines'].append(key)
             tt = T.title.text() if T.title is not None else ''
             pg.setdefault('dirs', collections.defaultdict(set))[key].add('하행' if '하행' in tt else '상행' if '상행' in tt else '')
@@ -2184,7 +2191,7 @@ class Book:
         def remeta(pg):
             pg['lines'], pg['dirs'] = [], collections.defaultdict(set)
             for q in pg['pieces']:
-                key = ('KTX', q['T'].line) if self.is_ktx(q['T']) else ('', q['T'].line)
+                key = self.line_key(q['T'])
                 if key not in pg['lines']: pg['lines'].append(key)
                 tt = q['T'].title.text() if q['T'].title is not None else ''
                 pg['dirs'][key].add('하행' if '하행' in tt else '상행' if '상행' in tt else '')

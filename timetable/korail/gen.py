@@ -364,7 +364,8 @@ class Table:
         vlab = (' 수서발' if self.dir == 'down' else ' 수서행') if self.variant == '수서' else ''
         if self.merged: vlab = f'·{self.merged}' + vlab           # 경부선·경전선 수서발
         cp = getattr(self, 'cpl', None)      # 병결: {열차번호: [짝 열차번호]}, 행 자리(head: 시발역 밑 / foot: 종착역 밑)
-        name = ('KTX ' if ktx else '') + (self.line_disp) + vlab
+        hsr = HSR_NAME.get((self.cat, self.line))
+        name = (hsr + vlab) if hsr else ('KTX ' if ktx else '') + (self.line_disp) + vlab
         span = (f'{band_names[0]} > {band_names[-1]}' if band_names[0] != band_names[-1] else ' > '.join(band_names)) if not sub else ' > '.join(sub.split(' ─ ')[::-1] if self.dir == 'up' else sub.split(' ─ '))
         L = []
         L.append(f'title "{dirmark} {name} u({span})."')
@@ -372,7 +373,7 @@ class Table:
         # 노선 띠: 왼쪽에 방향·노선(인쇄에서 표마다 무엇인지), 가운데에 주요 역
         dirw = '하행' if self.dir == 'down' else '상행'
         # 방향은 노선 이름 뒤에 명조로
-        L.append(f'headl "b' + ('`KTX` ' if ktx else '') + f'{self.line_disp}{vlab}. 〔{dirw}〕"')
+        L.append(f'headl "b' + (f'{hsr}{vlab}' if hsr else ('`KTX` ' if ktx else '') + f'{self.line_disp}{vlab}') + f'. 〔{dirw}〕"')
         L.append(f'head "（{hd}）"')          # 구간: 명조로 괄호에
         L.append('headheight 48')
         if ktx: L.append(f'headstyle "fc={KTX_COLOR}"')
@@ -693,6 +694,47 @@ def share(ts):
     return {'split': split, 'major': chosen}
 
 
+# 고속철도 표 이름 (KTX 경부선 → 경부고속철도)
+HSR_NAME = {('ktx', '경부선'): '경부고속철도', ('ktx', '호남선'): '호남고속철도'}
+# 고속선에서 갈라지는 KTX: 고속철도 표에 「…선 경유」로 빠지는 열차로 넣고, 그 노선 표는 갈림역부터만
+HSR_GUESTS = {('ktx', '경부선'): [('ktx', '경전선'), ('ktx', '동해선(서울~포항)')], ('ktx', '호남선'): [('ktx', '전라선')]}
+BRANCH_AT = {('ktx', '경전선'): '동대구', ('ktx', '전라선'): '익산', ('ktx', '동해선(서울~포항)'): '동대구'}
+
+def real_ends_of(tr, names):
+    ix = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
+    return {'from': tr.get('from') or names[ix[0]], 'to': tr.get('to') or names[ix[-1]],
+            'fromT': tr.get('fromT') or tr['times'][ix[0]], 'toT': tr.get('toT') or tr['times'][ix[-1]]}
+
+def via_trains(t, trs, gst, gline):
+    """다른 노선 KTX 열차를 고속철도 표 t 의 역에 맞춰 싣는다: 같은 역은 시각, 표를 벗어나는 쪽은 「…선 경유」"""
+    hn = [clean_name(x) for x in t['stations']]
+    gn = [clean_name(x) for x in gst]
+    out = []
+    for tr in trs:
+        tt = [None] * len(hn)
+        for j, x in enumerate(gn):
+            if x in hn and isinstance(tr['times'][j], int): tt[hn.index(x)] = tr['times'][j]
+        ix = [i for i, x in enumerate(tt) if isinstance(x, int)]
+        if not ix: continue
+        lab = f"{gline.split('(')[0]} 경유"
+        ends = real_ends_of(tr, gst)
+        if t['dir'] == 'down' and clean_name(ends['to']) != hn[ix[-1]] and ix[-1] + 1 < len(hn): tt[ix[-1] + 1] = lab
+        if t['dir'] == 'up' and clean_name(ends['from']) != hn[ix[0]] and ix[0] >= 1: tt[ix[0] - 1] = lab
+        out.append(dict(tr, times=tt, **ends))
+    return out
+
+def branch_only(t, at):
+    """갈림역 at 부터(하행)·까지(상행)만. 시발·종착은 원래대로"""
+    nm = [clean_name(x) for x in t['stations']]
+    k = nm.index(at)
+    rng = range(k, len(nm)) if t['dir'] == 'down' else range(0, k + 1)
+    trs = []
+    for tr in t['trains']:
+        tt = [tr['times'][i] for i in rng]
+        if not any(isinstance(x, int) for x in tt): continue
+        trs.append(dict(tr, times=tt, **real_ends_of(tr, t['stations'])))
+    return dict(t, stations=[t['stations'][i] for i in rng], trains=trs)
+
 def couple(t, g, at):
     """주인 표 t(수서 발착)와 손님 노선 표 g 의 수서 열차를 병결로 짝짓는다.
     짝: 갈림역 at 앞에서 함께 서는 역의 시각이 모두 같고 운행일이 겹치는 주인 열차. 짝이 없으면 홀로 다니는 열차로 주인 표에도 싣는다.
@@ -719,11 +761,8 @@ def couple(t, g, at):
         for h in hits: hmap[h['no']].append(tr['no'])
         gmap[tr['no']] = [h['no'] for h in hits]
         ends = real_ends(tr)
-        if not hits:          # 홀로 다니는 열차: 주인 표에도 (갈림역 너머로 이어짐)
-            tt = [None] * len(hn)
-            for i in trunk:
-                if gn[i] in hn: tt[hn.index(gn[i])] = tr['times'][i]
-            extra.append(dict(tr, times=tt, cont=down, **ends))
+        if not hits:          # 홀로 다니는 열차: 주인 표에도, 다른 선으로 빠지는 열차처럼 (「경전선 경유」)
+            extra += via_trains(t, [tr], g['stations'], g['line'])
         # 손님 별표: 하행은 갈림역 도착 = 짝의 도착 시각
         arr_at = {}
         if down and hits:
@@ -768,7 +807,7 @@ def main():
                 expanded += [(cat, sheet, sub, None), (cat, sheet, sub, '수서')]
             else: expanded.append((cat, sheet, sub, None))
         for cat, sheet, sub, variant in expanded:
-            head = ('KTX' if cat == 'ktx' else '일반열차') + (f" ({sub.replace(' ─ ', '–')})" if sub else '') + (' (수서 발착)' if variant == '수서' else '')
+            head = (HSR_NAME.get((cat, sheet)) or ('KTX' if cat == 'ktx' else '일반열차')) + (f" ({sub.replace(' ─ ', '–')})" if sub else '') + (' (수서 발착)' if variant == '수서' else '')
             if variant == '수서' and (cat, sheet) in COUPLE_GUEST: head = 'KTX (수서 발착 병결)'
             P.append(f'== {head} ==')
             pair = {}
@@ -808,39 +847,30 @@ def main():
                            'days': {tr['no']: tr['note'] for tr in gt['trains']}}
                 elif variant == '수서' and (cat, sheet) in COUPLE_GUEST:
                     t, gmap = GUEST_SUSEO[(cat, sheet, d)]      # 별표는 직결 열차처럼 (시발·종착역이 수서). 병결열차 행 없이
-                elif (cat, sheet) in MERGE_GUEST:      # 수서 열차는 표 끝에 직결 열차처럼
+                elif (cat, sheet) in MERGE_GUEST:      # 수서 열차는 표 끝(굵은 줄 뒤)에. 고속선 구간은 고속철도 표에 있으니 갈림역부터
                     nm = [clean_name(x) for x in t['stations']]
                     k = nm.index('수서')
-                    drop = [i for i, x in enumerate(nm) if x in ('수서', '동탄', '평택지제')]
-                    entry = nm.index('천안아산') if '천안아산' in nm else None
-                    trs = []
-                    # 병결 짝이 있으면 직통 열차처럼: 갈림역 앞(하행)·뒤(상행)는 시각 대신 「ㅇㅇㅇ열차에서/분리」「ㅇㅇㅇ열차로/병결」
                     gt, gmap = GUEST_SUSEO.get((cat, sheet, d), ({'trains': []}, {}))
                     gby = {x['no']: x for x in gt['trains']}
-                    at = COUPLE[COUPLE_GUEST[(cat, sheet)]][2]
-                    ka = nm.index(at)
+                    trs = []
                     for tr in t['trains']:
                         if not isinstance(tr['times'][k], int): trs.append(tr); continue
-                        tt = list(tr['times'])
-                        ends = {'from': '수서', 'fromT': tt[k]} if d == 'down' else {'to': '수서', 'toT': tt[k]}
-                        for i in drop: tt[i] = None
-                        hosts = gmap.get(tr['no'], [])
-                        if hosts:
-                            h = '・'.join(hosts)               # 짝이 요일로 바뀌면 둘 다
-                            # 자녀 열차: 갈림역 앞(하행)·뒤(상행)는 「수서/발/654」「수서/착/1041」을 가로로 (어버이 열차 비고에 연결)
-                            if d == 'down':
-                                for i in range(ka): tt[i] = None
-                                tt[ka - 1] = f'=수서/발/{hm(ends["fromT"])}'
-                            else:
-                                for i in range(ka + 1, len(tt)): tt[i] = None
-                                tt[ka + 1] = f'=수서/착/{hm(ends["toT"])}'
-                            trs.append(dict(tr, times=tt, block=1, arr_at=gby.get(tr['no'], {}).get('arr_at', {}), **ends))
-                        else:
-                            trs.append(dict(tr, times=tt, block=1, pass_from=entry, **ends))
+                        trs.append(dict(tr, block=1, arr_at=gby.get(tr['no'], {}).get('arr_at', {})))
                     t = dict(t, trains=trs)
                 elif (cat, sheet) in COUPLE_GUEST:     # 수서 열차는 병결 별표로
                     k = next(i for i, x in enumerate(t['stations']) if clean_name(x) == '수서')
                     t = dict(t, trains=[tr for tr in t['trains'] if not isinstance(tr['times'][k], int)])
+                if (cat, sheet) in HSR_GUESTS:          # 고속선에서 갈라지는 다른 노선 KTX 를 「…선 경유」로
+                    for gk in HSR_GUESTS[(cat, sheet)]:
+                        g = tabs.get(gk + (d,))
+                        if not g: continue
+                        gnm = [clean_name(x) for x in g['stations']]
+                        sk = gnm.index('수서') if '수서' in gnm else None
+                        if variant == '수서' and gk in COUPLE_GUEST: continue      # 병결 열차는 couple 에서 (홀로 다니는 것만 실림)
+                        gtr = [tr for tr in g['trains'] if (sk is not None and isinstance(tr['times'][sk], int)) == (variant == '수서')]
+                        t = dict(t, trains=t['trains'] + via_trains(t, gtr, g['stations'], gk[1]))
+                if (cat, sheet) in BRANCH_AT and variant is None:
+                    t = branch_only(t, BRANCH_AT[(cat, sheet)])
                 T = Table(t, data['hanja']); T.line_disp = line; T.cpl = cpl
                 T.wiki(sub); pair[d] = T
             shared = share(list(pair.values()))
