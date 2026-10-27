@@ -988,9 +988,13 @@ class Book:
         blk = sum(T.colW[j] for j in (L if side == 'L' else R if side == 'R' else L + R))
         return TW + 2 * fw + blk + (self.vband_for(side) if getattr(T, 'band_left', False) else 0)
 
+    def wide_band_w(self, scale=1.0):
+        """두 줄 세로 제목칸의 폭: 글자 두 줄(굵은 노선 + 명조 구간)과 사이, 양옆 조금"""
+        return ((1.3 * 1.2 + 1.3 * 0.9 + 0.15) * scale + 0.5) * self.fs
+
     def vband_for(self, side):
         """세로 제목칸 폭: 펼침면 짝은 왼쪽 면에만 넓게(두 줄), 오른쪽 면에는 없다. 한 쪽짜리는 보통 폭"""
-        if side == 'L': return self.cfg.get('wideBand', 2) * self.P0
+        if side == 'L': return self.wide_band_w(1.0)
         if side == 'R': return 0.0
         return self.vband_w
 
@@ -1135,7 +1139,7 @@ class Book:
         sg0 = segs(parts[0], base, [])            # 노선 〔하행〕 (방향은 명조 괄호 그대로)
         mdir = None
         route = re.sub(r'\s+', ' ', parts[1].text()).strip().strip('（）()')
-        two = colw >= 3.5 * fs                     # 넓은 칸: 두 줄 (오른쪽 줄이 먼저)
+        two = colw >= 3.0 * fs * scale             # 넓은 칸: 두 줄 (오른쪽 줄이 먼저)
         cw = colw / 2 if two else colw
         # 두 줄일 때 줄 사이는 글자 크기만큼만 (칸 폭을 반씩 나누면 행간이 너무 벌어진다)
         cwA = 1.3 * 1.2 * scale * fs if two else cw
@@ -2076,21 +2080,22 @@ class Book:
                 pc['ch'] = self.make_chunk(pc['T'], pc['side'], pc['trains'], avail, pc.get('ncol'))
                 pc['avail'] = avail
         # 세로 제목칸: 빈 열이 넉넉한 쪽에서는 열 두 칸 폭으로 넓히고 글자도 키운다 (쪽 안의 세로 띠는 모두 같이)
-        wide_w = self.cfg.get('wideBand', 2) * self.P0
-        extra = wide_w - self.vband_w
         sc = self.cfg.get('wideBandScale', 1.4)
         for pg in pages:
             vps = [pc for pc in pg['pieces'] if getattr(pc['T'], 'band_left', False) and pc['side'] == 'B']
-            if not vps or extra <= 0: continue
+            if not vps: continue
             def spare(pc):
                 ch = pc['ch']
                 return sum(ch['P'] for c in ch['trains'] if isinstance(c, tuple)) + ch['extra']
-            if not all(spare(pc) >= extra + 0.01 for pc in vps): continue
-            # 글자 크기: 세로 길이가 들어가는 가장 큰 배율 (쪽 안에서 같게)
+            # 글자 크기: 세로 길이와 남는 폭에 드는 가장 큰 배율 (쪽 안에서 같게). 칸 폭은 글자 두 줄에 맞춘다
             def fits(s_):
-                return all(self.vband(pc['T'], pc.get('part') or None, 100, wide_w, s_)[1]
-                           <= (pc['vrun'][1] if pc.get('vrun') else pc['h']) - 2 * (fw + self.frame_pad) - 2 * self.vpad for pc in vps)
-            s_ok = next((x for x in (sc, 1.3, 1.2, 1.1, 1.0) if x <= sc and fits(x)), 1.0)
+                w_ = self.wide_band_w(s_)
+                return all(spare(pc) >= w_ - self.vband_w + 0.01 for pc in vps) and all(
+                    self.vband(pc['T'], pc.get('part') or None, 100, w_, s_)[1]
+                    <= (pc['vrun'][1] if pc.get('vrun') else pc['h']) - 2 * (fw + self.frame_pad) - 2 * self.vpad for pc in vps)
+            s_ok = next((x for x in (sc, 1.3, 1.2, 1.1, 1.0) if x <= sc and fits(x)), None)
+            if s_ok is None: continue
+            wide_w = self.wide_band_w(s_ok); extra = wide_w - self.vband_w
             for pc in vps:
                 pc['ch'] = self.make_chunk(pc['T'], pc['side'], pc['trains'], pc['avail'] - extra, pc.get('ncol'))
                 pc['vbw'], pc['vbscale'] = wide_w, s_ok
