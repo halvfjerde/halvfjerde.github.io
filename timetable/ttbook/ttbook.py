@@ -3433,6 +3433,7 @@ class Book:
                     q['vrun_part'] = '・'.join(dict.fromkeys(r['part'] for r in run if r.get('part')))    # 한 칸에 걸친 몇째들: (첫째·둘째)
         self.pages = pages
         self.plan_air()
+        self.plan_bus()
         self.plan_back()
 
     # ── 항공 (JTB 국내선 꼴): 공항 쌍마다 한 덩이 — 머리(번호·쌍·운임), 왼쪽 가는 편·오른쪽 오는 편, 밑에 ※ 주. 두 단으로 흘려 짠다 ──
@@ -3591,6 +3592,82 @@ class Book:
         tex += self.page_side_title(recto, [('', '항공')])
         return tex, ' '.join(ops) + ' ' + (self.pdf_ops(rects) if rects else '')
 
+    # ── 고속버스: 출발 터미널마다(가나다) 행선지마다 소요·요금과 발차 시각을 죽. 두 단으로 흘려 짠다 ──
+    def plan_bus(self):
+        self.bus = []
+        f = self.cfg.get('bus')
+        if not f: return
+        data = json.load(open(os.path.join(self.base, f), encoding='utf-8'))
+        R, fs = self.R, self.fs
+        NC = 2
+        colw = self.cw / NC
+        pad = 0.5 * fs
+        TH = 2 * R
+        LW = 6.2 * fs                                       # 행선지 칸 (이름 / 소요·요금)
+        TS, MK = 2.3 * fs, 1.0 * fs                         # 시각 칸, 등급 표지 칸
+        per = max(1, int((colw - LW - 2 * pad) / (TS + MK)))
+        cols, col, y = [], [], 0.0
+        def newcol():
+            nonlocal col, y
+            cols.append(col); col, y = [], 0.0
+        for O in data['origins']:
+            ents = []
+            for X in O['dests']:
+                n = max(2, -(-len(X['times']) // per))
+                ents.append((X, n))
+            i = 0
+            while i < len(ents):
+                room = self.ch - y - TH - pad
+                k, h = 0, 0.0
+                while i + k < len(ents) and h + ents[i + k][1] * R <= room + 1e-6:
+                    h += ents[i + k][1] * R; k += 1
+                if k == 0:
+                    if col: newcol(); continue
+                    k = 1; h = ents[i][1] * R                    # 한 단보다 긴 행선지 (드묾)
+                col.append({'O': O['from'], 'y': y, 'ents': ents[i:i + k]})
+                y += TH + h + pad
+                i += k
+                if i < len(ents): newcol()
+        if col: newcol()
+        pages = [cols[k:k + NC] for k in range(0, len(cols), NC)]
+        self._bus = (colw, TH, pad, LW, TS, MK, per)
+        for i, p in enumerate(pages):
+            self.bus.append(p); self.pages.append({'pieces': [], 'lines': [], 'bus': i})
+
+    def bus_page(self, k, x0, recto):
+        fs, H, R = self.fs, self.H, self.R
+        colw, TH, pad, LW, TS, MK, per = self._bus
+        tex, rects = [], []
+        y0 = self.mt
+        HS = 0.82
+        for ci, col in enumerate(self.bus[k]):
+            xx = x0 + ci * colw
+            for pc in col:
+                Y = y0 + pc['y']
+                tex.append(self.put_box(xx + pad, Y, colw - 2 * pad, TH, self.inl.run('%s 발' % pc['O'], Ctx('GB', 1.15)), 'l', 'm'))
+                yy = Y + TH
+                rects.append(('h', xx, xx + colw, yy, 2))
+                for j, (X, n) in enumerate(pc['ents']):
+                    if j: rects.append(('h', xx, xx + colw, yy, 1))
+                    nt = self.inl.run(X['to'], Ctx('GB', 0.9))
+                    w_ = self.inl.wc.get(nt, 1) * fs
+                    if w_ > LW - pad: nt = self.inl.run(X['to'], Ctx('GB', 0.9).but(hscale=(LW - pad) / w_))
+                    tex.append(self.put_box(xx + pad, yy, LW, R, nt, 'l', 'm'))
+                    du = '%d:%02d' % (X['dur'] // 60, X['dur'] % 60)
+                    fa = ('{:,}'.format(X['fare'][0]) + ('∼' if X['fare'][1] != X['fare'][0] else '')) if X.get('fare') else ''
+                    tex.append(self.put_box(xx + pad, yy + R, LW, R, self.inl.run(du + ' ' + fa, Ctx('M', 0.72).but(hscale=HS)), 'l', 'm'))
+                    for m_, (t, g) in enumerate(X['times']):
+                        r_, c_ = divmod(m_, per)
+                        tx = xx + LW + pad + c_ * (TS + MK)
+                        tex.append(self.put_box(tx, yy + r_ * R, TS, R, self.inl.run(t, Ctx('DM', 1.0)), 'r', 'm'))
+                        if g: tex.append(self.put_box(tx + TS + 0.1 * fs, yy + r_ * R, MK, R, self.inl.run(g, Ctx('M', 0.6)), 'l', 'm'))
+                    yy += n * R
+                rects.append(('v', xx + LW, Y + TH, yy, 1))
+                yy += pad
+                rects.append(('box', xx, Y, xx + colw, yy, self.rw[1]))
+        tex += self.page_side_title(recto, [('', '고속버스')])
+        return tex, self.pdf_ops(rects) if rects else ''
+
     # ── 책 뒤: 역명 색인과 판권 ──
     def station_pages(self, first):
         sp = collections.defaultdict(set)
@@ -3703,8 +3780,9 @@ class Book:
         seq = [('h', '철도', min(x[1] for x in rail), max(x[2] for x in rail), None)] + [('i',) + x for x in rail]
         for om in OTHER:
             if om in lp: seq += [('g',), ('h', om, lp[om][0], lp[om][1], None)]
-        ai_ = [i for i, pg in enumerate(self.pages) if 'air' in pg]
-        if ai_: seq += [('g',), ('h', '항공', ai_[0] + first, ai_[-1] + first, None)]
+        for key_, lab_ in (('air', '항공'), ('bus', '고속버스')):
+            ai_ = [i for i, pg in enumerate(self.pages) if key_ in pg]
+            if ai_: seq += [('g',), ('h', lab_, ai_[0] + first, ai_[-1] + first, None)]
         if bk_: seq += [('g',), ('h', '역명 색인', bk_[0] + first, bk_[-1] + first, None)]
         # 범례: 세 단 (등급 · KTX · 관광열차)
         lg = self.cfg.get('legend', [])
@@ -3816,8 +3894,9 @@ class Book:
             recto = folio % 2 == 1
             x0 = self.mi if recto else self.mo
             tex, rects = [], []
-            if 'front' in pg or 'back' in pg or 'air' in pg:     # 노선도·색인·범례 / 항공 / 역명 색인·판권
-                t_, lit_ = self.front_page(pg['front'], x0, first) if 'front' in pg else self.air_page(pg['air'], x0, recto) if 'air' in pg else self.back_page(pg['back'], x0, recto)
+            if 'front' in pg or 'back' in pg or 'air' in pg or 'bus' in pg:     # 노선도·색인·범례 / 항공 / 고속버스 / 역명 색인·판권
+                t_, lit_ = self.front_page(pg['front'], x0, first) if 'front' in pg else self.air_page(pg['air'], x0, recto) if 'air' in pg \
+                    else self.bus_page(pg['bus'], x0, recto) if 'bus' in pg else self.back_page(pg['back'], x0, recto)
                 tex += t_
                 tex += self.page_furniture(folio, recto, '', '', None)
                 body.append(r'\begin{picture}(%.3f,%.3f)' % (self.W, self.H))
