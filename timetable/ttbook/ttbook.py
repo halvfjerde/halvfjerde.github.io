@@ -1867,6 +1867,7 @@ class Book:
                 for n in r['nums']:
                     ps = sorted(p for p, X in where.get(n, []) if X is not T)
                     if ps: fol.append(ps[0] + first)
+                fol = list(dict.fromkeys(fol))          # 두 열차가 같은 쪽에 실렸으면 한 번만
             out[mk] = (r'\kern%.3fbp ' % (0.2 * 0.76 * r['size'] * self.fs)).join(badge(f, r['size'], r['color']) for f in fol)
             if not fol and r.get('host'): out[mk] = r['host']          # 가리킬 쪽이 없으면 본디의 ║ 그대로
         return [re.sub(r'\\TTREF\{\d+\}', lambda m: out.get(m.group(0), ''), b) for b in body]
@@ -3530,28 +3531,15 @@ class Book:
         tex.append(self.put_box(x0, y0, W, 4.6 * fs, self.inl.run(tp.get('title', '시각표'), Ctx('GB', 4.6)), 'l', 't'))
         tex.append(self.put_box(x0, y0 + 5.6 * fs, W, 1.6 * fs, self.inl.run(tp.get('sub', ''), Ctx('M', 1.6)), 'l', 't'))
         gut = 3 * fs
-        hh, ih, sg = 2 * R, 1.5 * R, 1.5 * R             # 갈래 머리 행, 항목 행, 갈래 사이
-        ind = 1.0 * fs                                   # 항목 들여쓰기
+        hh, ih = 2 * R, 1.5 * R                          # 범례 머리 행, 항목 행
         rng_ = lambda a, b: ('%d' % a) if a == b else ('%d∼%d' % (a, b))
-        def head(xx, yy, w, name, pg=None):
-            nt = self.inl.run(name, Ctx('GB', 1.1))
-            tex.append(self.put_box(xx, yy, w, hh, nt, 'l', 'm'))
-            if pg:
-                pt = self.inl.run(pg, Ctx('M', 1.1))
-                tex.append(self.put_box(xx, yy, w, hh, pt, 'r', 'm'))
-                ops.append(self.dots(xx + wd(nt) + 0.6 * fs, xx + w - wd(pt) - 0.6 * fs, yy + hh / 2))
-            rects.append(('h', xx, xx + w, yy + hh, 2))
-        # 목차: 두 단
+        def head(xx, yy, w, name):
+            tex.append(self.put_box(xx, yy, w, hh, self.inl.run(name, Ctx('GB', 1.1)), 'l', 'm'))
+        # 목차: 노선을 실린 차례대로 한 목록 (두 단)
         lp = self.line_pages(first)
         bk_ = [i for i, pg in enumerate(self.pages) if 'back' in pg and self.back[pg['back']]['cols']]
-        hsr = [(nm, a, b, T) for nm, (a, b, T) in lp.items() if nm.endswith('고속철도') or nm.startswith('KTX ')]
-        tour = [(nm, a, b, T) for nm, (a, b, T) in lp.items() if nm == '관광열차']
-        gen_ = [x for x in ((nm, a, b, T) for nm, (a, b, T) in lp.items()) if x not in hsr + tour]
-        span = lambda xs: rng_(min(x[1] for x in xs), max(x[2] for x in xs))
-        cols_ = [[('노선별 시각표', span(gen_), gen_)],
-                 [('고속철도', span(hsr), hsr)] + ([('관광열차', span(tour), [])] if tour else [])
-                 + ([('역명 색인', rng_(bk_[0] + first, bk_[-1] + first), [])] if bk_ else [])]
-        sec_h = lambda secs: sum(hh + (0.5 * R + len(it) * ih if it else 0) for _, _, it in secs) + (len(secs) - 1) * sg
+        items = [(nm, a, b, T) for nm, (a, b, T) in lp.items()] + ([('역명 색인', bk_[0] + first, bk_[-1] + first, None)] if bk_ else [])
+        per = int(math.ceil(len(items) / 2.0))
         # 범례: 세 단 (등급 · KTX · 관광열차)
         lg = self.cfg.get('legend', [])
         groups, flat = [], []
@@ -3566,30 +3554,25 @@ class Book:
             html = run_module('title "x"\n\n[stations]\n가\n\n[notes]\n' + '\n'.join(flat), os.path.join(HERE, 'src', 'Timetable.lua'), os.path.join(HERE, 'build'))
             nd = parse_html(html).find(lambda n: 'jtt-notes' in n.cls)
             rows_ = [k_ for k_ in nd.kids if isinstance(k_, Node)] if nd is not None else []
-        lg_h = max([hh + 0.5 * R + len(it) * ih for _, it in groups] + [0])
+        lg_h = max([hh + len(it) * ih for _, it in groups] + [0])
         bottom = y0 + self.ch
         yl0 = bottom - lg_h
-        yc0 = yl0 - 2 * R - max(sec_h(c) for c in cols_)
+        yc0 = yl0 - 2 * R - per * ih
         cw2 = (W - gut) / 2
-        for c_i, secs in enumerate(cols_):
-            xx = x0 + c_i * (cw2 + gut); yy = yc0
-            for s_i, (nm, pg, items) in enumerate(secs):
-                if s_i: yy += sg
-                head(xx, yy, cw2, nm, pg); yy += hh
-                if items: yy += 0.5 * R
-                for inm, ia, ib, T in items:
-                    kt = T is not None and self.is_ktx(T)
-                    it = self.inl.run(inm, Ctx('M', 1.0, '0A5FE0' if kt else None)); ip = self.inl.run(rng_(ia, ib), Ctx('M', 1.0))
-                    tex.append(self.put_box(xx + ind, yy, cw2 - ind, ih, it, 'l', 'm'))
-                    tex.append(self.put_box(xx, yy, cw2, ih, ip, 'r', 'm'))
-                    ops.append(self.dots(xx + ind + wd(it) + 0.6 * fs, xx + cw2 - wd(ip) - 0.6 * fs, yy + ih / 2))
-                    yy += ih
+        for n_, (inm, ia, ib, T) in enumerate(items):
+            c_i, r_ = divmod(n_, per)
+            xx = x0 + c_i * (cw2 + gut); yy = yc0 + r_ * ih
+            kt = T is not None and self.is_ktx(T)
+            it = self.inl.run(inm, Ctx('GB', 1.0, '0A5FE0' if kt else None)); ip = self.inl.run(rng_(ia, ib), Ctx('M', 1.0))
+            tex.append(self.put_box(xx, yy, cw2, ih, it, 'l', 'm'))
+            tex.append(self.put_box(xx, yy, cw2, ih, ip, 'r', 'm'))
+            ops.append(self.dots(xx + wd(it) + 0.6 * fs, xx + cw2 - wd(ip) - 0.6 * fs, yy + ih / 2))
         nG = max(1, len(groups))
         cw3 = (W - (nG - 1) * gut) / nG
         bw_ = 4.2 * fs
         for g_, (head_, items) in enumerate(groups):
             xx = x0 + g_ * (cw3 + gut); yy = yl0
-            head(xx, yy, cw3, head_); yy += hh + 0.5 * R
+            head(xx, yy, cw3, head_); yy += hh
             for n_, name in items:
                 if n_ is None:
                     tex.append(self.put_box(xx, yy, cw3, ih, self.inl.run(name, Ctx('M', 1.0)), 'l', 'm'))
