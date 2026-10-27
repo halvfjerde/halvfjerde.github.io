@@ -1526,6 +1526,12 @@ class Book:
         T._drop = drop
         return drop
 
+    def split_lr(self, T, k):
+        """펼침면 한 벌에 k 편: 왼쪽 면을 먼저 채우고 나머지를 오른쪽 면에 (빈 열은 펼침면 끝에 모인다)"""
+        cL, cR = self.cap(T, 'L'), self.cap(T, 'R')
+        if k <= cL + cR: return min(cL, k)
+        return min(self.cap(T, 'L', True), k)
+
     def stack_parts(self, T, G):
         """펼침면 G 개에 고르게 나눈 열차 무리: [(왼쪽 면 열차, 오른쪽 면 열차)]"""
         _, Tc, _ = self.blocks(T)
@@ -1534,7 +1540,7 @@ class Book:
         out, ti = [], 0
         for g in range(G):
             k = base + (1 if g < ex else 0)
-            kA = min(capL, -(-k // 2))
+            kA = self.split_lr(T, k)
             out.append((Tc[ti:ti + kA], Tc[ti + kA:ti + k])); ti += k
         return out
 
@@ -1583,9 +1589,26 @@ class Book:
                              'h': self.piece_h(T, rows[id(T)], False, bw)})
         return jobs
 
+    def half_w(self):
+        return (self.cw + self.frame_w) / 2          # 좌우 대칭으로 나란히 둘 때 한 표의 폭 (가운데 틀을 함께 쓴다)
+
+    def side_jobs(self, Td, Tu):
+        """작은 하행·상행 짝을 한 쪽에 좌우로 (같은 폭으로). 들지 않으면 None"""
+        half = self.half_w()
+        bw = self.band_w(half)
+        js = []
+        for T in (Td, Tu):
+            n = len(self.blocks(T)[1])
+            if self.fixed_w(T, 'B') + n * self.P0 * self.squeeze > half + 0.01: return None
+            rows = list(range(T.nrow))
+            js.append((T, self.blocks(T)[1], rows, self.piece_h(T, rows, False, bw)))
+        return [{'T': Td, 'Tu': Tu, 'kind': 'side', 'parts': js, 'h': max(j[3] for j in js), 'trs': js[0][1],
+                 'rows': js[0][2], 'notes': False, 'bw': bw}]
+
     def jobs_of(self, T):
         """표 하나를 실을 일감들: [{kind single|pair, trs, rows, h, ...}] (역 구간 먼저, 그 안에서 열차 무리 차례)"""
         if getattr(T, 'stack_with', None) is not None: return self.stack_jobs(T, T.stack_with)
+        if getattr(T, 'side_with', None) is not None: return self.side_jobs(T, T.side_with)
         if getattr(T, 'stacked', False): return []
         PH = self.ch
         L, Tc, R = self.blocks(T)
@@ -1643,13 +1666,13 @@ class Book:
                 if r:
                     if full >= 1 and r <= sB: groups.append(('single', r))
                     else:
-                        kA = -(-r // 2); groups.append(('pair', kA, r - kA))
+                        kA = self.split_lr(T, r); groups.append(('pair', kA, r - kA))
             else:
                 base, ex = divmod(n, G)
                 groups = []
                 for g in range(G):
                     k = base + (1 if g < ex else 0)
-                    kA = -(-k // 2); groups.append(('pair', kA, k - kA))
+                    kA = self.split_lr(T, k); groups.append(('pair', kA, k - kA))
         jobs = []
         for si, (b0, b1) in enumerate(secs):
             last_sec = si == len(secs) - 1
@@ -1706,6 +1729,15 @@ class Book:
         def try_place(job, c):
             """지금 쪽 c 에 (짝이면 c 와 c+1 에) 그대로 들면 싣고 True"""
             T, trs, rows, h, notes = job['T'], job['trs'], job['rows'], job['h'], job['notes']
+            if job['kind'] == 'side':
+                y = top(c)
+                if y + h > PH + 0.01: return False
+                half = self.half_w()
+                for k_, (T_, trs_, rows_, h_) in enumerate(job['parts']):
+                    pc_ = put(T_, c, trs_, rows_, y, False, h_, k_ * (half - fw), True, 'B', job['bw'])
+                    pc_['fixw'] = half
+                ys[c] = y + h
+                return True
             if job['kind'] == 'stack':            # 펼침면에서만 (왼쪽 면에서 시작)
                 if c % 2 == 1: return False
                 y = max(top(c), top(c + 1))
@@ -1783,7 +1815,7 @@ class Book:
             if mode == 'left': T.band_left = fits
             else: T.band_left = fits and len(jl) <= len(jt) and 2 * hl - fw <= PH + 0.01 < 2 * ht - fw
         for T in tables:
-            T.band_left = False; T.fold = False; T.stack_with = None; T.stacked = False
+            T.band_left = False; T.fold = False; T.stack_with = None; T.stacked = False; T.side_with = None
             if self.fold != 'off':
                 jt = self.jobs_of(T)
                 T.band_left = T.head is not None; T.fold = True
@@ -1809,6 +1841,17 @@ class Book:
                 for T in ts:
                     T.fold = False; T.band_left = False
                     band_pos(T)
+            # 작은 짝(둘 다 반쪽 폭에 드는 것)은 한 쪽에 좌우 대칭으로 (하행 왼쪽, 상행 오른쪽)
+            if self.cfg.get('sideBySide', True) and len(ts) == 2:
+                dn = [T for T in ts if '하행' in T.title.text()]
+                up = [T for T in ts if '상행' in T.title.text()]
+                if len(dn) == 1 and len(up) == 1:
+                    old = [(T.fold, T.band_left) for T in ts]
+                    for T in ts: T.fold = False; T.band_left = False
+                    if self.side_jobs(dn[0], up[0]):
+                        dn[0].side_with, up[0].stacked = up[0], True
+                        continue
+                    for T, (f, b) in zip(ts, old): T.fold, T.band_left = f, b
             # 하행·상행 짝이 펼침면에 위아래로 들면 그렇게 (하행 위, 상행 아래, 가로로 이어 읽는다)
             if self.cfg.get('upDown', True) and len(ts) == 2:
                 dn = [T for T in ts if '하행' in T.title.text()]
@@ -1833,7 +1876,8 @@ class Book:
         rkey = lambda T: (T.line, self.is_ktx(T), route(T))
         for bunch in bunches:
             pend = [collections.deque(self.jobs_of(T)) for T in bunch]
-            whole = [len(q) == 1 for q in pend]          # 한 번에 다 실리는 표만 당겨 올 수 있다
+            init = [len(q) for q in pend]
+            whole = [n <= 1 for n in init]          # 한 번에 다 실리는 표만 당겨 올 수 있다 (짝에 묶여 일감이 없는 표 포함)
             while any(pend):
                 pi = next(i for i, q in enumerate(pend) if q)
                 job = pend[pi][0]
@@ -1848,10 +1892,10 @@ class Book:
                         unit = [qi]
                         while unit[-1] + 1 < len(pend) and rkey(bunch[unit[-1] + 1]) == rkey(bunch[qi]): unit.append(unit[-1] + 1)
                         js = [pend[k][0] for k in unit if pend[k]]
-                        if len(js) == len(unit) and all(whole[k] for k in unit) and all(j['kind'] == 'single' for j in js) \
+                        if js and all(whole[k] and len(pend[k]) == init[k] for k in unit) and all(j['kind'] in ('single', 'side') for j in js) \
                                 and top(c) + sum(j['h'] for j in js) - (len(js) - 1) * fw <= PH + 0.01:
                             for k in unit:
-                                try_place(pend[k][0], c); pend[k].popleft()
+                                if pend[k]: try_place(pend[k][0], c); pend[k].popleft()
                             filled = True
                         qi = unit[-1] + 1
                     if not filled: advance(job, c)
@@ -1864,6 +1908,7 @@ class Book:
             for pc in pg['pieces']:
                 others = sorted([q for q in pg['pieces'] if q is not pc and abs(q['y'] - pc['y']) < 0.01 and q['x'] > pc['x']], key=lambda q: q['x'])
                 avail = min(others[0]['x'] - TWh - gapX - pc['x'], pc['nat']) if others else (self.cw - pc['x'])
+                if pc.get('fixw'): avail = pc['fixw']
                 pc['ch'] = self.make_chunk(pc['T'], pc['side'], pc['trains'], avail, pc.get('ncol'))
         # 붙은 조각 사이의 괘선: 위 조각과 같은 표면 띠 사이 괘선, 다른 표면 표 사이 괘선. 아래에 붙은 조각이 있으면 아래 변은 그 조각이 긋는다
         for pg in pages:
