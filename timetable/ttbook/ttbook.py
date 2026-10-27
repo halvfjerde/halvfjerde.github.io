@@ -907,13 +907,13 @@ class Book:
         T._aim = out
         return out
 
-    ARW = 0.4           # 진행 방향 화살표 곁 여백 (em): 착발 칸을 이만큼 넓혀 글자를 화살표에서 띄운다
+    ARW = 0.5           # 진행 방향 화살표 곁 여백 (em): 양옆 칸(착발·첫 열차, 마지막 열차·오른쪽 역명)에 반씩
 
     def arrow_ads(self, T):
-        """화살표를 둘 착발 칸 {열: 'l'|'r'} (열차 열과 맞닿은 쪽)"""
+        """화살표를 둘 칸 {열: 'l'|'r'} (열차 열과 맞닿은 쪽): 왼쪽 묶음의 착발 칸, 오른쪽 역명 칸"""
         out = {}
         for j, k in enumerate(T.kind):
-            if k != ('L', 'ad'): continue
+            if k not in (('L', 'ad'), ('R', 'st')): continue
             if j + 1 < len(T.kind) and T.kind[j + 1][0] == 'T': out[j] = 'r'
             elif j > 0 and T.kind[j - 1][0] == 'T': out[j] = 'l'
         return out
@@ -927,7 +927,12 @@ class Book:
         names = [len(c.node.text().strip()) for c in T.cells if c.c in stc and c.cs == 1 and 'jtt-th' not in c.cls and c.node.text().strip()]
         need = (max(names + [3]) + 0.6) * em
         for j in ads:
-            T.colW[j] += self.ARW * em
+            if T.kind[j] == ('R', 'st'):        # 오른쪽 역명: 제 칸의 남는 폭 안에서 (모자라면 그만큼만 넓힌다)
+                nm_ = [len(c.node.text().strip()) for c in T.cells if c.c == j and c.cs == 1 and 'jtt-th' not in c.cls and c.node.text().strip()]
+                need_r = (max(nm_ + [2]) + 0.6) * em
+                T.colW[j] = max(T.colW[j], need_r + self.ARW * em)
+                continue
+            T.colW[j] += self.ARW * em          # 반은 그 칸의 글자 곁, 반은 맞닿은 열차 열로 (짤 때 옮긴다)
             if stc:
                 take = min(self.ARW * em, max(0.0, T.colW[stc[0]] - need))
                 T.colW[stc[0]] -= take
@@ -1499,6 +1504,13 @@ class Book:
                     tgt = idx
                     if side != 'R': break
             if tgt is not None: widths[tgt] += ch['extra']
+        # 화살표 곁 여백: 착발(오른쪽 역명) 칸에 넣어 둔 몫의 반을 맞닿은 열차 열로 (화살표 양옆이 같게)
+        ads0 = self.arrow_ads(T)
+        for ci, j in enumerate(cols):
+            if isinstance(j, tuple) or j not in ads0: continue
+            k2 = ci + (1 if ads0[j] == 'r' else -1)
+            if 0 <= k2 < len(cols) and kind_of(T, cols[k2])[0] == 'T':
+                widths[ci] -= self.ARW / 2 * self.fs; widths[k2] += self.ARW / 2 * self.fs
         if self.hang_title: tx = x0           # 제목은 판면 밖(바깥 여백)에
         else: tx = x0 + (TW if side != 'R' else 0)
         fx0 = tx
@@ -1585,7 +1597,7 @@ class Book:
             sd = ads_[j]
             k2 = ci + (1 if sd == 'r' else -1)
             if not (0 <= k2 < len(cols)) or kind_of(T, cols[k2])[0] != 'T': continue
-            arr_.append((ci, j, sd, ('u' if sd == 'r' else 'd') if getattr(T, 'both', False) else 'd'))
+            arr_.append((ci, j, sd, ('u' if sd == 'r' else 'd') if (getattr(T, 'both', False) and kind_of(T, j)[0] == 'L') else 'd'))
         self.cur_arrow = {j: {sd} for ci, j, sd, _ in arr_}
         self.arrow_bounds = {(ci + 1 if sd == 'r' else ci) for ci, j, sd, _ in arr_}     # 이 경계의 세로 괘선은 화살표가 대신한다
         seen = set()
@@ -1644,9 +1656,9 @@ class Book:
         fs = self.fs
         cls, st = cell.cls, cell.style
         sd_ = getattr(self, 'cur_arrow', {}).get(cell.c)
-        if sd_ and 'jtt-ad' in cls and 'jtt-th' not in cls and T.hEnd <= cell.r < T.fStart:   # 화살표 곁을 비운다
-            if 'l' in sd_: x += self.ARW * fs
-            w -= self.ARW * fs
+        if sd_ and ('jtt-ad' in cls or 'jtt-rc' in cls) and 'jtt-th' not in cls and T.hEnd <= cell.r < T.fStart:   # 화살표 곁을 비운다
+            if 'l' in sd_: x += self.ARW / 2 * fs
+            w -= self.ARW / 2 * fs
 
         rc = T.rowcls[cell.r]
         if not cell.lines: return
