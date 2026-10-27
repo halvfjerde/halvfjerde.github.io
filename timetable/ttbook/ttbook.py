@@ -822,6 +822,7 @@ class Book:
         REF_C = self.metrics.ref
         self.inl = Inline(self.fs, self.metrics)
         self.pages = []                                           # [(side, [tex…], runhead)]
+        self.refs = {}                                            # \\TTREF{k} → 쪽 번호로 채울 주
 
     # ── 칸의 괘선(위키 CSS 와 같은 셈) ──
     def borders(self, T, cell):
@@ -880,7 +881,8 @@ class Book:
             h += line_height(ln)
         if any(it[0] == 'obj' and len(it) > 5 for ln in lines for it in ln):
             rc = T.rowcls[cell.r]
-            if rc & {'jtt-f1', 'jtt-fr'}: h += 0.4
+            if getattr(cell, 'refin', False): h += 0.1          # 밑에 쪽 번호 표지가 붙은 주: 표지 밑 여백으로 갈음
+            elif rc & {'jtt-f1', 'jtt-fr'}: h += 0.4
             else: h += 0.2
         return h
 
@@ -969,6 +971,7 @@ class Book:
                     nd.kids += [sm, Node('br', []), vt]
                     cl.node = nd
                     cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
+        refs_ = []
         for cell in T.cells:
             c = base
             if getattr(cell, 'small', None): c = c.but(size=cell.small)
@@ -986,6 +989,35 @@ class Book:
             cell.lines = self.inl.lines(cell.node, c)
             cell.lines = [l for l in cell.lines] if any(cell.lines) else []
             cell.need = self.cell_need(T, cell, cell.lines)
+            ref = self.ref_of(T, cell) if self.cfg.get('pageRefs', True) else None
+            if ref: refs_.append((cell, ref, c))
+        # 「…선 경유」「…로 연결」 등: 다음 줄에 그 열차가 실린 쪽 번호를 네모 표지로 (쪽 번호는 짠 뒤에 채운다).
+        # 세로 주 바로 밑(없으면 위) 칸이 ║ 이면 그 칸에 (행이 높아지지 않게), 아니면 주 칸 끝에 한 줄 더
+        for cell, ref, c in refs_:
+            sm = c.size * 0.76
+            n_ = len(ref['nums']) if ref['kind'] == 'train' else 1
+            w_ = n_ * 1.5 * sm + (n_ - 1) * 0.2 * sm
+            mk = r'\TTREF{%d}' % len(self.refs)
+            self.refs[mk] = dict(ref, T=T, col=cell.c, size=c.size, color=c.color)
+            item = [('obj', mk, w_, 1.3 * sm, c.size)]
+            host = None
+            if cell.r < T.fStart:
+                for rr in (cell.r + cell.rs, cell.r - 1):
+                    nb = T.occ.get((rr, cell.c))
+                    if T.hEnd <= rr < T.fStart and nb is not None and not isinstance(nb, Ghost) and nb.rs == 1 \
+                            and nb.node.text().strip() == '║' and not getattr(nb, 'refhost', False):
+                        host = nb; break
+            if host is not None:
+                self.refs[mk]['host'] = self.inl.flat(host.lines[0]) if host.lines else ''
+                host.lines = [item]; host.refhost = True
+                host.need = self.cell_need(T, host, host.lines)
+            else:                     # 주 칸 끝에 한 줄 더: 세로쓰기의 띄어쓰기는 빼고(표지가 사이를 띄운다) 높이를 아낀다
+                def nospace(n):
+                    n.kids = [k.replace(' ', '') if isinstance(k, str) else (nospace(k) or k) for k in n.kids]
+                nd = copy.deepcopy(cell.node); nospace(nd); cell.node = nd
+                cell.lines = [l for l in self.inl.lines(nd, c)] + [item]
+                cell.refin = True
+                cell.need = self.cell_need(T, cell, cell.lines)
         R = self.R / fs                     # em
         rows = [1] * T.nrow
         for cell in T.cells:
@@ -1577,6 +1609,59 @@ class Book:
                     if c.c == j and 'jtt-th' in c.cls and c.node.text().strip()]
             need = max([x + 0.6 for x in names] + [x + 0.6 - w / em for x, w in labs] + [3.0]) * em
             T.colW[j] = min(T.colW[j], need)
+
+    def ref_of(self, T, cell):
+        """열차 칸의 주가 다른 표를 가리키면 {kind: via|train, ...}: 「…선 경유」(그 노선 표의 같은 열차), 「…로 연결·분리」「…/발/654」(그 번호의 열차)"""
+        if T.kind[cell.c][0] != 'T' or cell.r < T.hEnd: return None
+        t = re.sub(r'\s', '', cell.node.text())
+        m = re.fullmatch(r'(.+선)경유', t)
+        if m: return {'kind': 'via', 'name': m.group(1)}
+        if re.search(r'연결|분리', t) or re.fullmatch(r'\D+(발|착)\d+', t):
+            nums = re.findall(r'\d{2,5}', t)
+            if nums: return {'kind': 'train', 'nums': nums}
+        return None
+
+    def colno(self, T):
+        """열차 열 → 열차 번호"""
+        if getattr(T, '_colno', None) is None:
+            T._colno = {}
+            for c in T.cells:
+                if c.r < T.hEnd and T.kind[c.c][0] == 'T' and c.node.find(lambda n: 'jtt-no' in n.cls) is not None:
+                    d = re.sub(r'\D', '', c.node.text())
+                    if d: T._colno[c.c] = d
+        return T._colno
+
+    def resolve_refs(self, body):
+        """짠 뒤: 쪽마다 실린 열차로 찾아 \\TTREF{k} 를 쪽 번호 네모 표지로"""
+        first = self.cfg.get('firstFolio', 2)
+        where = collections.defaultdict(list)          # 열차 번호 → [(쪽, 표)]
+        for p, pg in enumerate(self.pages):
+            for pc in pg['pieces']:
+                cn = self.colno(pc['T'])
+                for j in pc['trains']:
+                    if not isinstance(j, tuple) and j in cn: where[cn[j]].append((p, pc['T']))
+        def badge(n, size, color):
+            sm = size * 0.76
+            inner = self.inl.run(str(n), Ctx('DG', sm, color))
+            w = max(1.3, len(str(n)) * 0.55 + 0.4)
+            return r'\ttbadge{%.3f}{%.3f}{0}{1.000}{%.3f}{%s}' % (w * sm * self.fs, 1.3 * sm * self.fs, self.inl.c * size * self.fs, inner)
+        out = {}
+        for mk, r in self.refs.items():
+            T = r['T']
+            if r['kind'] == 'via':
+                no = self.colno(T).get(r['col'])
+                nm = r['name']
+                ok = (lambda X: self.is_ktx(X) and nm.replace('고속선', '고속철도') in X.title.text()) if nm.endswith('고속선') else (lambda X: X.line == nm)
+                ps = sorted(p for p, X in where.get(no, []) if ok(X) and X is not T)
+                fol = [ps[0] + first] if ps else []
+            else:
+                fol = []
+                for n in r['nums']:
+                    ps = sorted(p for p, X in where.get(n, []) if X is not T)
+                    if ps: fol.append(ps[0] + first)
+            out[mk] = (r'\kern%.3fbp ' % (0.2 * 0.76 * r['size'] * self.fs)).join(badge(f, r['size'], r['color']) for f in fol)
+            if not fol and r.get('host'): out[mk] = r['host']          # 가리킬 쪽이 없으면 본디의 ║ 그대로
+        return [re.sub(r'\\TTREF\{\d+\}', lambda m: out.get(m.group(0), ''), b) for b in body]
 
     def note_runs(self, T):
         """경유 등 세로 주와 바로 앞뒤 한 칸(║) 사이의 구획선은 긋지 않는다 → {(위 칸 id, 아래 칸 id)}"""
@@ -2817,6 +2902,7 @@ class Book:
             if rects: body.append(r'\put(0,0){\pdfextension literal{%s}}' % self.pdf_ops(rects))
             body += tex
             body.append(r'\end{picture}\newpage')
+        body = self.resolve_refs(body)
         pre = PREAMBLE % {
             'W': self.W, 'H': self.H, 'fontdefs': self.fontdefs(),
             'layout': 'TwoPageLeft' if first % 2 == 0 else 'TwoPageRight',
