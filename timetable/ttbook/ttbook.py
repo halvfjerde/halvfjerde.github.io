@@ -1244,8 +1244,8 @@ class Book:
         parts, color = self.band_nodes(T)                  # 띠가 한 덩어리면 가운데에
         ctx = Ctx('DM', 1.0, color)
         fs = self.fs
-        def seg(node):
-            ls = self.inl.lines(node, ctx)
+        def seg(node, c_=None):
+            ls = self.inl.lines(node, c_ or ctx)
             ln = ls[0] if ls and ls[0] else []
             return (self.inl.flat(ln), self.inl.line_w(ln) * fs, line_height(ln) if ln else 0.0)
         L, C = seg(parts[0]), seg(parts[1])
@@ -1253,7 +1253,7 @@ class Book:
             ln = [('tex', self.inl.run('(%s)' % part, Ctx('M', 1.0, color)), 1.0)]
             R = (self.inl.flat(ln), self.inl.line_w(ln) * fs, line_height(ln))
         else:
-            R = seg(parts[2])
+            R = seg(parts[2], Ctx('M', 1.0, color))      # 오른쪽 주(운행일 등): 숫자까지 명조로
         gap = 1.0 * fs
         if L[1] + C[1] + R[1] + 2 * gap <= W or not C[0]:
             plan = [(L[0], C[0], R[0], max(L[2], C[2], R[2], 1.25))]
