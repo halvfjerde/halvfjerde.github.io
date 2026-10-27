@@ -1506,11 +1506,13 @@ class Book:
             if tgt is not None: widths[tgt] += ch['extra']
         # 화살표 곁 여백: 착발(오른쪽 역명) 칸에 넣어 둔 몫의 반을 맞닿은 열차 열로 (화살표 양옆이 같게)
         ads0 = self.arrow_ads(T)
+        self.cur_tpad = {}               # 넓힌 열차 열: 글은 본디 폭에 (화살표 쪽을 비운다)
         for ci, j in enumerate(cols):
             if isinstance(j, tuple) or j not in ads0: continue
             k2 = ci + (1 if ads0[j] == 'r' else -1)
             if 0 <= k2 < len(cols) and kind_of(T, cols[k2])[0] == 'T':
                 widths[ci] -= self.ARW / 2 * self.fs; widths[k2] += self.ARW / 2 * self.fs
+                if not isinstance(cols[k2], tuple): self.cur_tpad[cols[k2]] = 'l' if ads0[j] == 'r' else 'r'
         if self.hang_title: tx = x0           # 제목은 판면 밖(바깥 여백)에
         else: tx = x0 + (TW if side != 'R' else 0)
         fx0 = tx
@@ -1638,7 +1640,7 @@ class Book:
         self.cur_arrow = {}
         # 괘선
         rects += self.grid_rules(T, rows, cols, xs, ys, side)
-        self.arrow_bounds = set()
+        self.arrow_bounds = set(); self.cur_tpad = {}
         # 주기
         if with_notes and T.notes is not None:
             rects.append(self.hrule(xs[0], xs[-1], ys[-1], 1))
@@ -1656,6 +1658,10 @@ class Book:
         fs = self.fs
         cls, st = cell.cls, cell.style
         sd_ = getattr(self, 'cur_arrow', {}).get(cell.c)
+        tp_ = getattr(self, 'cur_tpad', {}).get(cell.c)
+        if tp_ and cell.cs == 1:                     # 화살표 곁 열차 열: 넓힌 만큼을 비우고 본디 폭에 맞춘다
+            if tp_ == 'l': x += self.ARW / 2 * fs
+            w -= self.ARW / 2 * fs
         if sd_ and ('jtt-ad' in cls or 'jtt-rc' in cls) and 'jtt-th' not in cls and T.hEnd <= cell.r < T.fStart:   # 화살표 곁을 비운다
             if 'l' in sd_: x += self.ARW / 2 * fs
             w -= self.ARW / 2 * fs
