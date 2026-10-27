@@ -2392,6 +2392,46 @@ class Book:
                     if pu_[i]: put(job['Tu'], c + i, pu_[i], ru, y + hd - fw, False, hu, side=sd)['ncol'] = n_
                     ys[c + i] = y + h
                 return True
+            if job['kind'] == 'stack' and c % 2 == 1 and job.get('anyStart') and job.get('beside'):
+                # 오른쪽 면에서 시작: 첫 쪽은 홀로(양쪽 역명), 넘긴 왼쪽 면에 나머지와 그 옆에 다음 노선
+                y = max(top(c), top(c + 1))
+                if y + h > PH + 0.01: return False
+                da, db, rd, hd = job['d']; ua, ub, ru, hu = job['u']
+                Tu = job['Tu']
+                Ad, Au = da + db, ua + ub
+                kB = min(self.cap(T, 'B', True), self.cap(Tu, 'B', True))
+                rd_, ru_ = Ad[kB:], Au[kB:]
+                if not rd_ and not ru_: return False
+                _, ys0, _ = job['beside']
+                found = None
+                for yb_ in (1, 0):
+                    for b_ in range(job.get('blank', 0), -1, -1):
+                        nL = max(len(rd_), len(ru_)) + b_
+                        wL = max(self.fixed_w(T, 'L'), self.fixed_w(Tu, 'L')) + nL * self.P0
+                        wY = self.cw + fw - wL
+                        ys2 = []
+                        for Y, Yc, ry, _h in ys0:
+                            if self.fixed_w(Y, 'B') + (len(Yc) + yb_) * self.P0 > wY + 0.01: break
+                            ys2.append((Y, Yc, ry, self.piece_h(Y, ry, False, self.band_w(wY))))
+                        if len(ys2) == len(ys0) and y + sum(q[3] for q in ys2) - (len(ys2) - 1) * fw <= PH + 0.01:
+                            found = (wL, ys2, nL); break
+                    if found: break
+                if not found: return False
+                wL, ys2, nL = found
+                n0 = max(len(Ad[:kB]), len(Au[:kB]))
+                put(T, c, Ad[:kB], rd, y, False, hd, side='B')['ncol'] = n0
+                put(Tu, c, Au[:kB], ru, y + hd - fw, False, hu, side='B')['ncol'] = n0
+                for T_, tr_, r_, y_, h_ in ((T, rd_, rd, y, hd), (Tu, ru_, ru, y + hd - fw, hu)):
+                    if tr_:
+                        pc_ = put(T_, c + 1, tr_, r_, y_, False, h_, side='L'); pc_['fixw'], pc_['ncol'] = wL, nL
+                ys[c] = ys[c + 1] = y + h
+                yy = y
+                for Y, Yc, ry, hy in ys2:
+                    put(Y, c + 1, Yc, ry, yy, False, hy, wL - fw, False, 'B', self.band_w(self.cw + fw - wL))
+                    yy += hy - fw
+                ys[c + 1] = max(ys[c + 1], yy + fw)
+                cur['c'] = c + 2
+                return True
             if job['kind'] == 'stack':            # 펼침면에서만 (왼쪽 면에서 시작)
                 if c % 2 == 1: return False
                 y = max(top(c), top(c + 1))
@@ -2467,7 +2507,7 @@ class Book:
                 tt = q['T'].title.text() if q['T'].title is not None else ''
                 pg['dirs'][key].add('하행' if '하행' in tt else '상행' if '상행' in tt else '')
         def advance(job, c):
-            if job['kind'] in ('stack', 'facing') or (job['kind'] == 'pair' and job.get('beside') and c % 2 == 1):
+            if (job['kind'] in ('stack', 'facing') and not (job.get('anyStart') and job.get('beside'))) or (job['kind'] == 'pair' and job.get('beside') and c % 2 == 1):
                 # 펼침면으로 가야 해서 오른쪽 면이 통째로 빌 때: 앞 쪽 맨 아랫단의 작은 표(통째로 그 쪽에 있는 것)를 옮겨 채운다
                 if c % 2 == 1 and ys[c] == 0 and c >= 1 and page(c - 1)['pieces']:
                     prev = page(c - 1)
@@ -2760,7 +2800,7 @@ class Book:
                 if len(ys_) == 2: break
             if len(ys_) != 2 or ys_[0][3] + ys_[1][3] - fw > PH + 0.01: continue
             for T in (Td, Tu, Yd, Yu): T.custom_jobs = None; T.stack_with = None; T.side_with = None; T.stacked = False
-            Td.custom_jobs = [dict(sj[0], beside=(wR, ys_, nR))]
+            Td.custom_jobs = [dict(sj[0], beside=(wR, ys_, nR), anyStart=br.get('anyStart', False), blank=blank)]
             Tu.stacked = Yd.stacked = Yu.stacked = True
         # belowFacing: 마주 보는 하행·상행(facing) 밑에 다른 노선의 하행·상행을 (왼쪽 면 밑에 하행, 오른쪽 면 밑에 상행)
         for bf in self.cfg.get('belowFacing', []):

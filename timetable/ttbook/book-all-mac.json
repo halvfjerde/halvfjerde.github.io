@@ -130,7 +130,8 @@
    "line": "강릉선",
    "with": "중부내륙선",
    "ktx": true,
-   "blank": 4
+   "blank": 4,
+   "anyStart": true
   }
  ],
  "hsrLast": true,
