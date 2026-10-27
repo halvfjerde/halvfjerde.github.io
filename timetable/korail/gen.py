@@ -35,6 +35,7 @@ TOUR = json.load(open(TOUR_JSON)) if os.path.exists(TOUR_JSON) else None
 if TOUR: BOOK.append(('관광열차', [('tour', t['line'], None) for t in TOUR['tables'] if t['dir'] == 'down']))
 # 관광열차 표는 상하행을 한 표에 (가운데 역명, 왼쪽 하행·오른쪽 상행). 열차 옆 주석 열 (표 이름 → 세로 두 줄)
 TOUR_COLNOTE = {}
+BOTH_TABLES = {('gen', '서해선', '순환')}       # 상하행을 한 표에 적는 그 밖의 표 (평택선)
 TOUR_HEADR = {'정선아리랑': '토·일과 2, 7, 12, 17, 22, 27일 운행'}      # 표 머리띠 오른쪽에 적는 주      # 칸 문법 그대로 (세로 덩어리를 위에서 아래로)
 # 노선마다 재래선(일반열차) 표를 먼저, KTX 는 그 뒤에
 BOOK = [(line, sorted(parts, key=lambda p: 0 if p[0] == 'gen' else 1)) for line, parts in BOOK]
@@ -97,7 +98,7 @@ def combine_both(Td, Tu, sub, name):
         return out
     A, B = sections(a), sections(b)
     assert [l for l in A['footer'] if l.strip()] == [l for l in B['footer'] if l.strip()], (A['footer'], B['footer'])
-    disp = name.replace('(', ' (')
+    disp = re.sub(r'\s*\(', ' (', name)
     head = [f'title "{disp}"', f'headl "b{disp}"'] + ([f'headr "{TOUR_HEADR[name]}"'] if name in TOUR_HEADR else []) + ['cols ad st ad', 'both 1']
     head += [l for l in A[''] if l.strip() and not re.match(r'(title|headl|headr|head|headheight|cols|rcols)\b', l)]
     nh = len([l for l in A['rows'] if l.strip()])
@@ -1167,13 +1168,13 @@ def main():
                     if (cat, sheet) in SPLIT_LOOP and variant is None and any(is_loop(tr) for tr in tabs[(cat, sheet, d)]['trains']):
                         t['loop_note'] = f"{clean_name(next(tr for tr in tabs[(cat, sheet, d)]['trains'] if is_loop(tr))['from'])} 순환 열차는 {LOOP_NAME[(cat, sheet)]} 표에"
                 T = Table(t, data['hanja']); T.line_disp = LINE_DISP.get((cat, sheet), sheet.replace('(', ' (') if cat == 'tour' else line); T.cpl = cpl
-                T.both = cat == 'tour'
+                T.both = cat == 'tour' or (cat, sheet, variant) in BOTH_TABLES
                 T.wiki(sub); pair[d] = T
             shared = share(list(pair.values()))
-            if cat == 'tour' and len(pair) == 2:          # 관광열차: 상하행을 한 표에 (가운데 역명)
+            if (cat == 'tour' or (cat, sheet, variant) in BOTH_TABLES) and len(pair) == 2:          # 관광열차 등: 상하행을 한 표에 (가운데 역명)
                 for T in pair.values(): T.shared = shared
                 P.append('{{#invoke:Timetable|main|data=')
-                P.append(combine_both(pair['down'], pair['up'], sub, sheet))
+                P.append(combine_both(pair['down'], pair['up'], sub, pair['down'].line_disp))
                 P.append('}}')
                 P.append('')
                 book_items.append({'type': 'table', 'title': title, 'idx': idx, 'label': f"{line} {head}", 'fit': 'split', 'scale': 100})

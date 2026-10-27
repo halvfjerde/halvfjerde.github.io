@@ -1995,7 +1995,7 @@ class Book:
         m = re.search(r'([가-힣]+고속철도)', t)
         if m: return ('', m.group(1))
         if not self.is_ktx(T):                      # 노선 안의 다른 이름 표(평택선 등)는 그 이름
-            m = re.search(r'(?:하행|상행)\s*([가-힣·・]+선)(?![가-힣])', t)
+            m = re.search(r'(?:(?:하행|상행)\s*|^\s*)([가-힣·・]+선)(?![가-힣])', t)
             if m and m.group(1) != T.line: return ('', m.group(1))
         return ('KTX', T.line) if self.is_ktx(T) else ('', T.line)
 
@@ -2806,7 +2806,10 @@ class Book:
                     kw = br.get('upRow' if T is Tu else 'downRow')
                     if kw:
                         rr = [[X for X in tables if X.line == ln and kw in X.title.text() and d in X.title.text()] for d in ('하행', '상행')]
-                        if not all(len(x) == 1 for x in rr): break
+                        if not all(len(x) == 1 for x in rr):
+                            rb = [X for X in tables if X.line == ln and kw in X.title.text() and getattr(X, 'both', False)]   # 상하행을 한 표에
+                            if len(rb) != 1: break
+                            rr = [rb]
                         parts_ = []
                         # 좌우로 나란한 두 표는 역명 칸 폭을 같게 (넓은 쪽에)
                         for j_ in range(max(len(x[0].colW) for x in rr)):
