@@ -1963,6 +1963,9 @@ class Book:
         t = T.title.text() if T.title is not None else ''
         m = re.search(r'([가-힣]+고속철도)', t)
         if m: return ('', m.group(1))
+        if not self.is_ktx(T):                      # 노선 안의 다른 이름 표(평택선 등)는 그 이름
+            m = re.search(r'(?:하행|상행)\s*([가-힣·]+선)', t)
+            if m and m.group(1) != T.line: return ('', m.group(1))
         return ('KTX', T.line) if self.is_ktx(T) else ('', T.line)
 
     def is_ktx(self, T):
@@ -2709,6 +2712,11 @@ class Book:
                         rr = [[X for X in tables if X.line == ln and kw in X.title.text() and d in X.title.text()] for d in ('하행', '상행')]
                         if not all(len(x) == 1 for x in rr): break
                         parts_ = []
+                        # 좌우로 나란한 두 표는 역명 칸 폭을 같게 (넓은 쪽에)
+                        for j_ in range(max(len(x[0].colW) for x in rr)):
+                            ws_ = [x[0].colW[j_] for x in rr if j_ < len(x[0].colW) and x[0].kind[j_][1] == 'st' and x[0].kind[j_][0] in ('L', 'R')]
+                            if len(ws_) == len(rr):
+                                for x in rr: x[0].colW[j_] = max(ws_)
                         for (X,) in rr:
                             X.fold = False; X.band_left = False
                             _, Xc, _ = self.blocks(X)
