@@ -1887,7 +1887,8 @@ class Book:
         하행은 끝의 몇 편, 상행은 앞의 몇 편이 가운데 쪽에 (가운데 쪽과 상행 쪽이 펼침면이면 상행은 펼침면 하나로 읽힌다).
         한 쪽에 단 하나만 들어가는 높이의 표에서, 펼침면 짝(오른쪽 면이 거의 빈)보다 쪽을 아낀다"""
         if self.cfg.get('rightStubSingle', True): return None
-        for T in (Td, Tu): T.band_left = False; T.fold = False
+        bl = Td.line in self.cfg.get('bandLeftLines', [])            # 제목을 왼쪽 세로 띠로
+        for T in (Td, Tu): T.band_left = bl and T.head is not None; T.fold = False
         PH, fw = self.ch, self.frame_w
         half = self.half_w()
         bwf, bwh = self.band_w(self.cw), self.band_w(half)
@@ -2330,6 +2331,9 @@ class Book:
                     jl = self.jobs_of(T)
                     ok = ok and all(self.vband(T, '열넷째' if len(jl) > 1 else None, 100)[1] <= j['h'] - 2 * (fw + self.frame_pad) - 2 * self.vpad for j in jl)
                 for T in ts: T.band_left = ok
+        # bandLeftLines: 그 노선(KTX) 표는 제목을 왼쪽 세로 띠로
+        for T in tables:
+            if T.line in self.cfg.get('bandLeftLines', []) and self.is_ktx(T) and T.head is not None and not T.fold: T.band_left = True
         # tailWith: 노선의 KTX 하행·상행에 같은 노선의 작은 별표(수서 발착 병결 등)를 곁들여 한 흐름으로
         for tw in self.cfg.get('tailWith', []):
             ks = [T for T in tables if self.is_ktx(T) and T.line == tw['line']]

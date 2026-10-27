@@ -82,7 +82,11 @@ if not MERGE_SUSEO: SUSEO_TO = {}
 COUPLE = {('ktx', '경부선'): ('ktx', '경전선', '동대구'), ('ktx', '호남선'): ('ktx', '전라선', '익산')}
 COUPLE_GUEST = {(c, s): host for host, (c, s, _) in COUPLE.items()}
 # 별표 대신 손님 노선 KTX 표 끝에 수서 열차를 직결 열차처럼 덧붙이는 노선 (수서·동탄·평택지제 행 없이, 굵은 세로줄 뒤에)
-MERGE_GUEST = {('ktx', '경전선')}
+MERGE_GUEST = {('ktx', '경전선'), ('ktx', '전라선')}
+
+def ro(no):
+    """열차번호 뒤 조사 「으로/로」: 끝자리 읽기의 받침 (0·3·6 은 받침, 1·7·8 은 ㄹ 이라 「로」)"""
+    return '으로' if no[-1] in '036' else '로'
 GUEST_SUSEO = {}              # (cat, 손님 노선, 방향) → (별표, {손님 번호: [주인 번호]}). 주인 노선을 먼저 짤 때 채운다
 
 def week_days(note):
@@ -783,13 +787,13 @@ def main():
                         for i in drop: tt[i] = None
                         hosts = gmap.get(tr['no'], [])
                         if hosts:
-                            h = hosts[0]
+                            h = '・'.join(hosts)               # 짝이 요일로 바뀌면 둘 다
                             if d == 'down':
                                 for i in range(ka): tt[i] = None
-                                tt[ka - 1] = f'{h}열차에서/분리'
+                                tt[ka - 1] = f'{h}에서/분리'
                             else:
                                 for i in range(ka + 1, len(tt)): tt[i] = None
-                                tt[ka + 1] = f'{h}열차로/병결'
+                                tt[ka + 1] = f'{h}{ro(hosts[-1])}/병결'
                             trs.append(dict(tr, times=tt, block=1, arr_at=gby.get(tr['no'], {}).get('arr_at', {}), **ends))
                         else:
                             trs.append(dict(tr, times=tt, block=1, pass_from=entry, **ends))
