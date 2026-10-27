@@ -823,8 +823,10 @@ class Book:
         # 운행일(비고) 행: 세로쓰기 대신 작은 글자로 가로로 (한 줄에 세 자까지, 고르게 나눠 여러 줄)
         dayrows = {cl.r for cl in T.cells if cl.c == 0 and re.sub(r'\s', '', cl.node.text()) in ('운행일', '비고')}
         T.dayrow = max(dayrows) if dayrows else None
-        for cl in T.cells:             # 비고 행은 위에 붙여 (쪽의 남는 자리만큼 늘어난다)
-            if cl.r in dayrows: cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
+        for cl in T.cells:             # 비고 행: 내용은 위에 붙이고(쪽의 남는 자리만큼 늘어난다), 이름 칸은 가운데
+            if cl.r in dayrows:
+                cl.style = dict(cl.style)
+                cl.style['vertical-align'] = 'middle' if T.kind[cl.c][0] in ('L', 'R') else 'top'
         if self.cfg.get('daysCompact', True):
             for cl in T.cells:
                 if cl.r in dayrows and cl.c > 0 and cl.node.find(lambda n: 'jtt-v' in n.cls):
@@ -1964,27 +1966,56 @@ class Book:
                 avail = min(others[0]['x'] - TWh - gapX - pc['x'], pc['nat']) if others else (self.cw - pc['x'])
                 if pc.get('fixw'): avail = pc['fixw']
                 pc['ch'] = self.make_chunk(pc['T'], pc['side'], pc['trains'], avail, pc.get('ncol'))
-        # 쪽 아래 남는 자리: 맨 아랫단 표의 비고 행을 늘여 채운다 (다른 행 높이는 그대로).
-        # 펼침면에 걸친 표는 두 쪽에서 같은 만큼 (행이 어긋나지 않게)
+        # 쪽 아래 남는 자리: 단(같은 높이에서 시작하는 조각들)마다 비고 행을 늘여 채운다 (다른 행 높이는 그대로).
+        # 낮은 단부터 같은 높이가 되도록 나눠 준다(두 단이면 반반에 가깝게). 펼침면에 걸친 단은 두 쪽에서 같은 만큼
         if self.cfg.get('stretchRemarks', True):
             smax = self.cfg.get('stretchMax', 12) * self.R
-            low = {}
+            def tiers(pg):
+                ys_ = sorted({round(q['y'], 2) for q in pg['pieces']})
+                return [[q for q in pg['pieces'] if round(q['y'], 2) == y_] for y_ in ys_]
+            def can(t):
+                return all(q['T'].dayrow is not None and q['rows'] and q['rows'][-1] == q['T'].dayrow for q in t)
+            alloc = {}
             for p, pg in enumerate(pages):
-                if pg['pieces']: low[p] = PH - max(q['y'] + q['h'] for q in pg['pieces'])
-            for p, pg in enumerate(pages):
-                if p not in low: continue
-                bottom = max(q['y'] + q['h'] for q in pg['pieces'])
-                for pc in pg['pieces']:
-                    T = pc['T']
-                    if T.dayrow is None or not pc['rows'] or pc['rows'][-1] != T.dayrow: continue
-                    if abs(pc['y'] + pc['h'] - bottom) > 0.05: continue     # 맨 아랫단만
-                    room = low[p]
-                    mate = p + 1 if p % 2 == 0 else p - 1
-                    if mate in low and any(q['T'] is T and abs(q['y'] - pc['y']) < 0.05 for q in pages[mate]['pieces']):
-                        room = min(room, low[mate])
-                    ext = min(room, smax)
-                    if ext > 0.5 * self.R:
-                        pc['stretch'] = ext; pc['h'] += ext
+                if not pg['pieces']: continue
+                ts = tiers(pg)
+                left = PH - max(q['y'] + q['h'] for q in pg['pieces'])
+                hs = [max(q['h'] for q in t) for t in ts]
+                give = [0.0] * len(ts)
+                ok = [can(t) for t in ts]
+                # 물 채우기: 가장 낮은 단을 다음 낮은 단 높이까지 올리기를 되풀이
+                for _ in range(200):
+                    if left < 0.05: break
+                    cand = [i for i in range(len(ts)) if ok[i] and give[i] < smax - 0.01]
+                    if not cand: break
+                    cur_h = [hs[i] + give[i] for i in cand]
+                    lo = min(cur_h)
+                    low_i = [i for i, h_ in zip(cand, cur_h) if h_ - lo < 0.01]
+                    higher = [h_ for h_ in cur_h if h_ - lo >= 0.01]
+                    step = min([left / len(low_i)] + [h_ - lo for h_ in higher] + [smax - give[i] for i in low_i])
+                    for i in low_i: give[i] += step
+                    left -= step * len(low_i)
+                alloc[p] = (ts, give)
+            # 펼침면에 걸친 단: 마주 보는 쪽과 같은 만큼(작은 쪽에 맞춘다)
+            for p in list(alloc):
+                ts, give = alloc[p]
+                mate = p + 1 if p % 2 == 0 else p - 1
+                if mate not in alloc: continue
+                mts, mgive = alloc[mate]
+                for i, t in enumerate(ts):
+                    for j, mt in enumerate(mts):
+                        if any(q['T'] is r['T'] and abs(q['y'] - r['y']) < 0.05 for q in t for r in mt):
+                            give[i] = mgive[j] = min(give[i], mgive[j])
+            for p, (ts, give) in alloc.items():
+                shift = 0.0
+                for t, g in zip(ts, give):
+                    bottom = max(q['y'] + q['h'] for q in t)
+                    for q in t:
+                        q['y'] += shift
+                        if g > 0.5 * self.R:
+                            e = g + (bottom - (q['y'] - shift + q['h']))
+                            q['stretch'] = e; q['h'] += e
+                    if g > 0.5 * self.R: shift += g
         # 붙은 조각 사이의 괘선: 위 조각과 같은 표면 띠 사이 괘선, 다른 표면 표 사이 괘선. 아래에 붙은 조각이 있으면 아래 변은 그 조각이 긋는다
         for pg in pages:
             ps = pg['pieces']
