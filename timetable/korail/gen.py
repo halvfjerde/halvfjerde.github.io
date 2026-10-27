@@ -313,8 +313,8 @@ class Table:
                 used = [k for k, grp in enumerate(alt) if any(i in S for i in grp)] or [0]
                 for k, grp in enumerate(alt):
                     if k not in used: off |= set(grp)
-                if alt and not alt[0] and used == [0]:          # 막다른 지선(포항 등)에 가지 않는 열차: 지선 역은 ‥
-                    for grp in alt[1:]: dead |= set(grp)
+            for sp_ in DEAD_SPUR.get((self.cat, self.line), ()):     # 막다른 지선 역(포항)에 가지 않는 열차: ‥
+                if sp_ in self.st and self.st.index(sp_) not in S: dead.add(self.st.index(sp_))
             idx = sorted(S)
             for u, v in zip(idx, idx[1:]):
                 if v == u + 1 or any(T[k] == 'I' for k in range(u + 1, v)):
@@ -753,6 +753,7 @@ def share(ts):
 HSR_NAME = {('ktx', '경부선'): '경부고속철도', ('ktx', '호남선'): '호남고속철도'}
 # 고속선에서 갈라지는 KTX: 고속철도 표에 「…선 경유」로 빠지는 열차로 넣고, 그 노선 표는 갈림역부터만
 HSR_SPUR = {('ktx', '경부선'): [('경주', '포항')]}      # 고속철도 표에 넣는 막다른 지선 역: (갈림역, 지선 끝 역). 서울–포항 KTX 를 끝까지
+DEAD_SPUR = {('ktx', '경부선'): {'포항'}}                # 그 역에 가지 않는 열차는 ‥ (║ 아님)
 HSR_GUESTS = {('ktx', '경부선'): [('ktx', '경전선'), ('ktx', '동해선(서울~포항)')], ('ktx', '호남선'): [('ktx', '전라선')]}
 BRANCH_AT = {('ktx', '경전선'): '동대구', ('ktx', '전라선'): '익산', ('ktx', '동해선(서울~포항)'): '동대구'}
 
