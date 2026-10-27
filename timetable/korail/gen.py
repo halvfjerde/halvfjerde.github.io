@@ -38,7 +38,7 @@ MERGE_KTX = {('ktx', '동해선(부전-강릉)'): ('gen', '동해선'), ('ktx', 
              ('ktx', '경전선'): ('gen', '경전선'), ('ktx', '전라선'): ('gen', '전라선'), ('ktx', '동해선(서울~포항)'): ('gen', '동해선')}
 MERGE_INTO = {}
 for _k, _g in MERGE_KTX.items(): MERGE_INTO.setdefault(_g, []).append(_k)
-VIA_HSR = {('ktx', '경전선'): '경부고속철도', ('ktx', '전라선'): '호남고속철도', ('ktx', '동해선(서울~포항)'): '경부고속철도'}
+VIA_HSR = {('ktx', '경전선'): '경부고속선', ('ktx', '전라선'): '호남고속선', ('ktx', '동해선(서울~포항)'): '경부고속선'}
 KTX_STYLE = ['style=fc=' + KTX_COLOR, 'tstyle=fw=b']
 
 def merge_into(g, k, insert=True, via=None):
@@ -64,7 +64,7 @@ def merge_into(g, k, insert=True, via=None):
         ix = [i for i, x in enumerate(r['times']) if isinstance(x, int)]
         if not ix: continue
         if via:
-            lab = via.replace('고속철도', '/고속철도')          # 「경부/고속철도」 두 줄 세로쓰기
+            lab = f'{via}/경유'                                # 「경부고속선/경유」 두 줄 세로쓰기
             if clean_name(r['from']) != sn[ix[0]] and ix[0] >= 1: r['times'][ix[0] - 1] = lab
             if clean_name(r['to']) != sn[ix[-1]] and ix[-1] + 1 < len(sn): r['times'][ix[-1] + 1] = lab
         trs.append(r)

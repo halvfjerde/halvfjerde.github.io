@@ -549,7 +549,7 @@ class Inline:
             c2 = ctx
             for cl, f in FONT_OF_CLASS.items():
                 if cl in cls: c2 = c2.but(font=f)
-            if 'jtt-no' in cls and len(re.sub(r'\D', '', k.text())) >= 4: c2 = c2.but(hscale=0.84)   # 네 자리 열차번호는 장평을 좁게
+            if 'jtt-no' in cls and len(re.sub(r'\D', '', k.text())) >= 4: c2 = c2.but(hscale=0.92)   # 네 자리 열차번호는 장평을 조금 좁게
             if 'jtt-lit' in cls and ctx.font in ('DGB', 'GB'): c2 = c2.but(font='GB')   # 굵은 글 안의 로마자(KTX 등)는 고딕 굵게 그대로
             if 'jtt-j' in cls:
                 chars = [self.run(x.text(), c2) for x in k.kids if isinstance(x, Node)]
@@ -2142,6 +2142,16 @@ class Book:
                     pc_['fixw'] = half
                 ys[c] = y + h
                 return True
+            if job['kind'] == 'facing':           # 한 쪽짜리 하행·상행: 펼침면 왼쪽에 하행, 오른쪽에 상행
+                if c % 2 == 1: return False
+                y = max(top(c), top(c + 1))
+                (Td_, trd, rd_, hd_), (Tu_, tru, ru_, hu_) = job['parts']
+                if y + max(hd_, hu_) > PH + 0.01: return False
+                put(Td_, c, trd, rd_, y, False, hd_, 0.0, False, 'B', job['bw'])
+                put(Tu_, c + 1, tru, ru_, y, False, hu_, 0.0, False, 'B', job['bw'])
+                ys[c] = y + hd_; ys[c + 1] = y + hu_
+                cur['c'] = c + 2
+                return True
             if job['kind'] == 'stackN':           # 여러 쪽에 걸쳐 위(하행)·아래(상행) (오른쪽 면에서 시작하면 오·왼·오…)
                 N_ = len(job['sides'])
                 if c % 2 == 1 and not job.get('anyStart'): return False
@@ -2214,7 +2224,7 @@ class Book:
                 tt = q['T'].title.text() if q['T'].title is not None else ''
                 pg['dirs'][key].add('하행' if '하행' in tt else '상행' if '상행' in tt else '')
         def advance(job, c):
-            if job['kind'] == 'stack':
+            if job['kind'] in ('stack', 'facing'):
                 # 펼침면으로 가야 해서 오른쪽 면이 통째로 빌 때: 앞 쪽 맨 아랫단의 작은 표(통째로 그 쪽에 있는 것)를 옮겨 채운다
                 if c % 2 == 1 and ys[c] == 0 and c >= 1 and page(c - 1)['pieces']:
                     prev = page(c - 1)
@@ -2235,17 +2245,20 @@ class Book:
                 cur['c'] = c + 1
 
         def fill_blank(c):
-            """펼침면을 왼쪽 면에서 시작하느라 통째로 비게 되는 오른쪽 면: 뒤 묶음의 작은 표(한 번에 다 실리는 것)를 앞당겨 채운다"""
+            """펼침면을 왼쪽 면에서 시작하느라 통째로 비게 되는 오른쪽 면: 뒤 묶음의 작은 표 한 벌(하행·상행 함께, 한 번에 다 실리는 것)을 앞당겨 채운다"""
             for bunch2 in bunches[cur.get('bi', 0) + 1:]:
-                for T2 in bunch2:
-                    if id(T2) in prefilled or placed[id(T2)]: continue
-                    js = self.jobs_of(T2)
-                    if len(js) != 1 or js[0]['kind'] not in ('side', 'single') or js[0]['h'] > PH + 0.01: continue
-                    if try_place(js[0], c):
-                        prefilled.add(id(T2))
-                        if js[0]['kind'] == 'side':
-                            for q in js[0]['parts']: prefilled.add(id(q[0]))
-                        return True
+                i = 0
+                while i < len(bunch2):
+                    unit = [bunch2[i]]
+                    while i + len(unit) < len(bunch2) and rkey(bunch2[i + len(unit)]) == rkey(bunch2[i]): unit.append(bunch2[i + len(unit)])
+                    i += len(unit)
+                    if any(id(T2) in prefilled or placed[id(T2)] for T2 in unit): continue
+                    js = [j for T2 in unit for j in self.jobs_of(T2)]
+                    if not js or len(js) > 2 or any(j['kind'] not in ('side', 'single') for j in js): continue
+                    if sum(j['h'] for j in js) - (len(js) - 1) * fw > PH + 0.01: continue
+                    for j in js: try_place(j, c)
+                    for T2 in unit: prefilled.add(id(T2))
+                    return True
             return False
         prefilled = set()
 
@@ -2323,6 +2336,19 @@ class Book:
                         dn[0].side_with, up[0].stacked = up[0], True
                         continue
                     for T, (f, b) in zip(ts, old): T.fold, T.band_left = f, b
+            # 재래선의 한 쪽짜리 하행·상행(둘 다 반 쪽보다 높아 한 쪽에 함께 들지 않는 것): 펼침면 왼쪽·오른쪽에 마주 보게
+            if self.cfg.get('facing', True) and len(ts) == 2 and not any(self.is_ktx(T) for T in ts):
+                dn = [T for T in ts if '하행' in T.title.text()]
+                up = [T for T in ts if '상행' in T.title.text()]
+                if len(dn) == 1 and len(up) == 1:
+                    jd, ju = self.jobs_of(dn[0]), self.jobs_of(up[0])
+                    if len(jd) == 1 and len(ju) == 1 and jd[0]['kind'] == ju[0]['kind'] == 'single' \
+                            and jd[0]['h'] + ju[0]['h'] - fw > PH + 0.01:
+                        dn[0].custom_jobs = [{'T': dn[0], 'kind': 'facing', 'parts': [(dn[0], jd[0]['trs'], jd[0]['rows'], jd[0]['h']),
+                                              (up[0], ju[0]['trs'], ju[0]['rows'], ju[0]['h'])], 'h': max(jd[0]['h'], ju[0]['h']),
+                                              'trs': jd[0]['trs'], 'rows': jd[0]['rows'], 'notes': False, 'bw': jd[0]['bw']}]
+                        up[0].stacked = True
+                        continue
             # stackPages: 지정한 표는 하행 위·상행 아래로 N 쪽에 걸쳐
             sp = next((x for x in self.cfg.get('stackPages', []) if len(ts) == 2 and all(T.line == x['line'] and x.get('title', '') in T.title.text()
                                                                                        and not (x.get('not') and x['not'] in T.title.text()) for T in ts)), None)
