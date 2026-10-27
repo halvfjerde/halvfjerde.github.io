@@ -1065,17 +1065,16 @@ class Book:
         else:
             R = seg(parts[2])
         gap = 1.0 * fs
-        if not C[0] or not self.cfg.get('bandTwoLines', True):
+        if L[1] + C[1] + R[1] + 2 * gap <= W or not C[0]:
             plan = [(L[0], C[0], R[0], max(L[2], C[2], R[2], 1.25))]
         else:
-            # 두 줄로: 윗줄에 노선·방향과 몇째를 하나로 묶어 가운데, 아랫줄에 구간(명조 괄호)을 가운데
             plan = []
-            if L[0] or R[0]:
-                top = L[0] + (r'\hskip %.3fbp ' % (0.6 * fs) if (L[0] and R[0]) else '') + R[0]
-                plan.append(('', top, '', max(L[2], R[2], 1.25), 'c'))
+            if L[0] or R[0]: plan.append((L[0], '', R[0], max(L[2], R[2], 1.25)))
+            # 줄이 바뀌면 가운데(구간)는 다른 한쪽이 있는 반대편으로 민다
+            al = 'r' if (L[0] and not R[0]) else 'l' if (R[0] and not L[0]) else 'c'
             for node in self.split_center(parts[1], W, ctx):
                 t = seg(node)
-                plan.append(('', t[0], '', max(t[2], 1.25), 'c'))
+                plan.append(('', t[0], '', max(t[2], 1.25), al))
         self._bands[key] = plan
         return plan
 
@@ -1150,14 +1149,16 @@ class Book:
             need = max(la + lc, lb) + fs * scale
             if lb > H: b = ''
             # 오른쪽 줄(먼저 읽는 줄)에 구간, 왼쪽 줄에 노선·방향·몇째
+            # 왼쪽 줄은 노선·방향과 몇째를 한 덩어리로 가운데에
             right = r'\vbox to %.3fbp{\offinterlineskip\vfil %s\vfil}' % (H, b)
-            left = r'\vbox to %.3fbp{\offinterlineskip %s\vfil %s}' % (H, a, c)
+            left = r'\vbox to %.3fbp{\offinterlineskip\vfil %s%s%s\vfil}' % (H, a, (r'\kern%.3fbp' % (0.6 * fs * scale)) if c else '', c)
             tex = r'\hbox to %.3fbp{%s%s}' % (colw, left, right)
         else:
             need = la + lb + lc + 2 * fs * scale
             if need > H and la + lc + fs <= H:      # 길이가 모자라면 구간은 뺀다
                 b = ''
-            tex = r'\vbox to %.3fbp{\offinterlineskip %s\vfil %s\vfil %s}' % (H, a, b, c)
+            k_ = r'\kern%.3fbp' % (0.8 * fs * scale)
+            tex = r'\vbox to %.3fbp{\offinterlineskip\vfil %s%s%s%s%s\vfil}' % (H, a, k_ if b else '', b, k_ if c else '', c)
         return tex, need
 
     def split_center(self, node, W, ctx):
