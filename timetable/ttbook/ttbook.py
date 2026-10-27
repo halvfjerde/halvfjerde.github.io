@@ -2054,40 +2054,50 @@ class Book:
                 elif dr == 't': tex.append(self.put_box(x - bw / 2, y - 16, bw, 10, body_, 'c', 'm'))
                 else: tex.append(self.put_box(x - bw / 2, y + 6, bw, 10, body_, 'c', 'm'))
         else:
-          yy = y0
-          if fm or k == 0:
-            tex.append(self.put_box(x0, y0, W, 14, self.inl.run('색인', Ctx('GB', 14 / fs)), 'l', 't'))
-            rows = self.line_pages(first)
-            items = list(rows.items())
-            bk_ = [i for i, pg in enumerate(self.pages) if 'back' in pg and self.back[pg['back']]['cols']]
-            if bk_: items.append(('역명 색인', (bk_[0] + first, bk_[-1] + first, None)))
-            lh = 13.0
-            colw = (W - 12) / 2
-            per = int(math.ceil(len(items) / 2.0))
-            for i_, (nm, (a, b, T)) in enumerate(items):
-                col, r_ = divmod(i_, per)
-                xx = x0 + col * (colw + 12); yy = y0 + 26 + r_ * lh
-                kt = T is not None and self.is_ktx(T)
-                c_ = Ctx('GB', 1.1, '0A5FE0' if kt else None)
-                pg_ = ('%d' % a) if a == b else ('%d∼%d' % (a, b))
-                tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(nm, c_), 'l', 'm'))
-                tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(pg_, Ctx('M', 1.1)), 'r', 'm'))
-                ops.append('q 0.3 w 0 G [0.6 1.6] 0 d %.3f %.3f m %.3f %.3f l S Q' % (xx + 62, H - (yy + lh * 0.7), xx + colw - 26, H - (yy + lh * 0.7)))
-            yy = y0 + 26 + per * lh + 24
-          if fm or k == 1:
-            # 범례: 등급 표지(모듈로 그린 것)와 기호
-            tex.append(self.put_box(x0, yy, W, 14, self.inl.run('범례', Ctx('GB', 14 / fs)), 'l', 't'))
-            yy += 24
-            lg = self.cfg.get('legend', [])
-            if lg:
-                html = run_module('title "x"\n\n[stations]\n가\n\n[notes]\n' + '\n'.join(x[1] for x in lg), os.path.join(HERE, 'src', 'Timetable.lua'), os.path.join(HERE, 'build'))
-                nd = parse_html(html).find(lambda n: 'jtt-notes' in n.cls)
-                rows_ = [k for k in nd.kids if isinstance(k, Node)] if nd is not None else []
-                for (head_, _), d in zip(lg, rows_):
-                    ln_ = self.inl.lines(d, Ctx('M', 1.1))
-                    tex.append(self.put_box(x0, yy, 60, 12, self.inl.run(head_, Ctx('GB', 1.1)), 'l', 'm'))
-                    tex.append(self.put_box(x0 + 62, yy, W - 62, 12, self.inl.flat(ln_[0]) if ln_ else '', 'l', 'm'))
-                    yy += 15
+            # 색인(앞)·범례(뒤): 표처럼 틀 안에 칸을 짓고, 쪽 이름은 바깥 여백의 세로 제목으로
+            recto = (first + k) % 2 == 1
+            tex += self.page_side_title(recto, [('', '색인' if k == 0 else '범례')])
+            fw, fp, pad, R = self.frame_w, self.frame_pad, self.band_inset, self.R
+            ix, iy, iw = x0 + fw + fp, y0 + fw + fp, W - 2 * (fw + fp)
+            wd = lambda t: self.inl.wc.get(t, 1.0) * fs
+            rects = []
+            lh = 2 * R
+            if k == 0:
+                items = list(self.line_pages(first).items())
+                bk_ = [i for i, pg in enumerate(self.pages) if 'back' in pg and self.back[pg['back']]['cols']]
+                if bk_: items.append(('역명 색인', (bk_[0] + first, bk_[-1] + first, None)))
+                per = int(math.ceil(len(items) / 2.0))
+                colw = iw / 2
+                for i_, (nm, (a, b, T)) in enumerate(items):
+                    col, r_ = divmod(i_, per)
+                    xx = ix + col * colw + pad; ww = colw - 2 * pad; yy = iy + r_ * lh
+                    kt = T is not None and self.is_ktx(T)
+                    nt = self.inl.run(nm, Ctx('GB', 1.1, '0A5FE0' if kt else None))
+                    pt = self.inl.run(('%d' % a) if a == b else ('%d∼%d' % (a, b)), Ctx('M', 1.1))
+                    tex.append(self.put_box(xx, yy, ww, lh, nt, 'l', 'm'))
+                    tex.append(self.put_box(xx, yy, ww, lh, pt, 'r', 'm'))
+                    a_, b_ = xx + wd(nt) + 0.5 * fs, xx + ww - wd(pt) - 0.5 * fs
+                    yl = yy + lh / 2 + 0.4 * 1.1 * fs
+                    if b_ - a_ > fs: ops.append('q 0.3 w 0 G [0.6 1.6] 0 d %.3f %.3f m %.3f %.3f l S Q' % (a_, H - yl, b_, H - yl))
+                h = per * lh
+                rects += [('box', x0, y0, x0 + W, iy + h + fw + fp, fw), ('v', ix + colw, iy, iy + h, 1)]
+            else:
+                lg = self.cfg.get('legend', [])
+                if lg:
+                    html = run_module('title "x"\n\n[stations]\n가\n\n[notes]\n' + '\n'.join(x[1] for x in lg), os.path.join(HERE, 'src', 'Timetable.lua'), os.path.join(HERE, 'build'))
+                    nd = parse_html(html).find(lambda n: 'jtt-notes' in n.cls)
+                    rows_ = [k_ for k_ in nd.kids if isinstance(k_, Node)] if nd is not None else []
+                    heads = [self.inl.run(h_, Ctx('GB', 1.1)) for h_, _ in lg]
+                    hw = max(wd(t) for t in heads) + 2 * pad
+                    for i_, ((head_, _), d, ht) in enumerate(zip(lg, rows_, heads)):
+                        yy = iy + i_ * lh
+                        if i_ and head_: rects.append(('h', ix, ix + iw, yy, 1))
+                        ln_ = self.inl.lines(d, Ctx('M', 1.1))
+                        if head_: tex.append(self.put_box(ix + pad, yy, hw - 2 * pad, lh, ht, 'l', 'm'))
+                        tex.append(self.put_box(ix + hw + pad, yy, iw - hw - 2 * pad, lh, self.inl.flat(ln_[0]) if ln_ else '', 'l', 'm'))
+                    h = len(rows_) * lh
+                    rects += [('box', x0, y0, x0 + W, iy + h + fw + fp, fw), ('v', ix + hw, iy, iy + h, 1)]
+            if rects: ops.append(self.pdf_ops(rects))
         return tex, ' '.join(ops)
 
     def page_side_title(self, recto, lines, dirs=None, nos=None):
@@ -3393,6 +3403,7 @@ class Book:
                 for cl in T.cells:
                     if 'jtt-st' in cl.cls and 'jtt-th' not in cl.cls and cl.r in rs and T.kind[cl.c][0] == 'L':
                         nm = re.sub(r'[\(（].*?[\)）]|\s', '', cl.node.text())
+                        nm = self.cfg.get('stationAlias', {}).get(nm, {}).get(T.line, nm)     # 이름이 같은 다른 역: 판교(경기)
                         if nm and nm != '〃': sp[nm].add(pi + first)
         return sp
 
@@ -3410,22 +3421,24 @@ class Book:
                 else: out.append((a, b)); a = b = p
             out.append((a, b))
             return ', '.join(str(a) if a == b else '%d∼%d' % (a, b) for a, b in out)
-        NC = si.get('cols', 4); gap = 10.0
-        colw = (self.cw - (NC - 1) * gap) / NC
-        lh = 1.38 * fs; top = 26.0
-        cap = int((self.ch - top) / lh)
+        NC = si.get('cols', 4)
+        fw, fp, pad, R = self.frame_w, self.frame_pad, self.band_inset, self.R
+        colw = (self.cw - 2 * (fw + fp)) / NC
+        ww = colw - 2 * pad                      # 단 안의 글줄 폭
+        lh = R
+        cap = int((self.ch - 2 * (fw + fp)) / lh + 1e-6)
         wd = lambda t, c: self.inl.wc.get(self.inl.run(t, c), len(t)) * fs
         CHO = 'ㄱㄱㄴㄷㄷㄹㅁㅂㅂㅅㅅㅇㅈㅈㅊㅋㅌㅍㅎ'
         units, cur = [], None             # unit: 함께 둘 줄들 [(종류, …)]
         for nm in sorted(sp):
             c0 = CHO[(ord(nm[0]) - 0xAC00) // 588] if '가' <= nm[0] <= '힣' else nm[0]
             ps = rng(sp[nm])
-            if wd(nm, Ctx('M', 1.0)) + wd(ps, Ctx('M', 1.0)) + 8 <= colw: ent = [('e', nm, ps)]
+            if wd(nm, Ctx('M', 1.0)) + wd(ps, Ctx('M', 1.0)) + 2 * fs <= ww: ent = [('e', nm, ps)]
             else:                          # 쪽이 많으면 이름 아래에 쪽을 몇 줄로 (단 폭에 맞춰 쉼표에서)
                 ent = [('n', nm, '')]; ln_ = ''
                 for part in ps.split(', '):
                     t_ = (ln_ + ', ' + part) if ln_ else part
-                    if ln_ and wd(t_ + ',', Ctx('M', 1.0)) > colw - fs: ent.append(('p', '', ln_ + ',')); ln_ = part
+                    if ln_ and wd(t_ + ',', Ctx('M', 1.0)) > ww - fs: ent.append(('p', '', ln_ + ',')); ln_ = part
                     else: ln_ = t_
                 ent.append(('p', '', ln_))
             if c0 != cur:
@@ -3442,7 +3455,7 @@ class Book:
         pages = [cols[i:i + NC] for i in range(0, len(cols), NC)]
         # 마지막 쪽: 단을 고르게, 아래에 판권
         colo = self.cfg.get('colophon', [])
-        hc = (len(colo) + 2.5) * lh if colo else 0
+        hc = (len(colo) + 2) * lh if colo else 0
         n_before = sum(len(c) for p in pages[:-1] for c in p)
         # 마지막 쪽에 든 단위들
         cnt, idx = 0, 0
@@ -3454,42 +3467,54 @@ class Book:
             if len(lc) <= NC: break
             t += 1
         pages[-1] = lc
-        fit = top + t * lh + hc <= self.ch
+        fit = 2 * (fw + fp) + t * lh + hc <= self.ch
         for i, p in enumerate(pages):
-            self.back.append({'cols': p, 'colophon': bool(colo) and fit and i == len(pages) - 1})
-        if colo and not fit: self.back.append({'cols': [], 'colophon': True})
-        self._ix = (colw, gap, lh, top)
+            ln = i == len(pages) - 1
+            self.back.append({'cols': p, 'colophon': bool(colo) and fit and ln,
+                              'h': (2 * (fw + fp) + t * lh) if ln and colo and fit else self.ch})
+        if colo and not fit: self.back.append({'cols': [], 'colophon': True, 'h': 0})
+        self._ix = (colw, pad, lh)
         for i in range(len(self.back)): self.pages.append({'pieces': [], 'lines': [], 'back': i})
 
     def back_page(self, k, x0, recto):
         fs = self.fs
-        tex, ops = [], []
+        tex, ops, rects = [], [], []
         H = self.H; y0 = self.mt
-        colw, gap, lh, top = self._ix
+        colw, pad, lh = self._ix
+        fw, fp = self.frame_w, self.frame_pad
+        ix, iy = x0 + fw + fp, y0 + fw + fp
         bp = self.back[k]
+        wd = lambda t: self.inl.wc.get(t, 1.0) * fs
+        c_ = Ctx('M', 1.0)
         if bp['cols']:
-            tex.append(self.put_box(x0, y0, self.cw, 14, self.inl.run('역명 색인', Ctx('GB', 14 / fs)), 'l', 't'))
+            rects.append(('box', x0, y0, x0 + self.cw, y0 + bp['h'], fw))
+            NC = self.cfg['stationIndex'].get('cols', 4)
+            for ci in range(1, NC): rects.append(('v', ix + ci * colw, iy, y0 + bp['h'] - fw - fp, 1))
         for ci, col in enumerate(bp['cols']):
-            xx = x0 + ci * (colw + gap)
+            xx = ix + ci * colw + pad; ww = colw - 2 * pad
             for li, (kind, nm, ps) in enumerate(col):
-                yy = y0 + top + li * lh
+                yy = iy + li * lh
+                yl = yy + lh / 2 + 0.4 * fs
                 if kind == 'h':
-                    tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(nm, Ctx('GB', 1.1)), 'l', 'm'))
-                    ops.append('q 0.3 w 0 G %.3f %.3f m %.3f %.3f l S Q' % (xx + 1.6 * fs, H - (yy + lh * 0.55), xx + colw, H - (yy + lh * 0.55)))
+                    ht = self.inl.run(nm, Ctx('GB', 1.0))
+                    tex.append(self.put_box(xx, yy, ww, lh, ht, 'l', 'm'))
+                    ym = yy + lh / 2
+                    ops.append('q %.3f w 0 G %.3f %.3f m %.3f %.3f l S Q' % (self.rw[1], xx + wd(ht) + 0.5 * fs, H - ym, xx + ww, H - ym))
                     continue
-                if nm: tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(nm, Ctx('M', 1.0)), 'l', 'm'))
-                if ps: tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(ps, Ctx('M', 1.0)), 'r', 'm'))
+                nt = self.inl.run(nm, c_) if nm else ''
+                pt = self.inl.run(ps, c_) if ps else ''
+                if nm: tex.append(self.put_box(xx, yy, ww, lh, nt, 'l', 'm'))
+                if ps: tex.append(self.put_box(xx, yy, ww, lh, pt, 'r', 'm'))
                 if kind == 'e':
-                    a_ = xx + self.inl.wc.get(self.inl.run(nm, Ctx('M', 1.0)), 2) * fs + 2
-                    b_ = xx + colw - self.inl.wc.get(self.inl.run(ps, Ctx('M', 1.0)), 2) * fs - 2
-                    if b_ - a_ > 3: ops.append('q 0.3 w 0 G [0.6 1.6] 0 d %.3f %.3f m %.3f %.3f l S Q' % (a_, H - (yy + lh * 0.7), b_, H - (yy + lh * 0.7)))
+                    a_, b_ = xx + wd(nt) + 0.5 * fs, xx + ww - wd(pt) - 0.5 * fs
+                    if b_ - a_ > fs: ops.append('q 0.3 w 0 G [0.6 1.6] 0 d %.3f %.3f m %.3f %.3f l S Q' % (a_, H - yl, b_, H - yl))
         if bp['colophon']:
             colo = self.cfg.get('colophon', [])
-            yb = y0 + self.ch - len(colo) * lh * 1.1
-            ops.append('q 0.4 w 0 G %.3f %.3f m %.3f %.3f l S Q' % (x0, H - (yb - 0.8 * lh), x0 + self.cw, H - (yb - 0.8 * lh)))
+            yb = y0 + self.ch - len(colo) * lh
             for i, t in enumerate(colo):
-                tex.append(self.put_box(x0, yb + i * lh * 1.1, self.cw, lh, self.inl.run(t, Ctx('GB' if i == 0 else 'M', 1.15 if i == 0 else 0.95)), 'l', 'm'))
+                tex.append(self.put_box(x0, yb + i * lh, self.cw, lh, self.inl.run(t, Ctx('GB' if i == 0 else 'M', 1.0)), 'l', 'm'))
         tex += self.page_side_title(recto, [('', '역명 색인')]) if bp['cols'] else []
+        if rects: ops.insert(0, self.pdf_ops(rects))
         return tex, ' '.join(ops)
 
     def emit(self, out_tex):
