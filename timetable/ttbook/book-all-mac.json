@@ -72,5 +72,12 @@
    "line": "전라선",
    "title": "수서"
   }
+ ],
+ "holdAfter": [
+  {
+   "line": "경전선",
+   "title": "",
+   "after": "경부선"
+  }
  ]
 }
