@@ -932,17 +932,17 @@ class Book:
                 take = min(self.ARW * em, max(0.0, T.colW[stc[0]] - need))
                 T.colW[stc[0]] -= take
 
-    def arrow_rects(self, x, y0, y1, dr):
+    def arrow_rects(self, x, y0, y1, dr, shaft=None):
         """진행 방향 화살표: 첫 역 행부터 끝 역 행까지 축, 끝에 칠한 촉, 뒤에 V 깃"""
         em = self.fs
-        hw, hl = 0.27 * em, 0.9 * em          # 촉: 속 빈 세모
-        fw_, fd = 0.2 * em, 0.3 * em          # 깃: 속 빈 V (🔰 꼴 띠), 좁고 높게 (행 1.8개 남짓)
+        hw, hl = 0.24 * em, 0.9 * em          # 촉: 속 빈 세모
+        fw_, fd = 0.3 * em, 0.4 * em          # 깃: 속 빈 V (🔰 꼴 띠), 좁고 높게 (행 1.8개 남짓)
         fv = max(0.5 * em, 1.8 * self.R - fd - 0.2 * em)
         lw = self.rw[1]
         yt, yb = y0 + 0.1 * em, y1 - 0.08 * em
         if dr == 'u': yt, yb = y1 - 0.1 * em, y0 + 0.08 * em      # 위로: 꼬리가 아래
         s = 1 if yb > yt else -1
-        out = [('line', [(x, yt + s * (fv + fd)), (x, yb - s * hl * 1.02)], lw),
+        out = [('line', [(x, yt + s * fv), (x, yb - s * hl * 1.02)], shaft or lw),      # 축: 착발 칸과 첫 열차 열 사이 괘선을 대신 (깃 밑에서부터)
                ('closed', [(x - fw_, yt), (x, yt + s * fv), (x + fw_, yt), (x + fw_, yt + s * fd), (x, yt + s * (fv + fd)), (x - fw_, yt + s * fd)], lw),
                ('closed', [(x - hw, yb - s * hl), (x + hw, yb - s * hl), (x, yb)], lw)]
         return out
@@ -1133,7 +1133,6 @@ class Book:
             if n > tot: rows[cell.r + cell.rs - 1] += n - tot
         T.rowH = [n * self.R for n in rows]
         T.colW = self.col_widths(T)
-        self.arrow_room(T)
 
     def dir_badge(self, t, down, hollow, size, colw):
         """방향 표지(모듈의 jtt-dir: 뾰족한 오각형 안에 하행·상행). (tex, 높이 bp)"""
@@ -1581,7 +1580,8 @@ class Book:
             k2 = ci + (1 if sd == 'r' else -1)
             if not (0 <= k2 < len(cols)) or kind_of(T, cols[k2])[0] != 'T': continue
             arr_.append((ci, j, sd, ('u' if sd == 'r' else 'd') if getattr(T, 'both', False) else 'd'))
-        self.cur_arrow = {j: {sd} for ci, j, sd, _ in arr_}
+        self.cur_arrow = {}
+        self.arrow_bounds = {(ci + 1 if sd == 'r' else ci) for ci, j, sd, _ in arr_}     # 이 경계의 세로 괘선은 화살표가 대신한다
         seen = set()
         aims_ = []
         for r in rows:
@@ -1615,11 +1615,12 @@ class Book:
         srows = [i for i, r in enumerate(rows) if T.hEnd <= r < T.fStart]
         if len(srows) >= 2:
             for ci, j, sd, dr in arr_:
-                rects += self.arrow_rects(xs[ci] + self.ARW * fs / 2 + 0.12 * fs if sd == 'l' else xs[ci + 1] - self.ARW * fs / 2 - 0.12 * fs,
-                                          ys[srows[0]], ys[srows[-1] + 1], dr)
+                k_ = ci + 1 if sd == 'r' else ci
+                rects += self.arrow_rects(xs[k_], ys[srows[0]], ys[srows[-1] + 1], dr, self.rw[2])
         self.cur_arrow = {}
         # 괘선
         rects += self.grid_rules(T, rows, cols, xs, ys, side)
+        self.arrow_bounds = set()
         # 주기
         if with_notes and T.notes is not None:
             rects.append(self.hrule(xs[0], xs[-1], ys[-1], 1))
@@ -1637,9 +1638,7 @@ class Book:
         fs = self.fs
         cls, st = cell.cls, cell.style
         sd_ = getattr(self, 'cur_arrow', {}).get(cell.c)
-        if sd_ and 'jtt-ad' in cls and 'jtt-th' not in cls and T.hEnd <= cell.r < T.fStart:   # 화살표 자리를 비운다
-            if 'l' in sd_: x += self.ARW * fs; w -= self.ARW * fs
-            if 'r' in sd_: w -= self.ARW * fs
+
         rc = T.rowcls[cell.r]
         if not cell.lines: return
         # 여백
@@ -1725,6 +1724,7 @@ class Book:
                     if mir and k > lastT and kind_of(T, cols[k - 1])[0] == 'T': w = 2
                     elif mir and k > lastT: w = wmax(la, rb)
                     else: w = wmax(ra, lb)
+                if k in getattr(self, 'arrow_bounds', ()) and T.hEnd <= rows[i] < T.fStart: w = 0
                 y0, y1 = ys[i], ys[i + 1]
                 if seg and seg[0] == w and abs(seg[2] - y0) < 0.01: seg[2] = y1
                 else:
