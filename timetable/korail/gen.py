@@ -130,7 +130,7 @@ HEADS = {
     ('ktx', '전라선'): '용산 익산 전주 순천 여수엑스포', ('gen', '전라선'): '용산 서대전 익산 전주 순천 여수엑스포',
     ('ktx', '경전선'): '서울 동대구 마산 진주', ('gen', '경전선'): '부전 삼랑진 마산 진주 순천 광주송정',
     ('ktx', '동해선(서울~포항)'): '서울 대전 동대구 포항', ('ktx', '동해선(부전-강릉)'): '부전 포항 삼척 강릉',
-    ('gen', '동해선'): '부전 태화강 포항 삼척 동해 강릉',
+    ('gen', '동해선'): '부전・동대구 경주 포항 삼척 동해 강릉',
     ('ktx', '강릉선'): '서울 청량리 평창 강릉 동해',
     ('ktx', '중앙선'): '청량리 원주 안동 경주 부전', ('gen', '중앙선'): '청량리 원주 제천 영주 안동 부전',
     ('ktx', '중부내륙선'): '판교 충주 문경',
@@ -434,7 +434,7 @@ class Table:
             hs = hs.split()
             if self.dir == 'up': hs = hs[::-1]
             names = [self.st[i] for i in band]
-            band_names = [s for s in hs if s in self.st]
+            band_names = [s for s in hs if all(x in self.st for x in s.split('・'))]      # 「부전・동대구」: 갈래 끝 역을 나란히
         else: band_names = [self.st[i] for i in band]
         dirmark = 'k하행.' if self.dir == 'down' else 'n상행.'
         vlab = (' 수서발' if self.dir == 'down' else ' 수서행') if self.variant == '수서' else ''

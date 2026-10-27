@@ -5,9 +5,9 @@
 == 일반열차 ==
 === 하행 ===
 {{#invoke:Timetable|main|data=
-title "k하행. 동해선・대구선 u(부전 > 강릉)."
+title "k하행. 동해선・대구선 u(부전・동대구 > 강릉)."
 headl "b동해선・대구선. 〔하행〕"
-head "（부전 ― 태화강 ― 포항 ― 삼척 ― 동해 ― 강릉）"
+head "（부전・동대구 ― 경주 ― 포항 ― 삼척 ― 동해 ― 강릉）"
 headheight 48
 cols st ad
 rcols st
@@ -112,9 +112,9 @@ S{무궁화} 1895 부전/2054 : x,2054 2105 2112 2122 2143 2159 2208 i*4 2228 22
 
 === 상행 ===
 {{#invoke:Timetable|main|data=
-title "n상행. 동해선・대구선 u(강릉 > 부전)."
+title "n상행. 동해선・대구선 u(강릉 > 부전・동대구)."
 headl "b동해선・대구선. 〔상행〕"
-head "（강릉 ― 동해 ― 삼척 ― 포항 ― 태화강 ― 부전）"
+head "（강릉 ― 동해 ― 삼척 ― 포항 ― 경주 ― 부전・동대구）"
 headheight 48
 cols st ad
 rcols st
