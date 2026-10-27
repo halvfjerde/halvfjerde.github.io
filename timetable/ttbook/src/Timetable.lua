@@ -668,7 +668,7 @@ local function render_grid(frame, rows, H, L, F, title, opt)
     if not MD and rq and rq >= 1 and RR[rq] then
       poscls[j] = "jtt-rc jtt-r-" .. RR[rq] .. ((rq == 1) and " jtt-rc1" or "")
     elseif not li then
-      poscls[j] = (j == L + 1 or (MD and (j == 1 or j == MD.a + L + 1))) and "jtt-t jtt-t1" or "jtt-t"
+      poscls[j] = ((not MD and j == L + 1) or (MD and j == MD.a + L + 1)) and "jtt-t jtt-t1" or "jtt-t"
     else
       local r = opt.roles and roles[li] or roles[li - (L - min(L, 4))]
       if r and not BUILTIN_ROLE[r] then
@@ -719,7 +719,7 @@ local function render_grid(frame, rows, H, L, F, title, opt)
   local tdcache = {}
   local function td(c, j, extra)      -- extra: その位置だけの style（斜線見出しの線の位置など）
     local cls = poscls[j]
-    local plain = not (c.cs or c.th or colsty[j] or extra)
+    local plain = not (c.cs or c.th or colsty[j] or extra or MD)     -- 上下併記は列ごとに class が違う（着発欄の左右）ので使い回さない
     local bucket
     if plain then
       bucket = tdcache[cls]

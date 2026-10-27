@@ -34,7 +34,8 @@ TOUR_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tour.json'
 TOUR = json.load(open(TOUR_JSON)) if os.path.exists(TOUR_JSON) else None
 if TOUR: BOOK.append(('관광열차', [('tour', t['line'], None) for t in TOUR['tables'] if t['dir'] == 'down']))
 # 관광열차 표는 상하행을 한 표에 (가운데 역명, 왼쪽 하행·오른쪽 상행). 열차 옆 주석 열 (표 이름 → 세로 두 줄)
-TOUR_COLNOTE = {'정선아리랑': 'VR{매월}/2/7/12/17/22/27/VR{일도 운행}'}      # 칸 문법 그대로 (세로 덩어리를 위에서 아래로)
+TOUR_COLNOTE = {}
+TOUR_HEADR = {'정선아리랑': '매월 2, 7, 12, 17, 22, 27일도 운행'}      # 표 머리띠 오른쪽에 적는 주      # 칸 문법 그대로 (세로 덩어리를 위에서 아래로)
 # 노선마다 재래선(일반열차) 표를 먼저, KTX 는 그 뒤에
 BOOK = [(line, sorted(parts, key=lambda p: 0 if p[0] == 'gen' else 1)) for line, parts in BOOK]
 # 재래선과 같은 선로(정차역이 거의 같은)를 달리는 KTX 는 재래선 표에 합친다: 열차는 파란 글씨, 시각은 굵게
@@ -97,8 +98,8 @@ def combine_both(Td, Tu, sub, name):
     A, B = sections(a), sections(b)
     assert [l for l in A['footer'] if l.strip()] == [l for l in B['footer'] if l.strip()], (A['footer'], B['footer'])
     disp = name.replace('(', ' (')
-    head = [f'title "{disp}"', f'headl "b{disp}"', 'cols ad st ad', 'both 1']
-    head += [l for l in A[''] if l.strip() and not re.match(r'(title|headl|head|headheight|cols|rcols)\b', l)]
+    head = [f'title "{disp}"', f'headl "b{disp}"'] + ([f'headr "{TOUR_HEADR[name]}"'] if name in TOUR_HEADR else []) + ['cols ad st ad', 'both 1']
+    head += [l for l in A[''] if l.strip() and not re.match(r'(title|headl|headr|head|headheight|cols|rcols)\b', l)]
     nh = len([l for l in A['rows'] if l.strip()])
     nf = len([l for l in A['footer'] if l.strip()])
     def notecol(T, text, up=False):
@@ -109,7 +110,7 @@ def combine_both(Td, Tu, sub, name):
         for k in range(len(T.st)):
             ps = []
             for p_ in range(2 if k in T.split else 1):
-                ps.append(q(f'^{len(slots)} va=m; {text}') if j == s0 else '!')
+                ps.append(q(f'^{len(slots)} va=m ' + text.split('; ', 1)[0] + '; ' + text.split('; ', 1)[1] if '; ' in text else f'^{len(slots)} va=m; {text}') if j == s0 else '!')
                 j += 1
             toks.append(','.join(ps) if len(ps) > 1 else ps[0])
         return ' '.join(['_'] * nh) + ' : ' + ' '.join(compress(toks)) + ' : ' + ' '.join(['_'] * nf)

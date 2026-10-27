@@ -98,7 +98,7 @@ class Ghost:
     def __init__(self, ref, r):
         self.ref = ref
         self.r, self.c, self.rs, self.cs = r, ref.c, 1, ref.cs
-        self.cls = ref.cls - {'jtt-t1'}
+        self.cls = ref.cls - {'jtt-t1', 'jtt-c1'}
         self.style = {k: v for k, v in ref.style.items() if k.startswith('border')}
         self.lines = []
 
@@ -676,8 +676,10 @@ class Inline:
             boxes.append((b, max(pitch, self._vcolw))); hmax = max(hmax, h)
         if not lr: boxes = boxes[::-1]
         em = ctx.size * self.fs
-        tex = r'\hbox{' + ''.join(r'\hbox to %.3fbp{\hss\vtop{\kern0pt %s}\hss}' % (w_ * em, b) for b, w_ in boxes) + '}'
-        return ('obj', tex, sum(w_ for _, w_ in boxes), hmax, ctx.size, 'v')
+        # 가로로 쓴 숫자가 든 여러 줄: 줄 사이를 띄운다 (옆줄 숫자와 붙어 한 수로 읽히지 않게)
+        gap = 0.5 if len(boxes) > 1 and any(w_ > pitch + 0.01 for _, w_ in boxes) else 0.0
+        tex = r'\hbox{' + (r'\kern%.3fbp ' % (gap * em)).join(r'\hbox to %.3fbp{\hss\vtop{\kern0pt %s}\hss}' % (w_ * em, b) for b, w_ in boxes) + '}'
+        return ('obj', tex, sum(w_ for _, w_ in boxes) + gap * (len(boxes) - 1), hmax, ctx.size, 'v')
 
     def vbox(self, k, ctx):
         # VP{…}: 괄호(DiaPro 세로 괄호, 1em 줄 하나씩) + 오른쪽→왼쪽 세로 글
@@ -707,14 +709,15 @@ class Inline:
         if vb is not None:
             cols = self.text_cols(vb, ctx)
             boxes, hm = [], 0
-            hs_ = []
+            hs_, ws_ = [], []
             for col in cols:
                 b, hh = self.vcol(col, ctx)
-                boxes.append(b); hs_.append(hh); hm = max(hm, hh)
-            boxes, hs_ = boxes[::-1], hs_[::-1]
+                boxes.append(b); hs_.append(hh); hm = max(hm, hh); ws_.append(max(1.05, self._vcolw))   # 가로로 쓴 두 자리 숫자는 그만큼 넓게
+            boxes, hs_, ws_ = boxes[::-1], hs_[::-1], ws_[::-1]
+            gap = 0.3 if len(boxes) > 1 and any(w_ > 1.06 for w_ in ws_) else 0.0      # 옆줄 숫자와 붙어 한 수로 읽히지 않게
             # 짧은 줄은 괄호 사이 가운데에
-            parts.append(r'\hbox{' + ''.join(r'\hbox to %.3fbp{\hss\vtop{\kern%.3fbp %s}\hss}' % (1.05 * em, (hm - hh) / 2 * em, b)
-                                             for b, hh in zip(boxes, hs_)) + '}')
+            parts.append(r'\hbox{' + (r'\kern%.3fbp ' % (gap * em)).join(r'\hbox to %.3fbp{\hss\vtop{\kern%.3fbp %s}\hss}' % (w_ * em, (hm - hh) / 2 * em, b)
+                                             for b, hh, w_ in zip(boxes, hs_, ws_)) + '}')
             h += hm
         cl = [b for b in bks if 'jtt-bk--c' in b.cls]
         if cl:
@@ -837,6 +840,7 @@ class Book:
         if cls & {'jtt-c1', 'jtt-t1', 'jtt-st', 'jtt-ad', 'jtt-rc', 'jtt-cx'}: left = 0
         if 'jtt-rc1' in cls: left = 2
         if getattr(T, 'both', False) and cell.c > 0 and T.kind[cell.c][0] == 'L' and T.kind[cell.c - 1][0] == 'T': left = 2   # 상하병기: 가운데 역명의 왼쪽
+        if getattr(T, 'both', False) and 'jtt-c1' in cls and T.kind[cell.c][0] == 'T': left = 1     # 상하병기: 바깥 빈 열과 첫 열차 사이
         right = 0
         if 'jtt-ad' in cls and 'jtt-adin' not in cls: right = 2
         if 'jtt-lend' in cls: right = 2
