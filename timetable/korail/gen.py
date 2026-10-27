@@ -403,7 +403,7 @@ class Table:
         L.append(f'headl "b' + (f'{hsr}{vlab}' if hsr else ('`KTX` ' if ktx else '') + f'{self.line_disp}{vlab}') + f'. 〔{dirw}〕"')
         L.append(f'head "（{hd}）"')          # 구간: 명조로 괄호에
         L.append('headheight 48')
-        if ktx: L.append(f'headstyle "fc={KTX_COLOR}"')
+        if ktx: L.append(f'headstyle "fc={SUSEO_COLOR if self.variant == "수서" else KTX_COLOR}"')   # 수서 발착 표는 띠도 자주색
         L.append('cols st ad')
         L.append('rcols st')
         if MIX: L.append('rlabel 驛名')

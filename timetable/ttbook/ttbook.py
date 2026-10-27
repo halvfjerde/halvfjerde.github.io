@@ -2224,7 +2224,8 @@ class Book:
             if job['kind'] == 'stackN':           # 여러 쪽에 걸쳐 위(하행)·아래(상행) (오른쪽 면에서 시작하면 오·왼·오…)
                 N_ = len(job['sides'])
                 if c % 2 == 1 and not job.get('anyStart'): return False
-                if c % 2 == 1: job = dict(job, sides=['R' if i % 2 == 0 else 'L' for i in range(N_)])
+                # 오른쪽 면에서 시작하면: 첫 쪽은 홀로 (양쪽 역명·제목 띠), 그다음부터 펼침면 왼·오
+                if c % 2 == 1: job = dict(job, sides=['B' if i == 0 else 'L' if i % 2 == 1 else 'R' for i in range(N_)])
                 y = max(top(c + i) for i in range(N_))
                 if y + h > PH + 0.01: return False
                 pd_, rd, hd = job['d']; pu_, ru, hu = job['u']
@@ -2374,7 +2375,8 @@ class Book:
                 bunches[-1].append(T)
             else:
                 bunches.append([T])
-        for ln in dict.fromkeys(T.line for T in tables if hsr(T)):
+        bo = self.cfg.get('backOrder', [])          # 책 끝 묶음의 차례 (쪽 짝을 맞추려고 바꿀 때)
+        for ln in sorted(dict.fromkeys(T.line for T in tables if hsr(T)), key=lambda x: bo.index(x) if x in bo else len(bo)):
             bunches.append([T for T in tables if hsr(T) and T.line == ln])
         # 띠 자리: bandPos top | left | auto (auto: 왼쪽 세로 띠로 해야 한 쪽에 두 단이 들어가는 표만 왼쪽으로)
         mode = self.cfg.get('bandPos', 'top')
@@ -2458,7 +2460,10 @@ class Book:
                 dn = [T for T in ts if '하행' in T.title.text()]
                 up = [T for T in ts if '상행' in T.title.text()]
                 if len(dn) == 1 and len(up) == 1:
-                    sj = self.stackn_jobs(dn[0], up[0], sp['pages'])
+                    sj = None
+                    for N_ in ([sp['pages']] if sp['pages'] != 'auto' else range(2, 12)):    # auto: 드는 가장 적은 쪽 수
+                        sj = self.stackn_jobs(dn[0], up[0], N_)
+                        if sj: break
                     if sj:
                         dn[0].custom_jobs, up[0].stacked = sj, True
                         continue

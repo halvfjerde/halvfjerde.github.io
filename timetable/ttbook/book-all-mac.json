@@ -91,6 +91,17 @@
    "title": "호남고속철도",
    "not": "수서",
    "pages": 3
+  },
+  {
+   "line": "경부선",
+   "title": "경부고속철도",
+   "not": "수서",
+   "pages": "auto"
+  },
+  {
+   "line": "호남선",
+   "title": "수서",
+   "pages": "auto"
   }
  ],
  "ruleSplit": false,
@@ -119,5 +130,11 @@
    "blank": 4
   }
  ],
- "hsrLast": true
+ "hsrLast": true,
+ "backOrder": [
+  "경부선",
+  "강릉선",
+  "중부내륙선",
+  "호남선"
+ ]
 }

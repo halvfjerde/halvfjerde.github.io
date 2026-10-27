@@ -407,7 +407,7 @@ title "k하행. 호남고속철도 수서발 u(수서 > 목포)."
 headl "b호남고속철도 수서발. 〔하행〕"
 head "（수서 ― 익산 ― 광주송정 ― 목포）"
 headheight 48
-headstyle "fc=#0a5fe0"
+headstyle "fc=#d1007a"
 cols st ad
 rcols st
 
@@ -482,7 +482,7 @@ title "n상행. 호남고속철도 수서행 u(목포 > 수서)."
 headl "b호남고속철도 수서행. 〔상행〕"
 head "（목포 ― 광주송정 ― 익산 ― 수서）"
 headheight 48
-headstyle "fc=#0a5fe0"
+headstyle "fc=#d1007a"
 cols st ad
 rcols st
 

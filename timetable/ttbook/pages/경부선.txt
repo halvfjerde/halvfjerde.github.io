@@ -564,7 +564,7 @@ title "k하행. 경부고속철도 수서발 u(수서 > 부산)."
 headl "b경부고속철도 수서발. 〔하행〕"
 head "（수서 ― 대전 ― 동대구 ― 부산）"
 headheight 48
-headstyle "fc=#0a5fe0"
+headstyle "fc=#d1007a"
 cols st ad
 rcols st
 
@@ -662,7 +662,7 @@ title "n상행. 경부고속철도 수서행 u(부산 > 수서)."
 headl "b경부고속철도 수서행. 〔상행〕"
 head "（부산 ― 동대구 ― 대전 ― 수서）"
 headheight 48
-headstyle "fc=#0a5fe0"
+headstyle "fc=#d1007a"
 cols st ad
 rcols st
 
