@@ -490,7 +490,7 @@ class Table:
             if has_day:
                 nt = tr['note']
                 cn = self.cpl_note(tr)
-                if cn: ft.append(q(vert(((day_range(nt) + '/') if nt else '') + cn)))
+                if cn: ft.append(q(vert(((day_range(nt).replace('/', ' ') + '/') if nt else '') + cn)))   # 줄마다 한 항목 (개조식)
                 else: ft.append('_' if not nt else self.daysym[nt] if self.daysym else q(vert(day_range(nt))))
             if self.rem_empty: ft.append('_')
             line = ' '.join(hdr) + ' : ' + ' '.join(cells)
@@ -523,8 +523,7 @@ class Table:
             dn.append(('운행일주의' if self.daysym else '비고') + ' 무표시는 매일 운행')
             notes.append(', '.join(dn))
         cp = getattr(self, 'cpl', None)
-        if cp:
-            notes.append('병결열차는 연결해 달리는 열차')
+        if cp: pass                          # 어버이 열차는 비고에 「…로 분리·연결」
         elif (self.cat, self.line) in MERGE_GUEST:
             notes.append('굵은 줄 오른쪽은 수서 발착')
         elif (self.cat, self.line) in COUPLE_GUEST and self.variant != '수서':
@@ -549,6 +548,12 @@ class Table:
         return False
 
     def cpl_note(self, tr):
+        """어버이 열차의 비고: 「381로 분리」(하행)·「382로 연결」(상행). 짝이 요일로 바뀌면 「668・672로 연결」"""
+        gs = self.cpl_main(tr)
+        if not gs: return None
+        return f"{'・'.join(gs)}{ro(gs[-1])} {'분리' if self.dir == 'down' else '연결'}"
+
+    def cpl_note_old(self, tr):
         """병결 짝이 요일로 바뀌는 열차의 비고: 짝마다 요일과 번호 「월∼목 668/금∼일 672」"""
         gs = self.cpl_main(tr)
         if len(gs) < 2: return None
@@ -606,14 +611,16 @@ class Table:
             """역 k0..k1 의 칸(착발역은 두 칸)을 모아 가운데에 (…선 경유) 세로 한 줄, 나머지는 ‥ → {역: 토큰}"""
             slots = [(k, p) for k in range(k0, k1 + 1) for p in range(phys(k))]
             if len(slots) < 2: return None
-            text = via.replace(' ', '')
-            if '/' not in text: text = text.replace('경유', '/경유')             # 「태백선/경유」 두 줄 세로쓰기
-            need = math.ceil((max(len(x) for x in text.split('/')) + 0.3) / 1.26)   # 긴 줄 1em씩(괄호 없이), 행 1.26em
+            horiz = via.startswith('=')                       # 「=수서/발/654」: 가로로 줄마다 한 행 (필요한 행만 합친다)
+            text = via.lstrip('=').replace(' ', '')
+            if not horiz and '/' not in text: text = text.replace('경유', '/경유')             # 「태백선/경유」 두 줄 세로쓰기
+            need = len(text.split('/')) if horiz else math.ceil((max(len(x) for x in text.split('/')) + 0.3) / 1.26)   # 긴 줄 1em씩(괄호 없이), 행 1.26em
             if need > len(slots): need = 0                   # 자리가 모자라면 주석 없이 ║ 만 (행이 굵어지지 않게)
             s0 = (len(slots) - need) // 2
             parts = collections.defaultdict(list)
             for j, (k, p) in enumerate(slots):
-                if need and j == s0: parts[k].append(q(f'^{need} va={va}; VR{{{esc_txt(text)}}}'))   # 괄호 없이
+                if need and j == s0:
+                    parts[k].append(q(f'^{need} va={va}; ' + (esc_txt(text) if horiz else f'VR{{{esc_txt(text)}}}')))   # 괄호 없이
                 elif need and s0 < j < s0 + need: parts[k].append('!')
                 else: parts[k].append('i')                   # 다른 선을 달림
             return {k: ','.join(v) if len(v) > 1 and v != ['i', 'i'] else v[0] for k, v in parts.items()}
@@ -797,7 +804,7 @@ def main():
                     gc, gs, at = COUPLE[(cat, sheet)]
                     t, hmap, gt, gmap = couple(t, tabs.get((gc, gs, d)), at)
                     GUEST_SUSEO[(gc, gs, d)] = (gt, gmap)
-                    cpl = {'map': hmap, 'pos': 'foot' if d == 'down' else 'head', 'with': gs, 'at': at,
+                    cpl = {'map': hmap, 'pos': None, 'with': gs, 'at': at,
                            'days': {tr['no']: tr['note'] for tr in gt['trains']}}
                 elif variant == '수서' and (cat, sheet) in COUPLE_GUEST:
                     t, gmap = GUEST_SUSEO[(cat, sheet, d)]      # 별표는 직결 열차처럼 (시발·종착역이 수서). 병결열차 행 없이
@@ -820,12 +827,13 @@ def main():
                         hosts = gmap.get(tr['no'], [])
                         if hosts:
                             h = '・'.join(hosts)               # 짝이 요일로 바뀌면 둘 다
+                            # 자녀 열차: 갈림역 앞(하행)·뒤(상행)는 「수서/발/654」「수서/착/1041」을 가로로 (어버이 열차 비고에 연결)
                             if d == 'down':
                                 for i in range(ka): tt[i] = None
-                                tt[ka - 1] = f'{h}에서/분리'
+                                tt[ka - 1] = f'=수서/발/{hm(ends["fromT"])}'
                             else:
                                 for i in range(ka + 1, len(tt)): tt[i] = None
-                                tt[ka + 1] = f'{h}{ro(hosts[-1])}/병결'
+                                tt[ka + 1] = f'=수서/착/{hm(ends["toT"])}'
                             trs.append(dict(tr, times=tt, block=1, arr_at=gby.get(tr['no'], {}).get('arr_at', {}), **ends))
                         else:
                             trs.append(dict(tr, times=tt, block=1, pass_from=entry, **ends))

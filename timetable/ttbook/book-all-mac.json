@@ -90,5 +90,11 @@
  "ruleSplit": false,
  "bandLeftLines": [
   "전라선"
+ ],
+ "bandTop": [
+  {
+   "line": "동해선",
+   "title": "KTX"
+  }
  ]
 }

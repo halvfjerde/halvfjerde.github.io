@@ -906,6 +906,7 @@ class Book:
             for cl in T.cells:
                 if cl.r in dayrows and cl.c > 0 and cl.node.find(lambda n: 'jtt-v' in n.cls):
                     t = re.sub(r'\s', '', cl.node.text())
+                    if '연결' in t or '분리' in t: continue          # 병결 비고(개조식)는 적은 그대로 세로쓰기
                     # 요일 뭉치만 작은 가로 글씨로(세 자까지 한 줄, 넷~여섯 자는 두 자씩 세 줄까지).
                     # 나머지(「운행」, 「…선 경유」 등)는 관습대로 보통 크기 세로쓰기
                     mv = re.match(r'(.+선)경유$', t)
@@ -2313,8 +2314,14 @@ class Book:
                         len(self.blocks(T)[1]) > self.cap(T, 'B', True) for T in ts):
                     Td, Tu = dn[0], up[0]
                     old = [(T.fold, T.band_left) for T in ts]
-                    for T in ts: T.fold = False; T.band_left = T.head is not None
-                    sj = self.stack_jobs(Td, Tu)
+                    top_ = any(T.line == x['line'] and x.get('title', '') in T.title.text() for x in self.cfg.get('bandTop', []) for T in ts)
+                    sj = None
+                    if top_:                          # bandTop: 위 띠로 (위아래 단이 들면)
+                        for T in ts: T.fold = False; T.band_left = False
+                        sj = self.stack_jobs(Td, Tu)
+                    if not sj:
+                        for T in ts: T.fold = False; T.band_left = T.head is not None
+                        sj = self.stack_jobs(Td, Tu)
                     # 끝에 남는 몇 편을 한 쪽에 따로 실어야 하면, 위아래 펼침면 대신 그냥 접어 싣는다 (쪽 수는 같고 덜 어수선하다)
                     if sj and not any(j['kind'] == 'single' for j in sj):
                         Td.stack_with, Tu.stacked = Tu, True
