@@ -3535,11 +3535,12 @@ class Book:
         rng_ = lambda a, b: ('%d' % a) if a == b else ('%d∼%d' % (a, b))
         def head(xx, yy, w, name):
             tex.append(self.put_box(xx, yy, w, hh, self.inl.run(name, Ctx('GB', 1.1)), 'l', 'm'))
-        # 목차: 노선을 실린 차례대로 한 목록 (두 단)
+        # 목차: 큰 갈래(철도 · 역명 색인, 뒤에 항공 · 버스가 붙을 자리) 밑에 노선. 들여쓰기·밑줄 없이 글자 굵기로만 가른다
         lp = self.line_pages(first)
         bk_ = [i for i, pg in enumerate(self.pages) if 'back' in pg and self.back[pg['back']]['cols']]
-        items = [(nm, a, b, T) for nm, (a, b, T) in lp.items()] + ([('역명 색인', bk_[0] + first, bk_[-1] + first, None)] if bk_ else [])
-        per = int(math.ceil(len(items) / 2.0))
+        rail = [(nm, a, b, T) for nm, (a, b, T) in lp.items()]
+        seq = [('h', '철도', min(x[1] for x in rail), max(x[2] for x in rail), None)] + [('i',) + x for x in rail]
+        if bk_: seq += [('g',), ('h', '역명 색인', bk_[0] + first, bk_[-1] + first, None)]
         # 범례: 세 단 (등급 · KTX · 관광열차)
         lg = self.cfg.get('legend', [])
         groups, flat = [], []
@@ -3557,16 +3558,30 @@ class Book:
         lg_h = max([hh + len(it) * ih for _, it in groups] + [0])
         bottom = y0 + self.ch
         yl0 = bottom - lg_h
-        yc0 = yl0 - 2 * R - per * ih
+        sh = {'h': hh, 'i': ih, 'g': R}
+        def colh(xs): return sum(sh[x[0]] for x in xs)
+        best = None                                      # 두 단: 높이가 고르게, 갈래 머리가 단 끝에 홀로 남지 않게
+        for k_ in range(1, len(seq)):
+            if seq[k_ - 1][0] in ('h', 'g'): continue
+            c1, c2 = seq[:k_], [x for n_, x in enumerate(seq[k_:]) if not (n_ == 0 and x[0] == 'g')]
+            m_ = max(colh(c1), colh(c2) + (hh if c2[0][0] == 'i' else 0))      # 이어지는 단은 갈래 머리 높이만큼 내려서 (줄을 맞춘다)
+            if best is None or m_ < best[0]: best = (m_, c1, c2)
+        _, c1, c2 = best
+        yc0 = yl0 - 2 * R - best[0]
         cw2 = (W - gut) / 2
-        for n_, (inm, ia, ib, T) in enumerate(items):
-            c_i, r_ = divmod(n_, per)
-            xx = x0 + c_i * (cw2 + gut); yy = yc0 + r_ * ih
-            kt = T is not None and self.is_ktx(T)
-            it = self.inl.run(inm, Ctx('GB', 1.0, '0A5FE0' if kt else None)); ip = self.inl.run(rng_(ia, ib), Ctx('M', 1.0))
-            tex.append(self.put_box(xx, yy, cw2, ih, it, 'l', 'm'))
-            tex.append(self.put_box(xx, yy, cw2, ih, ip, 'r', 'm'))
-            ops.append(self.dots(xx + wd(it) + 0.6 * fs, xx + cw2 - wd(ip) - 0.6 * fs, yy + ih / 2))
+        for c_i, col in enumerate((c1, c2)):
+            xx = x0 + c_i * (cw2 + gut); yy = yc0 + (hh if col[0][0] == 'i' else 0)
+            for x in col:
+                if x[0] == 'g': yy += R; continue
+                _, inm, ia, ib, T = x
+                hd_ = x[0] == 'h'; h_ = sh[x[0]]
+                kt = T is not None and self.is_ktx(T)
+                it = self.inl.run(inm, Ctx('GB', 1.1) if hd_ else Ctx('M', 1.0, '0A5FE0' if kt else None))
+                ip = self.inl.run(rng_(ia, ib), Ctx('M', 1.1 if hd_ else 1.0))
+                tex.append(self.put_box(xx, yy, cw2, h_, it, 'l', 'm'))
+                tex.append(self.put_box(xx, yy, cw2, h_, ip, 'r', 'm'))
+                ops.append(self.dots(xx + wd(it) + 0.6 * fs, xx + cw2 - wd(ip) - 0.6 * fs, yy + h_ / 2))
+                yy += h_
         nG = max(1, len(groups))
         cw3 = (W - (nG - 1) * gut) / nG
         bw_ = 4.2 * fs
