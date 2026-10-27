@@ -30,6 +30,32 @@ BOOK = [
     ('목포보성선', [('gen', '목포보성선', None)]),
     ('교외선',     [('gen', '교외선', None)]),
 ]
+# 노선마다 재래선(일반열차) 표를 먼저, KTX 는 그 뒤에
+BOOK = [(line, sorted(parts, key=lambda p: 0 if p[0] == 'gen' else 1)) for line, parts in BOOK]
+# 재래선과 같은 선로(정차역이 거의 같은)를 달리는 KTX 는 재래선 표에 합친다: 열차는 파란 글씨, 시각은 굵게
+MERGE_KTX = {('ktx', '동해선(부전-강릉)'): ('gen', '동해선'), ('ktx', '중앙선'): ('gen', '중앙선')}
+MERGE_INTO = {g: k for k, g in MERGE_KTX.items()}
+KTX_STYLE = ['style=fc=' + KTX_COLOR, 'tstyle=fw=b']
+
+def merge_into(g, k):
+    """재래선 표 g 에 KTX 표 k 의 열차를 합친다. k 에만 있는 역은 k 의 차례대로 g 사이에 끼운다"""
+    gn = [clean_name(x) for x in g['stations']]
+    kn = [clean_name(x) for x in k['stations']]
+    st = list(g['stations'])
+    for j, x in enumerate(kn):
+        if x in [clean_name(y) for y in st]: continue
+        nxt = next((y for y in kn[j + 1:] if y in [clean_name(z) for z in st]), None)
+        pos = [clean_name(z) for z in st].index(nxt) if nxt else len(st)
+        st.insert(pos, k['stations'][j])
+    sn = [clean_name(x) for x in st]
+    def remap(tr, names, extra=None):
+        tt = [None] * len(st)
+        for j, x in enumerate(names):
+            if x in sn: tt[sn.index(x)] = tr['times'][j]
+        return dict(tr, times=tt, **(extra or {}))
+    trs = [remap(tr, gn) for tr in g['trains']] + [remap(tr, kn, {'ktx': True}) for tr in k['trains']]
+    return dict(g, stations=st, trains=trs)
+
 # 서는 열차가 없어도 남길 역 (하행·상행의 역을 맞춰 나란히 놓을 때 행이 어긋나지 않게. 모든 열차 통과로)
 KEEP_STATIONS = {('gen', '목포보성선'): {'조성'}}
 # 수서를 드나드는 열차(옛 SRT)를 따로 표로 내는 KTX 노선 (그 열차가 3분의 1 남짓 되는 곳)
@@ -447,7 +473,7 @@ class Table:
         for tr in self.trains:
             if tr.get('block', 0) != prev_block: L.append('---'); prev_block = tr.get('block', 0)   # 덧붙인 덩어리 앞에 굵은 세로줄
             k = KIND.get(tr['type'], tr['type'])
-            hdr = [q(badge(k, tr['type'])), tr['no']]
+            hdr = [q(badge(k, tr['type'])), tr['no']] + (KTX_STYLE if tr.get('ktx') else [])
             if has_fr:
                 o, d = self.ends_of(tr)
                 hdr.append(q(f'{esc_txt(o)}/{hm(self.end_times(tr)[0])}'))
@@ -484,6 +510,9 @@ class Table:
             if 'ITX-새마을' in types: parts.append('BS{k새마을.}은 `ITX-새마을`')
             if '새마을' in types: parts.append('S{새마을}은 새마을호')
             if 'ITX-마음' in types: parts.append('BS{k마음.}은 `ITX-마음`')
+            if any(tr.get('ktx') for tr in self.trains):
+                ks = sorted({tr['type'] for tr in self.trains if tr.get('ktx')})
+                parts.append(', '.join(f'S{{{KIND.get(x, x)}}}' for x in ks) + '은 ' + ', '.join(f'`{x}`' for x in ks) + '(파란 글씨)')
             if parts: notes.append('등급 ' + ', '.join(parts))
         if has_day:   # 운행일 관련은 한 줄로
             dn = []
@@ -727,6 +756,7 @@ def main():
         title = f'{PREFIX}/{line}'
         expanded = []
         for cat, sheet, sub in parts:
+            if (cat, sheet) in MERGE_KTX: continue          # 재래선 표에 합침
             if (cat, sheet) in SPLIT_SUSEO or ((cat, sheet) in COUPLE_GUEST and (cat, sheet) not in MERGE_GUEST):
                 expanded += [(cat, sheet, sub, None), (cat, sheet, sub, '수서')]
             else: expanded.append((cat, sheet, sub, None))
@@ -738,6 +768,8 @@ def main():
             for d in ('down', 'up'):
                 t = tabs.get((cat, sheet, d))
                 if not t: continue
+                if (cat, sheet) in MERGE_INTO and tabs.get(MERGE_INTO[(cat, sheet)] + (d,)):
+                    t = merge_into(t, tabs[MERGE_INTO[(cat, sheet)] + (d,)])
                 if (cat, sheet) in SPLIT_SUSEO or (cat, sheet) in SUSEO_TO:
                     k = next(i for i, x in enumerate(t['stations']) if clean_name(x) == '수서')
                     t = dict(t, variant=variant, trains=[tr for tr in t['trains'] if isinstance(tr['times'][k], int) == (variant == '수서')])

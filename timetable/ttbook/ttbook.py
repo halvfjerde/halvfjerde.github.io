@@ -954,6 +954,12 @@ class Book:
                 if cl in cell.cls: c = c.but(font=f)
             if ('jtt-ad' in cell.cls or 'jtt-mk' in cell.cls) and 'jtt-th' not in cell.cls: c = c.but(size=0.8)
             if 'jtt-r-ad' in cell.cls and 'jtt-th' not in cell.cls: c = c.but(size=0.8)
+            # 칸의 글자 색(fc=)·굵기(fw=b): 재래선 표에 합친 KTX 열차 등
+            col = (cell.style or {}).get('color', '')
+            if col.startswith('#'):
+                col = col[1:].upper()
+                c = c.but(color=''.join(x * 2 for x in col) if len(col) == 3 else col)
+            if ('jtt-fb' in cell.cls or '700' in (cell.style or {}).get('font-weight', '')) and c.font == 'DM': c = c.but(font='DGB')
             cell.lines = self.inl.lines(cell.node, c)
             cell.lines = [l for l in cell.lines] if any(cell.lines) else []
             cell.need = self.cell_need(T, cell, cell.lines)

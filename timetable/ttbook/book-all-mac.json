@@ -61,7 +61,7 @@
  ],
  "pageTitle": true,
  "notes": "header",
- "ktxFirst": true,
+ "ktxFirst": false,
  "bandPos": "auto",
  "fold": "auto",
  "dropEnds": false,
