@@ -275,7 +275,8 @@ class Table:
         hd = ' ― '.join(band_names)
         # 노선 띠: 왼쪽에 방향·노선(인쇄에서 표마다 무엇인지), 가운데에 주요 역
         dirw = '하행' if self.dir == 'down' else '상행'
-        L.append(f'headl "b〔{dirw}〕 ' + ('`KTX` ' if ktx else '') + f'{self.line_disp}{vlab}."')
+        # 방향은 노선 이름 뒤에 명조로
+        L.append(f'headl "b' + ('`KTX` ' if ktx else '') + f'{self.line_disp}{vlab}. 〔{dirw}〕"')
         L.append(f'head "b{hd}."')
         L.append('headheight 48')
         if ktx: L.append(f'headstyle "fc={KTX_COLOR}"')
