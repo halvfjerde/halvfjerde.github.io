@@ -736,7 +736,9 @@ class Table:
         tail = note_slots(tail_at, n - 1, tr['via_out'], 'm') if d != self.st[b] and tr.get('via_out') and tail_at < n else None
         head = note_slots(0, head_at, tr['via_in'], 'm') if o != self.st[a] and tr.get('via_in') and head_at >= 0 else None
         rem_mode = (self.cat, self.line) in NOTES_TO_REM          # 표 안의 경유 주를 모두 비고로 (칸은 ‥)
-        if rem_mode: head = tail = None
+        if rem_mode:                                   # 주는 비고로, 다른 선을 달리는 칸은 ║
+            if tail: tail = {k: 'i' for k in tail}
+            if head: head = {k: 'i' for k in head}
         for i, x in enumerate(T):
             sp = i in self.split
             if head and i <= head_at:
