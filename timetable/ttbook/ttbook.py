@@ -731,6 +731,10 @@ class Book:
         self.vband_w = cfg.get('leftBandWidth', 1.8) * self.fs      # 띠를 표 왼쪽 끝에 세로로 둘 때의 폭     # 띠의 왼쪽·오른쪽 글을 틀에서 띄우는 만큼
         self.notes = cfg.get('notes', True)                        # false: 표 밑의 주기(공통 범례)를 싣지 않는다
         self._bands = {}
+        self.fold = cfg.get('fold', 'off')                          # off | on | auto: 표를 한 쪽 폭의 띠로 접어 위아래로 쌓기
+        self.strip_side = 'B' if cfg.get('stripStubs', 'both') == 'both' else 'L'
+        self.strip_rule = cfg.get('stripRule', 2)                   # 같은 표의 띠 사이 괘선 (0 가는 1 중간 2 굵은 'd' 겹)
+        self.table_rule = cfg.get('tableRule', 'd')                 # 다른 표 사이 괘선
         self.squeeze = cfg.get('squeeze', 0.93)                    # 열 폭을 좁혀도 되는 한도 (넘치는 한두 편을 싣기 위해)
         # 글꼴: 이름으로 찾고, 조판 전에 재어 둔다
         dirs = cfg.get('fontDirs') or DEFAULT_FONT_DIRS
@@ -1046,6 +1050,8 @@ class Book:
         if part: c, lc = stack([('(%s)' % part, Ctx('M', 1.0, color))])
         else: c, lc = stack(segs(parts[2], base, []))
         need = la + lb + lc + 2 * fs
+        if need > H and la + lc + fs <= H:      # 길이가 모자라면 주요 역은 뺀다
+            b = ''
         tex = r'\vbox to %.3fbp{\offinterlineskip %s\vfil %s\vfil %s}' % (H, a, b, c)
         return tex, need
 
@@ -1088,7 +1094,7 @@ class Book:
         return (n * 1.35 * 0.8 + 0.5) * self.fs
 
     # ── 표 조각 하나를 쪽에 ──
-    def render_piece(self, T, ch, rows, x0, y0, with_notes, notes_room=True, line=None, part=None, hb=None):
+    def render_piece(self, T, ch, rows, x0, y0, with_notes, notes_room=True, line=None, part=None, hb=None, pc=None):
         """x0,y0: 조각 왼쪽 위 (쪽 좌표, 위에서 아래로). 그릴 것 목록과 크기를 돌려준다"""
         fs = self.fs
         tex, rects = [], []
@@ -1121,8 +1127,19 @@ class Book:
         for r in rows: ys.append(ys[-1] + T.rowH[r])
         nh = self.notes_h(T) if with_notes else 0
         fy1 = ys[-1] + nh + fp + fw
-        # 틀
-        rects += self.frame_rects(fx0, y0, fx1, fy1, fw)
+        # 틀: 왼쪽·오른쪽 변은 굵게. 위 변은 위에 붙은 조각에 따라(같은 표면 띠 사이 괘선, 다른 표면 표 사이 괘선)
+        top = pc['top'] if pc else 'frame'
+        bottom = pc['bottom'] if pc else True
+        VB0 = self.vband_w if getattr(T, 'band_left', False) else 0
+        rects.append(('v', fx0 + fw / 2, y0, fy1, 2)); rects.append(('v', fx1 - fw / 2, y0, fy1, 2))
+        if top == 'frame': rects.append(('h', fx0, fx1, y0 + fw / 2, 2))
+        elif top == 'table': rects.append(('h', fx0, fx1, y0 + fw / 2, self.table_rule))
+        else:
+            # 같은 표: 제목칸은 끊지 않는다
+            lx = (fx0 + fw + fp + VB0) if (VB0 and side != 'R') else fx0
+            rx = (fx1 - fw - fp - VB0) if (VB0 and side == 'R') else fx1
+            rects.append(('h', lx, rx, y0 + fw / 2, self.strip_rule))
+        if bottom: rects.append(('h', fx0, fx1, fy1 - fw / 2, 2))
         # 제목 (쪽마다 하나만 다는 경우에는 표마다 달지 않는다)
         if self.page_title: pass
         elif side == 'R':
@@ -1132,9 +1149,19 @@ class Book:
         # 세로 띠
         if VB:
             bx = xs[0] - VB if side != 'R' else xs[-1]
-            vt, _ = self.vband(T, part, ys[-1] - ty - 0.6 * fs)
-            tex.append(self.put_box(bx, ty + 0.3 * fs, VB, ys[-1] - ty - 0.6 * fs, vt, 'c', 't'))
-            rects.append(('v', xs[0] if side != 'R' else xs[-1], ty, ys[-1], 1))
+            run = pc and pc.get('vrun')
+            if run and run[2] > 1:            # 같은 표의 띠 여럿에 걸친 제목칸: 첫 띠에서 한 번에
+                if run[0] == 0:
+                    Hh = run[1] - 2 * (fw + fp) - 0.6 * fs
+                    vt, _ = self.vband(T, None, Hh)
+                    tex.append(self.put_box(bx, ty + 0.3 * fs, VB, Hh, vt, 'c', 't'))
+                y_a = y0 if run[0] > 0 else ty
+                y_b = fy1 if run[0] < run[2] - 1 else ys[-1]
+                rects.append(('v', xs[0] if side != 'R' else xs[-1], y_a, y_b, 1))
+            else:
+                vt, _ = self.vband(T, part, ys[-1] - ty - 0.6 * fs)
+                tex.append(self.put_box(bx, ty + 0.3 * fs, VB, ys[-1] - ty - 0.6 * fs, vt, 'c', 't'))
+                rects.append(('v', xs[0] if side != 'R' else xs[-1], ty, ys[-1], 1))
         # 노선 머리띠
         if hb:
             W = xs[-1] - xs[0] - 2 * self.band_inset
@@ -1495,7 +1522,14 @@ class Book:
         sL, sR = self.cap(T, 'L', True), self.cap(T, 'R', True)
         sB = self.cap(T, 'B', True)      # 한 쪽에 홀로 실리는 표는 양쪽 역명을 다 단다
         n = len(Tc)
-        if n <= sB:
+        fold = getattr(T, 'fold', False)
+        if fold:                        # 접어 싣기: 한 쪽 폭의 띠(strip)를 위아래로 쌓는다
+            sS = self.cap(T, self.strip_side, True)
+            k = -(-n // sS)
+            base, ex = divmod(n, k)
+            groups = [('single', base + (1 if g < ex else 0)) for g in range(k)]
+            sB = sS
+        elif n <= sB:
             groups = [('single', n)]
         else:
             C = capL + capR
@@ -1522,10 +1556,11 @@ class Book:
                 used = gdef[1] if gdef[0] == 'single' else gdef[1] + gdef[2]
                 trs = Tc[ti:ti + used]; ti += used
                 notes = last_sec and gi == len(groups) - 1
-                job = {'T': T, 'kind': gdef[0], 'trs': trs, 'notes': notes, 'sB': sB}
+                job = {'T': T, 'kind': gdef[0], 'trs': trs, 'notes': notes, 'sB': sB,
+                       'side': self.strip_side if fold else 'B'}
                 if gdef[0] == 'single':      # 좁은 표는 띠가 여러 줄이 될 수 있다
-                    natB = self.fixed_w(T, 'B') + used * self.P0
-                    job['narrow'] = natB < self.cw * 0.62
+                    natB = self.fixed_w(T, job['side']) + used * self.P0
+                    job['narrow'] = natB < self.cw * 0.62 and not fold
                     job['nat'] = natB
                     job['bw'] = self.band_w(natB) if job['narrow'] else BWF
                 else:
@@ -1578,12 +1613,12 @@ class Book:
                     if prev['narrow'] and abs(prev['y'] - low) < 0.01:
                         x = prev['x'] + prev['nat'] + TWh + gapX
                         if x + job['nat'] <= self.cw + 0.01 and prev['y'] + h <= PH + 0.01:
-                            put(T, c, trs, rows, prev['y'], notes, h, x, True, 'B', job['bw'])
+                            put(T, c, trs, rows, prev['y'], notes, h, x, True, job['side'], job['bw'])
                             ys[c] = max(ys[c], prev['y'] + h)
                             return True
                 if job['sB'] >= k and top(c) + h <= PH + 0.01:
                     y0 = top(c)
-                    put(T, c, trs, rows, y0, notes, h, 0.0, job['narrow'], 'B', job['bw'])
+                    put(T, c, trs, rows, y0, notes, h, 0.0, job['narrow'], job['side'], job['bw'])
                     ys[c] = y0 + h
                     return True
                 return False
@@ -1618,8 +1653,23 @@ class Book:
                 bunches.append([T])
         # 띠 자리: bandPos top | left | auto (auto: 왼쪽 세로 띠로 해야 한 쪽에 두 단이 들어가는 표만 왼쪽으로)
         mode = self.cfg.get('bandPos', 'top')
+        def per_page(h):
+            m = 0
+            while (m + 1) * h - m * fw <= PH + 0.01: m += 1
+            return m
         for T in tables:
-            T.band_left = False
+            T.band_left = False; T.fold = False
+            if self.fold != 'off':
+                jt = self.jobs_of(T)
+                T.band_left = T.head is not None; T.fold = True
+                jf = self.jobs_of(T)
+                m = per_page(max(j['h'] for j in jf))
+                ok = m >= 2 and len(jf) > 1
+                pf = -(-len(jf) // max(m, 1))
+                pt = sum(2 if j['kind'] == 'pair' else 1 for j in jt) * max(j['h'] for j in jt) / PH
+                if self.fold == 'on' or (ok and pf <= pt + 0.01):
+                    continue
+                T.band_left = False; T.fold = False
             if T.head is None or mode == 'top': continue
             jt = self.jobs_of(T)
             T.band_left = True
@@ -1653,6 +1703,27 @@ class Book:
                 others = sorted([q for q in pg['pieces'] if q is not pc and abs(q['y'] - pc['y']) < 0.01 and q['x'] > pc['x']], key=lambda q: q['x'])
                 avail = min(others[0]['x'] - TWh - gapX - pc['x'], pc['nat']) if others else (self.cw - pc['x'])
                 pc['ch'] = self.make_chunk(pc['T'], pc['side'], pc['trains'], avail)
+        # 붙은 조각 사이의 괘선: 위 조각과 같은 표면 띠 사이 괘선, 다른 표면 표 사이 괘선. 아래에 붙은 조각이 있으면 아래 변은 그 조각이 긋는다
+        for pg in pages:
+            ps = pg['pieces']
+            for pc in ps:
+                pc['top'], pc['bottom'], pc['vrun'] = 'frame', True, None
+            for pc in ps:
+                above = [q for q in ps if q is not pc and abs(q['y'] + q['h'] - fw - pc['y']) < 0.05]
+                if above:
+                    pc['top'] = 'strip' if all(q['T'] is pc['T'] for q in above) else 'table'
+                    for q in above: q['bottom'] = False
+            # 제목칸(세로 띠)은 같은 표의 띠가 이어 쌓인 만큼 한 칸으로
+            for pc in sorted(ps, key=lambda q: q['y']):
+                if not getattr(pc['T'], 'band_left', False) or pc['vrun'] is not None: continue
+                run = [pc]
+                while True:
+                    nxt = [q for q in ps if q['T'] is pc['T'] and abs(q['x'] - pc['x']) < 0.05
+                           and abs(run[-1]['y'] + run[-1]['h'] - fw - q['y']) < 0.05]
+                    if not nxt: break
+                    run.append(nxt[0])
+                for k, q in enumerate(run):
+                    q['vrun'] = (k, sum(r['h'] for r in run) - (len(run) - 1) * fw, len(run))
         self.pages = pages
 
     def emit(self, out_tex):
@@ -1665,7 +1736,7 @@ class Book:
             tex, rects = [], []
             for pc in pg['pieces']:
                 t, r, w, h = self.render_piece(pc['T'], pc['ch'], pc['rows'], x0 + pc.get('x', 0), self.mt + pc['y'], pc['notes'],
-                                               line=pc['T'].line, part=pc['part'], hb=pc['hb'])
+                                               line=pc['T'].line, part=pc['part'], hb=pc['hb'], pc=pc)
                 tex += t; rects += r
             # 머리글은 노선 이름만 (책을 넘기며 찾는 자리). 몇째 조각인지는 표의 세로 제목 끝에
             if self.page_title:

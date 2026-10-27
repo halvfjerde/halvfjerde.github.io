@@ -61,5 +61,6 @@
  "pageTitle": true,
  "notes": false,
  "ktxFirst": true,
- "bandPos": "auto"
+ "bandPos": "auto",
+ "fold": "auto"
 }
