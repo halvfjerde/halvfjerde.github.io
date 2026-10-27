@@ -385,6 +385,7 @@ class Inline:
         가로쓰기에서는 글꼴마다 잰 만큼 위아래를 맞춘다"""
         if not s: return ''
         s = self.cover(s, ctx.font)
+        s = re.sub(r' (?=[〔（「『])', '\u2002', s)      # 여는 괄호 앞은 조금 더 띄운다
         segs = []
         for ch in s:
             k = char_kind(ch)
@@ -400,7 +401,8 @@ class Inline:
         wsum = 0.0
         for k, chs in segs:
             sp = r'\hskip %.3fbp ' % (0.3 * ctx.size * self.fs)
-            t = ''.join(sp if ch == ' ' else esc(ch) for ch in chs)
+            sp2 = r'\hskip %.3fbp ' % (0.55 * ctx.size * self.fs)
+            t = ''.join(sp if ch == ' ' else sp2 if ch == '\u2002' else esc(ch) for ch in chs)
             fam = KO_OF[ctx.font] if k in ('ko', 'kp') else ctx.font
             c2 = ctx
             up = self.shift_for(k, ctx.font)
@@ -421,6 +423,7 @@ class Inline:
     def adv(self, ch, fam):
         """글꼴 묶음 fam 에서 ch 의 폭 (em). 묶음의 글꼴을 차례로 보아 처음 가진 것의 폭"""
         if ch in ' \u00a0': return 0.3
+        if ch == '\u2002': return 0.55
         if not self.m: return 1.0 if not is_latin(ch) else 0.55
         for role in FAMCHAIN.get(fam, []):
             fi = self.m.info.get(role)
@@ -820,6 +823,8 @@ class Book:
         # 운행일(비고) 행: 세로쓰기 대신 작은 글자로 가로로 (한 줄에 세 자까지, 고르게 나눠 여러 줄)
         dayrows = {cl.r for cl in T.cells if cl.c == 0 and re.sub(r'\s', '', cl.node.text()) in ('운행일', '비고')}
         T.dayrow = max(dayrows) if dayrows else None
+        for cl in T.cells:             # 비고 행은 위에 붙여 (쪽의 남는 자리만큼 늘어난다)
+            if cl.r in dayrows: cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
         if self.cfg.get('daysCompact', True):
             for cl in T.cells:
                 if cl.r in dayrows and cl.c > 0 and cl.node.find(lambda n: 'jtt-v' in n.cls):
@@ -831,7 +836,7 @@ class Book:
                         if i: nd.kids.append(Node('br', []))
                         nd.kids.append(t[i:i + per])
                     cl.node, cl.small = nd, 0.75
-                    cl.style = dict(cl.style); cl.style['vertical-align'] = 'middle'
+                    cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
         for cell in T.cells:
             c = base
             if getattr(cell, 'small', None): c = c.but(size=cell.small)
@@ -1051,7 +1056,8 @@ class Book:
                 while i < len(text):
                     ch = text[i]
                     if ch in ' \u00a0　':
-                        items.append(r'\kern%.3fbp' % (0.35 * em)); L += 0.35 * em; i += 1; continue
+                        kk = 0.55 if text[i + 1:i + 2] in ('〔', '（') else 0.35
+                        items.append(r'\kern%.3fbp' % (kk * em)); L += kk * em; i += 1; continue
                     if ch in VROT:
                         t, l = self.inl.vform(ch, c, colw)
                         items.append(t); L += l * em; i += 1; continue
