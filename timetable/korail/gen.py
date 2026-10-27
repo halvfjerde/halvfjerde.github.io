@@ -8,7 +8,7 @@ import json, sys, os, re, statistics, collections, math
 EDITION = '2026년 11월호'
 PREFIX = f'연습장:시각표 {EDITION}'
 MIX = '--mix' in sys.argv
-KTX_COLOR = '#1d3f8a'          # KTX 표의 노선 띠·제목 표지 색
+KTX_COLOR = '#0a5fe0'          # KTX 표의 노선 띠·제목 표지 색
 
 # 책에 싣는 노선 순서와, 각 노선에 들어갈 표(엑셀 시트 이름)
 BOOK = [
@@ -185,6 +185,13 @@ def day_range(s):
     elif len(s) == 2: s = '・'.join(s)                     # 금・토 (일본식 가운뎃점. 「금토」는 한 낱말처럼 읽힌다)
     else: s += '요일'                                      # 월요일 (「월 운행」은 달로도 읽힌다)
     return s + '/운행'                                     # 요일 | 운행 두 줄
+
+def day_short(s):
+    """운행일 행: 요일 한 글자씩 붙여(금토·월수금·월), 이어지는 셋 이상만 범위(월∼목)"""
+    if len(s) >= 3:
+        k = WEEK.index(s[0])
+        if all(WEEK[(k + i) % 7] == ch for i, ch in enumerate(s)): return f'{s[0]}∼{s[-1]}'
+    return s
 
 # 따로 조사한 도착 시각 {(열차번호, 역): 분}. arrivals.json 이 있으면 읽는다
 ARR = {}
@@ -419,8 +426,8 @@ class Table:
         self.rem_empty = not has_day
         if self.has_days: L.append(f'days {lbl("days")} r={LBL["days"][1]} style=va=t')
         if has_day: L.append(f'day  {lbl("day")} r={LBL["day"][1]} style=va=t')
-        elif not self.has_days: L.append(f'rem  {lbl("day")} r={LBL["day"][1]} style=va=t')
-        self.rem_row = has_day or not self.has_days        # 빈 비고 행은 운행일 행이 없을 때만 (있으면 운행일 행이 끝 행으로 남는 자리를 받는다)
+        else: L.append(f'rem  {lbl("day")} r={LBL["day"][1]} style=va=t')
+        self.rem_row = True
         L.append('')
         thru = collections.Counter()
         for tr in self.trains:
@@ -491,7 +498,7 @@ class Table:
         for tr in self.trains:
             if tr.get('block', 0) != prev_block: L.append('---'); prev_block = tr.get('block', 0)   # 덧붙인 덩어리 앞에 굵은 세로줄
             k = KIND.get(tr['type'], tr['type'])
-            hdr = [q(badge(k, tr['type'])), tr['no']] + (KTX_STYLE if tr.get('ktx') else [])
+            hdr = [q(badge(k, tr['type'])), tr['no']] + (KTX_STYLE if tr.get('ktx') else ['style=fc=' + KTX_COLOR] if ktx else [])   # 고속철도 표는 열차 칸을 모두 파랗게
             if has_fr:
                 o, d = self.ends_of(tr)
                 hdr.append(q(f'{esc_txt(o)}/{hm(self.end_times(tr)[0])}'))
@@ -509,7 +516,7 @@ class Table:
             if self.has_days:
                 if not isday(nt): ft.append('_')
                 elif self.daysym: ft.append(self.daysym[nt])
-                else: ft.append(q(vert(day_range(nt).rsplit('/운행', 1)[0])))      # 운행일 행: 요일만 (월요일・금・토・월∼목)
+                else: ft.append(q(esc_txt(day_short(nt))))      # 운행일 행: 요일 글자만 가로로 (이어지는 셋 이상은 월∼목), 넘치면 좁힌다
             if has_day:
                 cn = self.cpl_note(tr)
                 if cn: ft.append(q(vert(cn)))
@@ -525,7 +532,7 @@ class Table:
         kinds = [KIND.get(tr['type'], tr['type']) for tr in self.trains]
         if ktx:
             names = [('산천', 'KTX-산천'), ('청룡', 'KTX-청룡'), ('이음', 'KTX-이음')]
-            parts = ['무표시는 KTX'] + [f'「{k}」은 `{full}`' for k, full in names if k in kinds]
+            parts = ['무표시는 KTX'] + [f'S{{{k}}}은 `{full}`' for k, full in names if k in kinds]
             notes.append('차종 ' + ', '.join(parts))
         else:
             types = {tr['type'] for tr in self.trains}

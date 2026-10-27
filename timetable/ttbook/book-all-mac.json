@@ -103,8 +103,13 @@
  "besideRight": [
   {
    "line": "중앙선",
-   "with": "경북선",
-   "kind": "pair"
+   "kind": "pair",
+   "down": "경북선",
+   "up": "서해선",
+   "rest": [
+    4,
+    3
+   ]
   }
  ]
 }

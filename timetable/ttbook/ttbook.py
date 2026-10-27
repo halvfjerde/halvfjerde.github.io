@@ -2505,28 +2505,40 @@ class Book:
         # besideRight: 펼침면 짝(하행 위·상행 아래)의 오른쪽 면 끝 몇 편 옆에 다음 노선의 하행·상행을 나란히 (그 노선의 한 쪽을 아낀다)
         for br in self.cfg.get('besideRight', []):
             pick = lambda ln, d: [T for T in tables if T.line == ln and not self.is_ktx(T) and d in T.title.text()]
+            if br.get('kind') == 'pair':
+                # 방향마다 펼침면 하나: 왼쪽 면 가득 + 오른쪽 면에 끝 몇 편(rest), 그 옆에 다른 노선의 하행·상행을 위아래로
+                lns = [br['line'], br['down'], br['up']]
+                if not all(len(pick(ln, d)) == 1 for ln in lns for d in ('하행', '상행')): continue
+                Td, Tu = pick(br['line'], '하행')[0], pick(br['line'], '상행')[0]
+                bwf = self.band_w(self.cw)
+                js_, ys_all = [], []
+                for T, ln, rest in ((Td, br['down'], br.get('rest', [None, None])[0]), (Tu, br['up'], br.get('rest', [None, None])[1])):
+                    T.fold = False; T.band_left = False
+                    _, Tc, _ = self.blocks(T)
+                    kL = len(Tc) - rest if rest else min(len(Tc) - 1, self.cap(T, 'L'))
+                    rows = list(range(T.nrow)); h = self.piece_h(T, rows, False, bwf)
+                    if kL < 1 or kL > self.cap(T, 'L', True) or h > PH + 0.01: break
+                    wR = self.fixed_w(T, 'R') + (len(Tc) - kL) * self.P0
+                    wY = self.cw + fw - wR
+                    ys_ = []
+                    for Y in (pick(ln, '하행')[0], pick(ln, '상행')[0]):
+                        Y.fold = False; Y.band_left = False
+                        _, Yc, _ = self.blocks(Y)
+                        if self.fixed_w(Y, 'B') + len(Yc) * self.P0 > wY + 0.01: break
+                        ry = list(range(Y.nrow))
+                        ys_.append((Y, Yc, ry, self.piece_h(Y, ry, False, self.band_w(wY))))
+                    if len(ys_) != 2 or sum(q[3] for q in ys_) - fw > PH + 0.01: break
+                    js_.append({'T': T, 'kind': 'pair', 'trs': Tc, 'kA': kL, 'rows': rows, 'h': h, 'notes': False, 'bw': bwf,
+                                'beside': (wR, ys_)})
+                    ys_all += [q[0] for q in ys_]
+                if len(js_) != 2: continue
+                for T in [Td, Tu] + ys_all: T.custom_jobs = None; T.stack_with = None; T.side_with = None; T.stacked = False
+                Td.custom_jobs, Tu.custom_jobs = [js_[0]], [js_[1]]
+                for Y in ys_all: Y.stacked = True
+                continue
             if not all(len(pick(ln, d)) == 1 for ln in (br['line'], br['with']) for d in ('하행', '상행')): continue
             Td, Tu, Yd, Yu = pick(br['line'], '하행')[0], pick(br['line'], '상행')[0], pick(br['with'], '하행')[0], pick(br['with'], '상행')[0]
             for T in (Td, Tu, Yd, Yu): T.fold = False; T.band_left = False
-            if br.get('kind') == 'pair':
-                # 방향마다 펼침면 하나: 왼쪽 면 가득 + 오른쪽 면에 끝 몇 편, 그 옆에 다음 노선의 같은 방향
-                bwf = self.band_w(self.cw)
-                js_ = []
-                for T, Y in ((Td, Yd), (Tu, Yu)):
-                    _, Tc, _ = self.blocks(T); _, Yc, _ = self.blocks(Y)
-                    kL = min(len(Tc) - 1, self.cap(T, 'L'))
-                    rows = list(range(T.nrow)); h = self.piece_h(T, rows, False, bwf)
-                    wR = self.fixed_w(T, 'R') + (len(Tc) - kL) * self.P0
-                    wY = self.cw + fw - wR
-                    ry = list(range(Y.nrow)); hy = self.piece_h(Y, ry, False, self.band_w(wY))
-                    if kL < 1 or h > PH + 0.01 or hy > PH + 0.01 or self.fixed_w(Y, 'B') + len(Yc) * self.P0 > wY + 0.01: break
-                    js_.append({'T': T, 'kind': 'pair', 'trs': Tc, 'kA': kL, 'rows': rows, 'h': h, 'notes': False, 'bw': bwf,
-                                'beside': (wR, [(Y, Yc, ry, hy)])})
-                if len(js_) != 2: continue
-                for T in (Td, Tu, Yd, Yu): T.custom_jobs = None; T.stack_with = None; T.side_with = None; T.stacked = False
-                Td.custom_jobs, Tu.custom_jobs = [js_[0]], [js_[1]]
-                Yd.stacked = Yu.stacked = True
-                continue
             sj = self.stack_jobs(Td, Tu)
             if not sj or len(sj) != 1 or sj[0]['kind'] != 'stack': continue
             da, db, rd, hd = sj[0]['d']; ua, ub, ru, hu = sj[0]['u']
@@ -2685,6 +2697,38 @@ class Book:
                             e = g + (bottom - (q['y'] - shift + q['h']))
                             q['stretch'] = e; q['h'] += e
                     if g > 0.5 * self.R: shift += g
+            # 옆에 위아래로 쌓인 표들이 있는 쪽(과 마주 보는 쪽): 세로로 이어진 조각들마다 쪽 맨 아래까지, 남는 자리는 높이에 비례해 나눈다
+            def xover(a, b):
+                wa, wb = a.get('avail', a['nat']), b.get('avail', b['nat'])
+                return a['x'] < b['x'] + wb - 1 and b['x'] < a['x'] + wa - 1
+            def stacked_beside(ps):
+                return any(xover(a, b) and abs(a['y'] - b['y']) > 0.5 for a in ps for b in ps if a is not b) and \
+                    any(not xover(a, b) for a in ps for b in ps if a is not b)
+            sp_ = {p for p, pg in enumerate(pages) if stacked_beside(pg['pieces'])}
+            sp_ |= {p + 1 if p % 2 == 0 else p - 1 for p in sp_}
+            for p in sp_:
+                if p >= len(pages): continue
+                ps = pages[p]['pieces']
+                for q in ps:
+                    q['h'] -= q.get('stretch', 0); q['stretch'] = 0
+                done = set()
+                for q in sorted(ps, key=lambda q: q['y']):
+                    if id(q) in done: continue
+                    chain = [q]
+                    while True:
+                        nx = [r for r in ps if id(r) not in done and r not in chain and r['y'] > chain[-1]['y'] + 0.5 and xover(chain[-1], r)]
+                        if not nx: break
+                        chain.append(min(nx, key=lambda r: r['y']))
+                    for r in chain: done.add(id(r))
+                    y_ = chain[0]['y']
+                    tot = sum(r['h'] for r in chain) - (len(chain) - 1) * fw
+                    slack = PH - (y_ + tot)
+                    cs_ = [r for r in chain if can([r])]
+                    hsum = sum(r['h'] for r in cs_)
+                    for r in chain:
+                        e = slack * r['h'] / hsum if (r in cs_ and hsum > 0 and slack > 0) else 0.0
+                        r['y'] = y_; r['h'] += e; r['stretch'] = e
+                        y_ += r['h'] - fw
         # 붙은 조각 사이의 괘선: 위 조각과 같은 표면 띠 사이 괘선, 다른 표면 표 사이 괘선. 아래에 붙은 조각이 있으면 아래 변은 그 조각이 긋는다
         for pg in pages:
             ps = pg['pieces']
