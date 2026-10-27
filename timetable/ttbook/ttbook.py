@@ -913,14 +913,15 @@ class Book:
                     unbig(nd)
                     cl.node = nd
         # 운행일(비고) 행: 세로쓰기 대신 작은 글자로 가로로 (한 줄에 세 자까지, 고르게 나눠 여러 줄)
-        dayrows = {cl.r for cl in T.cells if cl.c == 0 and re.sub(r'\s', '', cl.node.text()) in ('운행일', '운행일주의', '비고')}
+        dayrows = {cl.r for cl in T.cells if (cl.c == 0 or (getattr(T, 'both', False) and T.kind[cl.c][0] == 'L'))
+                   and re.sub(r'\s', '', cl.node.text()) in ('운행일', '운행일주의', '비고')}
         T.dayrow = max(dayrows) if dayrows else None
         for cl in T.cells:             # 비고 행: 내용은 위에 붙이고(쪽의 남는 자리만큼 늘어난다), 이름 칸은 가운데
             if cl.r in dayrows:
                 cl.style = dict(cl.style)
                 cl.style['vertical-align'] = 'middle' if T.kind[cl.c][0] in ('L', 'R') else 'top'
         for cl in T.cells:             # 비고의 「↑ / …선 / 경유」(가로): 맨 위 ↑ 는 굵은 위 화살표로
-            if cl.r in dayrows and cl.c > 0 and not cl.node.find(lambda n: 'jtt-v' in n.cls):
+            if cl.r in dayrows and T.kind[cl.c][0] == 'T' and not cl.node.find(lambda n: 'jtt-v' in n.cls):
                 mu = re.fullmatch(r'↑(.+선)경유', re.sub(r'\s', '', cl.node.text()))
                 if mu:
                     nd = Node('td', []); nd.kids += [Node('span', [('class', 'tt-uarrow')]), Node('br', []), mu.group(1), Node('br', []), '경유']
@@ -928,7 +929,7 @@ class Book:
                     cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
         if self.cfg.get('daysCompact', True):
             for cl in T.cells:
-                if cl.r in dayrows and cl.c > 0 and cl.node.find(lambda n: 'jtt-v' in n.cls):
+                if cl.r in dayrows and T.kind[cl.c][0] == 'T' and cl.node.find(lambda n: 'jtt-v' in n.cls):
                     t = re.sub(r'\s', '', cl.node.text())
                     if '연결' in t or '분리' in t: continue          # 병결 비고(개조식)는 적은 그대로 세로쓰기
                     # 요일 뭉치만 작은 가로 글씨로(세 자까지 한 줄, 넷~여섯 자는 두 자씩 세 줄까지).
@@ -1144,7 +1145,7 @@ class Book:
             T.Lc = [j for j, k in enumerate(T.kind) if k[0] == 'L']
             T.Tc = [j for j, k in enumerate(T.kind) if k[0] == 'T']
             T.Rc = [j for j, k in enumerate(T.kind) if k[0] == 'R']
-            T.mirror = not T.Rc
+            T.mirror = not T.Rc and not getattr(T, 'both', False)
             if T.mirror:     # 오른쪽 역명이 없으면 왼쪽 묶음을 거울처럼
                 T.Rc = [j for j in reversed(T.Lc) if T.kind[j][1] in ('st', 'ad')]
         return T.Lc, T.Tc, T.Rc
@@ -1182,6 +1183,10 @@ class Book:
         room = (self.cw if avail is None else avail) - self.fixed_w(T, side)
         cap = max(1, int(room / self.P0 + 1e-6))
         n = max(len(trains), ncol or 0)        # ncol: 위아래로 맞붙은 조각과 열 수를 같게 (세로 괘선이 이어지도록)
+        if getattr(T, 'both', False):          # 상하행 한 표: 빈 열 없이 제 차례대로 (하행 | 역명 | 상행). 남는 폭은 역명 칸에
+            P = self.P0 if len(trains) <= cap else room / len(trains)
+            keep = sorted(set(L) | set(trains))
+            return {'side': side, 'cols': keep, 'trains': list(trains), 'extra': max(0, room - len(trains) * P), 'mirror': False, 'P': P}
         if n > cap:
             P = room / n
             cols, extra = list(trains) + [('G', Tc[-1], g) for g in range(n - len(trains))], 0
@@ -1957,6 +1962,7 @@ class Book:
             html = run_module(blocks[i], os.path.join(HERE, 'src', 'Timetable.lua'), os.path.join(HERE, 'build'))
             wrap = parse_html(html).find(lambda n: 'jtt-wrap' in n.cls)
             T = build_table(wrap)
+            T.both = 'jtt-both' in wrap.cls          # 상하행을 한 표에 (가운데 역명, 왼쪽 하행·오른쪽 상행)
             self.prepare(T)
             T.line = item.get('line') or os.path.splitext(os.path.basename(src))[0]
             if self.notes is not True: T.legend, T.notes = T.notes, None     # 표 밑 주기 대신 (notes: 'header' 면 쪽 머리에)
@@ -2584,9 +2590,14 @@ class Book:
                 bunches[-1].append(T)
             else:
                 bunches.append([T])
+        last = self.cfg.get('lastLines', [])           # 책 맨 끝에 둘 노선 (관광열차)
+        if last:
+            tail_ = [b for b in bunches if b and b[0].line in last]
+            bunches = [b for b in bunches if not (b and b[0].line in last)]
         bo = self.cfg.get('backOrder', [])          # 책 끝 묶음의 차례 (쪽 짝을 맞추려고 바꿀 때)
         for ln in sorted(dict.fromkeys(T.line for T in tables if hsr(T)), key=lambda x: bo.index(x) if x in bo else len(bo)):
             bunches.append([T for T in tables if hsr(T) and T.line == ln])
+        if last: bunches += tail_
         # 띠 자리: bandPos top | left | auto (auto: 왼쪽 세로 띠로 해야 한 쪽에 두 단이 들어가는 표만 왼쪽으로)
         mode = self.cfg.get('bandPos', 'top')
         def per_page(h):
@@ -2733,23 +2744,25 @@ class Book:
             if T.line in self.cfg.get('bandLeftLines', []) and self.is_ktx(T) and T.head is not None and not T.fold: T.band_left = True
         # rowGroups: 작은 표 여럿(제목에 이 말이 든 표들의 하행·상행)을 한 단에 같은 폭으로 나란히 (관광열차 등)
         for rg in self.cfg.get('rowGroups', []):
-            row = [T for t_ in rg['titles'] for d_ in ('하행', '상행') for T in tables
-                   if T.line == rg['line'] and t_ in T.title.text() and d_ in T.title.text()]
+            row = [T for t_ in rg['titles'] for T in tables if T.line == rg['line'] and t_ in T.title.text()]     # 표 차례대로(하행·상행)
             if len(row) < 2: continue
             k_ = len(row)
-            w_ = (self.cw + (k_ - 1) * fw) / k_
-            if any(self.fixed_w(T, 'B') + len(self.blocks(T)[1]) * self.P0 * self.squeeze > w_ + 0.01 for T in row): continue
+            # 폭: 제 폭에 비례해 판면 폭을 나눈다 (남는 폭은 역명 칸에)
+            nat_ = [self.fixed_w(T, 'B') + len(self.blocks(T)[1]) * self.P0 for T in row]
+            tot_ = self.cw + (k_ - 1) * fw
+            if sum(nat_) > tot_ + 0.01: continue
+            ws_ = [x * min(1.1, tot_ / sum(nat_)) for x in nat_]       # 많이 남으면 늘이지 않고 오른쪽을 비운다
             parts_ = []
-            for T in row:
+            for T, w1 in zip(row, ws_):
                 T.fold = False; T.band_left = False
                 rr = list(range(T.nrow))
-                parts_.append((T, self.blocks(T)[1], rr, self.piece_h(T, rr, False, self.band_w(w_))))
+                parts_.append((T, self.blocks(T)[1], rr, self.piece_h(T, rr, False, self.band_w(w1))))
             hm_ = max(q[3] for q in parts_)
             parts_ = [(a, b, c, hm_) for a, b, c, _ in parts_]        # 한 단은 높이를 맞춘다 (밑의 표가 가지런히)
             for T in row: T.custom_jobs = None; T.stack_with = None; T.side_with = None; T.stacked = True
             row[0].stacked = False
-            row[0].custom_jobs = [{'T': row[0], 'kind': 'side', 'parts': parts_, 'widths': [w_] * k_, 'h': max(q[3] for q in parts_),
-                                   'trs': parts_[0][1], 'rows': parts_[0][2], 'notes': False, 'bw': self.band_w(w_), 'nosplit': True}]
+            row[0].custom_jobs = [{'T': row[0], 'kind': 'side', 'parts': parts_, 'widths': ws_, 'h': max(q[3] for q in parts_),
+                                   'trs': parts_[0][1], 'rows': parts_[0][2], 'notes': False, 'bw': self.band_w(ws_[0]), 'nosplit': True}]
         # besideRight: 펼침면 짝(하행 위·상행 아래)의 오른쪽 면 끝 몇 편 옆에 다음 노선의 하행·상행을 나란히 (그 노선의 한 쪽을 아낀다)
         for br in self.cfg.get('besideRight', []):
             kx = br.get('ktx', False)            # KTX 표끼리 (KTX밖에 없는 노선)

@@ -655,14 +655,22 @@ local function render_grid(frame, rows, H, L, F, title, opt)
     for k = 1, min(L, 4) do roles[k] = ROLE[4 - min(L, 4) + k] end
   end
   local RR, TT = opt.R or {}, opt.T
+  -- 上下併記（mid）: 駅欄（左ブロック）は 下り列車のあと a+1 … a+L。それ以外は列車
+  local MD = opt.mid
+  local function lidx(j)
+    if MD then if j > MD.a and j <= MD.a + L then return j - MD.a end; return nil end
+    if j <= L then return j end
+    return nil
+  end
   for j = 1, maxcols do
     local rq = TT and (j - L - TT)
-    if rq and rq >= 1 and RR[rq] then
+    local li = lidx(j)
+    if not MD and rq and rq >= 1 and RR[rq] then
       poscls[j] = "jtt-rc jtt-r-" .. RR[rq] .. ((rq == 1) and " jtt-rc1" or "")
-    elseif j > L then
-      poscls[j] = (j == L + 1) and "jtt-t jtt-t1" or "jtt-t"
+    elseif not li then
+      poscls[j] = (j == L + 1 or (MD and (j == 1 or j == MD.a + L + 1))) and "jtt-t jtt-t1" or "jtt-t"
     else
-      local r = opt.roles and roles[j] or roles[j - (L - min(L, 4))]
+      local r = opt.roles and roles[li] or roles[li - (L - min(L, 4))]
       if r and not BUILTIN_ROLE[r] then
         poscls[j] = "jtt-cx jtt-cx-" .. r
         colsty[j] = "left:var(--jtt-o-" .. r .. ");width:var(--jtt-" .. r .. ");min-width:var(--jtt-" .. r .. ")"
@@ -675,14 +683,16 @@ local function render_grid(frame, rows, H, L, F, title, opt)
   -- 左の欄に要る幅の見積もり（1 列だけのセル。基準文字の倍数。余白込み）
   local colneed = {}
   if opt.roles then
+    local j0 = MD and MD.a or 0
     for r = 1, N do
-      for j = 1, min(L, #rows[r]) do
+      for j = j0 + 1, min(j0 + L, #rows[r]) do
         local c = parse_cell(rows[r][j])
+        local li = j - j0
         if not c.skip and not (c.cs and c.cs > 1) and not c.th and not c.dg and c.w then
-          local role = roles[j]
+          local role = roles[li]
           local sc = (role == "mk" or role == "ad") and 0.8 or 1
           local need = c.w * sc + ((role == "ad") and 0.15 or 0.35)
-          if not colneed[j] or need > colneed[j] then colneed[j] = need end
+          if not colneed[li] or need > colneed[li] then colneed[li] = need end
         end
       end
     end
@@ -721,8 +731,9 @@ local function render_grid(frame, rows, H, L, F, title, opt)
     if j == 1 then a[#a + 1] = " jtt-c1" end
     if opt.roles and L > 0 then
       -- 新形式: 左ブロックの区切り線は「最後の左列」に引く（着発が最後でない並びもあるため）
-      if j == L then a[#a + 1] = " jtt-lend"
-      elseif roles[j] == "ad" then a[#a + 1] = " jtt-adin" end
+      local li = lidx(j)
+      if li == L then a[#a + 1] = " jtt-lend"
+      elseif li and roles[li] == "ad" then a[#a + 1] = " jtt-adin" end
     end
     if c.th then a[#a + 1] = " jtt-th" end
     if c.c  then a[#a + 1] = " jtt-c"  end
@@ -733,7 +744,8 @@ local function render_grid(frame, rows, H, L, F, title, opt)
     local cs = c.cs or (c.th and (L - 1))
     if cs then
       cs = min(cs, maxcols - j + 1)
-      if opt.roles and j <= L then cs = min(cs, L - j + 1) end   -- 左欄の結合は左欄の中で止める
+      local li = lidx(j)
+      if opt.roles and li then cs = min(cs, L - li + 1) end   -- 左欄の結合は左欄の中で止める
       if cs > 1 then a[#a + 1] = ' colspan="' .. cs .. '"' end
     end
     local xs = colsty[j]
@@ -744,7 +756,7 @@ local function render_grid(frame, rows, H, L, F, title, opt)
     end
     a[#a + 1] = ">"
     -- 横詰めは時刻欄 1 列分のセルだけ（結合セル・見出し・右欄には使わない）
-    a[#a + 1] = (j > L and (not TT or j <= L + TT) and not c.th and not (c.cs and c.cs > 1) and c.html_t) or c.html
+    a[#a + 1] = (not lidx(j) and (MD or not TT or j <= L + TT) and not c.th and not (c.cs and c.cs > 1) and c.html_t) or c.html
     a[#a + 1] = "</td>"
     local s = concat(a)
     if plain then bucket[c] = s end
@@ -764,7 +776,7 @@ local function render_grid(frame, rows, H, L, F, title, opt)
       local pc = parse_cell(tp.style .. "; x")
       if pc.style then sty = ' style="' .. pc.style .. '"' end
     end
-    local o = { '<div class="jtt-wrap jtt-wrap--top' .. (opt.tside and " jtt-wrap--tr" or "") .. '"><div class="jtt-top"' .. sty .. '>' }
+    local o = { '<div class="jtt-wrap jtt-wrap--top' .. (opt.tside and " jtt-wrap--tr" or "") .. (opt.mid and " jtt-both" or "") .. '"><div class="jtt-top"' .. sty .. '>' }
     for _, row in ipairs(tp.rows) do
       local g = { l = {}, c = {}, r = {} }
       for _, item in ipairs(row) do
@@ -784,7 +796,7 @@ local function render_grid(frame, rows, H, L, F, title, opt)
     o[#o + 1] = '</div><div class="jtt-row"><div class="jtt-title">'
     out[#out + 1] = concat(o)
   else
-    out[#out + 1] = '<div class="jtt-wrap' .. (opt.tside and " jtt-wrap--tr" or "") .. '"><div class="jtt-title">'
+    out[#out + 1] = '<div class="jtt-wrap' .. (opt.tside and " jtt-wrap--tr" or "") .. (opt.mid and " jtt-both" or "") .. '"><div class="jtt-title">'
   end
   out[#out + 1] = render_title(title or "")
   out[#out + 1] = '</div><div class="jtt-frame">'
@@ -866,9 +878,9 @@ local function render_grid(frame, rows, H, L, F, title, opt)
   local function row_h(r)
     if esth[r] then return esth[r] end
     local h = 1.2
-    for j = L + 1, #rows[r] do
+    for j = 1, #rows[r] do
       local c = parse_cell(rows[r][j])
-      if not c.skip and not (c.rs and c.rs > 1) then local e = est_cell(c); if e > h then h = e end end
+      if not lidx(j) and not c.skip and not (c.rs and c.rs > 1) then local e = est_cell(c); if e > h then h = e end end
     end
     esth[r] = h
     return h
@@ -1545,6 +1557,18 @@ local function build_grid(m, dir)
   local cols, L = m.cols, #m.cols
   local rcols, R = m.rcols, #m.rcols
   local stations, trains = select_dir(m, dir)
+  -- 上下併記（both）: 駅欄を真ん中に、左に下り（上から読む）、右に上り（下から読む）
+  local both = m.set.both and m.set.both ~= "" and m.set.both ~= "0"
+  local utr, ures, ust, stq = {}, {}, nil, nil
+  if both then
+    stations, trains = m.st, m.tr.down
+    utr, ust = m.tr.up, reverse_stations(m.st)
+    for t = 1, #utr do ures[t] = resolve(utr[t], ust) end
+    rcols, R = {}, 0
+    for q, role in ipairs(cols) do if role == "st" then stq = q end end
+  end
+  -- 上下併記の右の着発欄（駅名より右の ad）は段の名前を逆に（上りは下から読む）
+  local function radv(q) return both and stq and q > stq end
   local nt = #trains
   local W = L + nt + R
   local res = {}
@@ -1589,6 +1613,8 @@ local function build_grid(m, dir)
 
   local rows, rinfo = {}, {}
   local function push(row, info) rows[#rows + 1] = row; rinfo[#rows] = info end
+  local UP = {}          -- 上下併記: 行ごとの上り列車の欄
+  local nS = #stations
 
   local nhead = 0
   local hs = m.set
@@ -1650,6 +1676,11 @@ local function build_grid(m, dir)
       end
     end
     push(row, { kind = "hdr", key = d.key, style = d.style })
+    if both then
+      local uv = value_cells(d, utr, function(tr) return tr.attr end)
+      if d.join and uv[1] then uv[1] = addattr(uv[1], "#") end
+      UP[#rows] = uv
+    end
   end
   for i, s in ipairs(stations) do
     local info = { kind = "body", si = i, st = s }
@@ -1689,7 +1720,8 @@ local function build_grid(m, dir)
       for q, role in ipairs(cols) do
         if role == "ad" then
           for k = 1, N do
-            local c = fcell(s, "ad", { v = pk[k] }, false, pname(k))   -- ad.style の属性が付いていても壊さない
+            local kk = radv(q) and (N + 1 - k) or k
+            local c = fcell(s, "ad", { v = pk[kk] }, false, pname(kk))   -- ad.style の属性が付いていても壊さない
             if k > 1 or s.line then c = addattr(c, "&") end
             rr[k][q] = c
           end
@@ -1713,14 +1745,33 @@ local function build_grid(m, dir)
           for k = 1, N do rr[k][L + nt + q] = tmp[k] end
         end
       end
-      for k = 1, N do push(rr[k], { kind = "body", si = i, st = s, part = pname(k), pi = k }) end
+      for k = 1, N do
+        push(rr[k], { kind = "body", si = i, st = s, part = pname(k), pi = k })
+        if both then
+          local u, kk = {}, N + 1 - k            -- 上りは下の段が着、上の段が発
+          for t = 1, #utr do local x = ures[t][nS + 1 - i]; u[t] = x.p and x.p[kk] or ((kk == 1) and x.a or x.d) end
+          UP[#rows] = u
+        end
+      end
     else
       local r = {}
-      for q, role in ipairs(cols) do r[q] = fcell(s, role, s.f[role]) end
+      for q, role in ipairs(cols) do
+        local f = s.f[role]
+        if role == "ad" and radv(q) and f and not f.q then
+          local v = f.v
+          if SEM[v] == "DEP" then f = { v = "着" } elseif SEM[v] == "ARR" then f = { v = "発" } elseif FLIP[v] then f = { v = FLIP[v] } end
+        end
+        r[q] = fcell(s, role, f)
+      end
       if s.line and L > 0 then r[L] = addattr(r[L], "&") end
       for t = 1, nt do r[L + t] = res[t][i].v end
       for q, role in ipairs(rcols) do r[L + nt + q] = fcell(s, role, s.r and s.r[role] or s.f[role], true) end
       push(r, info)
+      if both then
+        local u = {}
+        for t = 1, #utr do u[t] = ures[t][nS + 1 - i].v end
+        UP[#rows] = u
+      end
     end
   end
   for k, d in ipairs(m.foot) do
@@ -1733,10 +1784,28 @@ local function build_grid(m, dir)
       append(row, skips(R - 1))
     end
     push(row, { kind = "foot", key = d.key, style = d.style })
+    if both then UP[#rows] = value_cells(d, utr, function(tr) return tr.foot end) end
   end
   for k, row in ipairs(m.post) do push(row, { kind = "post", k = k }) end
 
   local cinfo = {}
+  if both then
+    -- 列を 下り | 駅欄 | 上り に並べ替える
+    for r = 1, #rows do
+      if UP[r] then
+        local row, new = rows[r], {}
+        for j = L + 1, L + nt do new[#new + 1] = row[j] end
+        for j = 1, L do new[#new + 1] = row[j] end
+        append(new, UP[r])
+        rows[r] = new
+      end
+    end
+    for t = 1, nt do cinfo[t] = { kind = "train", ti = t, tr = trains[t] } end
+    for q, role in ipairs(cols) do cinfo[nt + q] = { kind = "left", role = role } end
+    for t = 1, #utr do cinfo[nt + L + t] = { kind = "train", ti = nt + t, tr = utr[t] } end
+    return rows, nhead + #m.pre + nH, L, #m.foot + #m.post,
+      { rows = rinfo, cols = cinfo, R = {}, T = nt + #utr, roles = cols, head = meta_head, mid = { a = nt, L = L, U = #utr } }
+  end
   for q, role in ipairs(cols) do cinfo[q] = { kind = "left", role = role } end
   for t = 1, nt do
     cinfo[L + t] = { kind = "train", ti = t, tr = trains[t] }
@@ -2046,7 +2115,7 @@ p.views = {
       end
     end
     -- 列車の左の縦罫（[trains] の --- 行）
-    if meta.T then
+    if meta.T and not meta.mid then
       for t = 1, meta.T do
         local ci = meta.cols[L + t]
         local lv = ci and ci.tr and ci.tr.line
@@ -2063,7 +2132,7 @@ p.views = {
     end
     apply_styles(m, rows, meta)
     return render_grid(frame, rows, H, L, F, args.title or m.set.title,
-      { R = meta.R, T = meta.T, notes = notes_html(m), roles = meta.roles, head = meta.head,
+      { R = meta.R, T = meta.T, mid = meta.mid, notes = notes_html(m), roles = meta.roles, head = meta.head,
         rinfo = EDMAP and meta.rows or nil, cinfo = EDMAP and meta.cols or nil, set = m.set, rmeta = meta.rows,
         tside = (m.set.titleside == "r" or m.set.titleside == "right") or nil,
         top = (#m.top > 0 and { rows = m.top, style = m.set.topstyle })

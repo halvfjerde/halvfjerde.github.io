@@ -33,7 +33,8 @@ BOOK = [
 TOUR_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tour.json')
 TOUR = json.load(open(TOUR_JSON)) if os.path.exists(TOUR_JSON) else None
 if TOUR: BOOK.append(('관광열차', [('tour', t['line'], None) for t in TOUR['tables'] if t['dir'] == 'down']))
-TOUR_NOTE = {'정선아리랑열차': '2·7일(정선 장날)에도 운행'}
+# 관광열차 표는 상하행을 한 표에 (가운데 역명, 왼쪽 하행·오른쪽 상행). 열차 옆 주석 열 (표 이름 → 세로 두 줄)
+TOUR_COLNOTE = {'정선아리랑': '2·7로 끝나는 날/(정선 장날)에도 운행'}
 # 노선마다 재래선(일반열차) 표를 먼저, KTX 는 그 뒤에
 BOOK = [(line, sorted(parts, key=lambda p: 0 if p[0] == 'gen' else 1)) for line, parts in BOOK]
 # 재래선과 같은 선로(정차역이 거의 같은)를 달리는 KTX 는 재래선 표에 합친다: 열차는 파란 글씨, 시각은 굵게
@@ -81,6 +82,51 @@ def merge_gen(h, g):
                 if r.get(k) and not hh.get(k): hh[k] = r[k]
         else: trs.append(r)
     return dict(h, stations=st, trains=trs)
+
+def combine_both(Td, Tu, sub, name):
+    """하행 표·상행 표를 한 표로 (모듈의 both: 가운데 역명, 왼쪽 하행 위에서부터·오른쪽 상행 밑에서부터)"""
+    a, b = Td.wiki(sub).split('\n'), Tu.wiki(sub).split('\n')
+    assert Td.st == Tu.st[::-1], (Td.st, Tu.st)
+    def sections(lines):
+        out, cur = {'': []}, ''
+        for l in lines:
+            m = re.fullmatch(r'\[(\w+(?: \w+)?)\]', l.strip())
+            if m: cur = m.group(1); out[cur] = []; continue
+            out[cur].append(l)
+        return out
+    A, B = sections(a), sections(b)
+    assert [l for l in A['footer'] if l.strip()] == [l for l in B['footer'] if l.strip()], (A['footer'], B['footer'])
+    disp = name.replace('(', ' (')
+    head = [f'title "{disp}"', f'headl "b{disp}"', 'cols ad st ad', 'both 1']
+    head += [l for l in A[''] if l.strip() and not re.match(r'(title|headl|head|headheight|cols|rcols)\b', l)]
+    nh = len([l for l in A['rows'] if l.strip()])
+    nf = len([l for l in A['footer'] if l.strip()])
+    def notecol(T, text, up=False):
+        # 상행 열은 모듈이 행을 뒤집어 놓으므로, 합친 칸(^n)은 상행 차례의 끝 칸에 (뒤집으면 맨 위)
+        slots = [(k, p_) for k in range(len(T.st)) for p_ in range(2 if k in T.split else 1)]
+        s0 = len(slots) - 1 if up else 0
+        toks, j = [], 0
+        for k in range(len(T.st)):
+            ps = []
+            for p_ in range(2 if k in T.split else 1):
+                ps.append(q(f'^{len(slots)} va=m; VR{{{esc_txt(text)}}}') if j == s0 else '!')
+                j += 1
+            toks.append(','.join(ps) if len(ps) > 1 else ps[0])
+        return ' '.join(['_'] * nh) + ' : ' + ' '.join(compress(toks)) + ' : ' + ' '.join(['_'] * nf)
+    trd = [l for l in A['trains'] if l.strip()]
+    tru = [l for l in B['trains'] if l.strip()]
+    cn = TOUR_COLNOTE.get(name)
+    if cn:                  # 주석 열은 바깥쪽에: 하행은 열차 왼쪽, 상행은 오른쪽
+        trd = [notecol(Td, cn)] + trd
+        tru = tru + [notecol(Tu, cn, up=True)]
+    notes = list(dict.fromkeys([l for l in A['notes'] + B['notes'] if l.strip()]))
+    def stline(l):          # 역 줄: 「이름 착발 r=…」 → 「착발 이름 착발」 (cols ad st ad. 오른쪽 착발은 모듈이 상행으로 뒤집는다)
+        tk = l.split()
+        if not tk or tk[0] == '---': return l
+        return f'{tk[1]} {tk[0]} {tk[1]}'
+    L = head + ['', '[rows]'] + A['rows'] + ['[footer]'] + A['footer'] + ['[stations]'] + [stline(l) for l in A['stations']] \
+        + ['[trains]'] + trd + ['', '[trains up]'] + tru + ['', '[notes]'] + notes
+    return '\n'.join(L)
 
 def merge_into(g, k, insert=True, via=None):
     """재래선 표 g 에 KTX 표 k 의 열차를 합친다. k 에만 있는 역은 k 의 차례대로 g 사이에 끼운다(insert).
@@ -145,7 +191,7 @@ HEADS = {
     ('gen', '대구선'): '동대구 영천 경주 포항', ('gen', '영동선'): '강릉 동해 철암 영주',
     ('gen', '태백선'): '제천 영월 태백 동해', ('gen', '목포보성선'): '순천 벌교 전남장흥 목포',
     ('gen', '교외선'): '대곡 의정부',
-    ('tour', '백두대간협곡열차・동해산타열차'): '영주 분천 철암 동해 강릉',
+    ('tour', '백두대간협곡・동해산타'): '영주 분천 철암 동해 강릉',
 }
 
 # 갈래(서로 다른 길로 가는 구간). 묶음마다 [기본 갈래, 다른 갈래, …]. 빈 기본 갈래는 막다른 지선
@@ -471,7 +517,7 @@ class Table:
         # 머리 행
         L.append('[rows]')
         self.o0, self.d0 = self.st[o0], self.st[d0]
-        has_fr = has_to = True
+        has_fr = has_to = not getattr(self, 'both', False)      # 상하행을 한 표에: 시발·종착은 시각으로 (머리·발 행 없이)
         # 등급(KTX는 차종) 표지 바로 밑에 열차번호, 두 행은 이름 칸을 합쳐 사이 선 없이. 그 밑에 시발역
         L.append(f'kind {lbl("no")} style=va=b r={LBL["no"][1]}')
         L.append(f'no   ^ fmt=N{{*}} style=va=t')
@@ -659,12 +705,7 @@ class Table:
             parts = [f'S{{{k}}}은 `{full}`' for k, full in names if k in kinds]
             if parts: notes.append('차종 ' + ', '.join(parts))
             if any(self.is_suseo(tr) for tr in self.trains): notes.append('자주 글씨는 수서 발착')
-        elif self.cat == 'tour':           # 관광열차: 등급 칸에는 별명 글자(V·S…)
-            seen = {}
-            for tr in self.trains: seen.setdefault(tr['type'], tr.get('name', tr['type']))
-            parts = [f"S{{{KIND.get(k_, k_)}}}는 {nm_.split('(')[0]}" + (f'(`{k_}`)' if k_ != nm_ else '') for k_, nm_ in seen.items()]
-            notes.append('등급 ' + ', '.join(parts))
-            if TOUR_NOTE.get(self.line): notes.append(TOUR_NOTE[self.line])
+        elif self.cat == 'tour': pass        # 관광열차: 등급 표지(V·S…)는 제목으로 명백하다
         else:
             types = {tr['type'] for tr in self.trains}
             parts = []
@@ -683,8 +724,8 @@ class Table:
                 used = {tr['note'] for tr in self.trains}
                 if '월화수목금' in used: dn.append('◆ 평일(월∼금) 운행')
                 if '토일' in used: dn.append('◇ 토·일 운행')
-            dn.append('운행일 무표시는 매일 운행')
-            notes.append(', '.join(dn))
+            if not all(isday(tr['note']) for tr in self.trains): dn.append('운행일 무표시는 매일 운행')
+            if dn: notes.append(', '.join(dn))
         cp = getattr(self, 'cpl', None)
         if cp: pass                          # 어버이 열차는 비고에 「…로 분리·연결」
         elif (self.cat, self.line) in MERGE_GUEST:
@@ -693,7 +734,7 @@ class Table:
             notes.append(f'수서 발착 열차는 수서 발착 병결 표에')
         if self.loop_note: notes.append(self.loop_note)
         ab_ = [k for k, v in END_ABBR.items() if any(k in self.ends_of(tr) for tr in self.trains)]
-        if ab_: notes.append('시발·종착역의 ' + ', '.join(f'{END_ABBR[k]}는 {k}' for k in ab_))
+        if ab_ and not getattr(self, 'both', False): notes.append('시발·종착역의 ' + ', '.join(f'{END_ABBR[k]}는 {k}' for k in ab_))
         for st_, via_ in self.skipped:
             notes.append(f"{st_}에만 서는 KTX({via_} 경유)는 {via_.replace('고속선', '고속철도')} 표에")
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
@@ -1125,8 +1166,19 @@ def main():
                     if (cat, sheet) in SPLIT_LOOP and variant is None and any(is_loop(tr) for tr in tabs[(cat, sheet, d)]['trains']):
                         t['loop_note'] = f"{clean_name(next(tr for tr in tabs[(cat, sheet, d)]['trains'] if is_loop(tr))['from'])} 순환 열차는 {LOOP_NAME[(cat, sheet)]} 표에"
                 T = Table(t, data['hanja']); T.line_disp = LINE_DISP.get((cat, sheet), sheet.replace('(', ' (') if cat == 'tour' else line); T.cpl = cpl
+                T.both = cat == 'tour'
                 T.wiki(sub); pair[d] = T
             shared = share(list(pair.values()))
+            if cat == 'tour' and len(pair) == 2:          # 관광열차: 상하행을 한 표에 (가운데 역명)
+                for T in pair.values(): T.shared = shared
+                P.append('{{#invoke:Timetable|main|data=')
+                P.append(combine_both(pair['down'], pair['up'], sub, sheet))
+                P.append('}}')
+                P.append('')
+                book_items.append({'type': 'table', 'title': title, 'idx': idx, 'label': f"{line} {head}", 'fit': 'split', 'scale': 100})
+                idx += 1
+                print(f'{line:6} {head:16} both {len(pair["down"].st):3} st {len(pair["down"].trains) + len(pair["up"].trains):4} tr')
+                continue
             for d in ('down', 'up'):
                 if d not in pair: continue
                 T = pair[d]; T.shared = shared
