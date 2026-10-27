@@ -56,6 +56,7 @@ local BRACKET = {
 -- 2 文字トークン
 local PAIR = {
   ["--"] = { t = G.term2, c = true },
+  ["-_"] = { t = U(0x2581), c = true },     -- 終着（下寄せの一本線）: 上下併記の上り（下から読む）
   [">>"] = { t = "➡",     c = true },
   ["<>"] = { t = G.dia,   c = true },
   [".."] = { t = "." },
@@ -1567,6 +1568,12 @@ local function build_grid(m, dir)
     rcols, R = {}, 0
     for q, role in ipairs(cols) do if role == "st" then stq = q end end
   end
+  -- 上りは下から読むので、終着の一本線は下寄せ（▁）に
+  local function upterm(v)
+    if type(v) ~= "string" then return v end
+    if v == "-" then return "-_" end
+    return (gsub(v, "(;%s*)%-$", "%1-_"))
+  end
   -- 上下併記の右の着発欄（駅名より右の ad）は段の名前を逆に（上りは下から読む）
   local function radv(q) return both and stq and q > stq end
   local nt = #trains
@@ -1749,7 +1756,7 @@ local function build_grid(m, dir)
         push(rr[k], { kind = "body", si = i, st = s, part = pname(k), pi = k })
         if both then
           local u, kk = {}, N + 1 - k            -- 上りは下の段が着、上の段が発
-          for t = 1, #utr do local x = ures[t][nS + 1 - i]; u[t] = x.p and x.p[kk] or ((kk == 1) and x.a or x.d) end
+          for t = 1, #utr do local x = ures[t][nS + 1 - i]; u[t] = upterm(x.p and x.p[kk] or ((kk == 1) and x.a or x.d)) end
           UP[#rows] = u
         end
       end
@@ -1769,7 +1776,7 @@ local function build_grid(m, dir)
       push(r, info)
       if both then
         local u = {}
-        for t = 1, #utr do u[t] = ures[t][nS + 1 - i].v end
+        for t = 1, #utr do u[t] = upterm(ures[t][nS + 1 - i].v) end
         UP[#rows] = u
       end
     end
