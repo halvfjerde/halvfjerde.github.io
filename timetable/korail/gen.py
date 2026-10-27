@@ -30,8 +30,11 @@ BOOK = [
     ('목포보성선', [('gen', '목포보성선', None)]),
     ('교외선',     [('gen', '교외선', None)]),
 ]
+# 수서를 드나드는 열차(옛 SRT)를 따로 표로 내는 KTX 노선 (그 열차가 3분의 1 남짓 되는 곳)
+SPLIT_SUSEO = {('ktx', '경부선'), ('ktx', '호남선')}
 # 노선 띠에 적을 역(하행 차례. 상행은 뒤집는다). 없으면 자동
 HEADS = {
+    ('ktx', '경부선', '수서'): '수서 대전 동대구 부산', ('ktx', '호남선', '수서'): '수서 익산 광주송정 목포',
     ('ktx', '경부선'): '서울 대전 동대구 부산', ('gen', '경부선'): '서울 대전 동대구 부산',
     ('ktx', '호남선'): '용산 익산 광주송정 목포', ('gen', '호남선'): '용산 서대전 익산 광주송정 목포',
     ('ktx', '전라선'): '용산 익산 전주 순천 여수엑스포', ('gen', '전라선'): '용산 서대전 익산 전주 순천 여수엑스포',
@@ -125,6 +128,7 @@ def q(s):
 class Table:
     def __init__(self, t, hanja):
         self.cat, self.line, self.dir = t['cat'], t['line'], t['dir']
+        self.variant = t.get('variant')
         st = [clean_name(s) for s in t['stations']]
         self.hanja = hanja
         trains = []
@@ -252,7 +256,7 @@ class Table:
         if len(mid) > 3: mid = [mid[round(k * (len(mid) - 1) / 2)] for k in (0, 1, 2)]
         # 노선 띠: 주요 역을 많아야 다섯
         band = list(dict.fromkeys([o0] + mid + [d0]))
-        hs = HEADS.get((self.cat, self.line))
+        hs = HEADS.get((self.cat, self.line, self.variant)) or HEADS.get((self.cat, self.line))
         if hs:
             hs = hs.split()
             if self.dir == 'up': hs = hs[::-1]
@@ -260,14 +264,15 @@ class Table:
             band_names = [s for s in hs if s in self.st]
         else: band_names = [self.st[i] for i in band]
         dirmark = 'k하행.' if self.dir == 'down' else 'n상행.'
-        name = ('KTX ' if ktx else '') + (self.line_disp)
+        vlab = (' 수서발' if self.dir == 'down' else ' 수서행') if self.variant == '수서' else ''
+        name = ('KTX ' if ktx else '') + (self.line_disp) + vlab
         span = (f'{band_names[0]} > {band_names[-1]}' if band_names[0] != band_names[-1] else ' > '.join(band_names)) if not sub else ' > '.join(sub.split(' ─ ')[::-1] if self.dir == 'up' else sub.split(' ─ '))
         L = []
         L.append(f'title "{dirmark} {name} u({span})."')
         hd = ' ― '.join(band_names)
         # 노선 띠: 왼쪽에 방향·노선(인쇄에서 표마다 무엇인지), 가운데에 주요 역
         dirw = '하행' if self.dir == 'down' else '상행'
-        L.append(f'headl "b〔{dirw}〕 ' + ('`KTX` ' if ktx else '') + f'{self.line_disp}."')
+        L.append(f'headl "b〔{dirw}〕 ' + ('`KTX` ' if ktx else '') + f'{self.line_disp}{vlab}."')
         L.append(f'head "b{hd}."')
         L.append('headheight 48')
         if ktx: L.append(f'headstyle "fc={KTX_COLOR}"')
@@ -526,13 +531,21 @@ def main():
         book_items.append({'type': 'divider', 'text': line, 'sub': '', 'inline': True})
         idx = 0
         title = f'{PREFIX}/{line}'
+        expanded = []
         for cat, sheet, sub in parts:
-            head = ('KTX' if cat == 'ktx' else '일반열차') + (f" ({sub.replace(' ─ ', '–')})" if sub else '')
+            if (cat, sheet) in SPLIT_SUSEO:
+                expanded += [(cat, sheet, sub, None), (cat, sheet, sub, '수서')]
+            else: expanded.append((cat, sheet, sub, None))
+        for cat, sheet, sub, variant in expanded:
+            head = ('KTX' if cat == 'ktx' else '일반열차') + (f" ({sub.replace(' ─ ', '–')})" if sub else '') + (' (수서 발착)' if variant == '수서' else '')
             P.append(f'== {head} ==')
             pair = {}
             for d in ('down', 'up'):
                 t = tabs.get((cat, sheet, d))
                 if not t: continue
+                if (cat, sheet) in SPLIT_SUSEO:
+                    k = next(i for i, x in enumerate(t['stations']) if clean_name(x) == '수서')
+                    t = dict(t, variant=variant, trains=[tr for tr in t['trains'] if isinstance(tr['times'][k], int) == (variant == '수서')])
                 T = Table(t, data['hanja']); T.line_disp = line
                 T.wiki(sub); pair[d] = T
             shared = share(list(pair.values()))
