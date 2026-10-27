@@ -986,7 +986,13 @@ class Book:
         TW = 0 if self.hang_title else self.title_tex(T)[2]
         fw = self.frame_w + self.frame_pad
         blk = sum(T.colW[j] for j in (L if side == 'L' else R if side == 'R' else L + R))
-        return TW + 2 * fw + blk + (self.vband_w if getattr(T, 'band_left', False) else 0)
+        return TW + 2 * fw + blk + (self.vband_for(side) if getattr(T, 'band_left', False) else 0)
+
+    def vband_for(self, side):
+        """세로 제목칸 폭: 펼침면 짝은 왼쪽 면에만 넓게(두 줄), 오른쪽 면에는 없다. 한 쪽짜리는 보통 폭"""
+        if side == 'L': return self.cfg.get('wideBand', 2) * self.P0
+        if side == 'R': return 0.0
+        return self.vband_w
 
     def cap(self, T, side, squeeze=False):
         """그 면에 실을 수 있는 열차 수. squeeze: 열 폭을 조금(squeeze 비율까지) 좁혀서"""
@@ -1101,7 +1107,8 @@ class Book:
                 if 'jtt-lit' in k.cls and c2.font != 'GB': c2 = c2.but(font='M')
                 segs(k, c2, out)
             return out
-        def stack(sg):
+        def stack(sg, cw=None):
+            cw = cw or colw
             items, L = [], 0.0
             for text, c in sg:
                 em = c.size * fs
@@ -1112,26 +1119,48 @@ class Book:
                         kk = 0.55 if text[i + 1:i + 2] in ('〔', '（') else 0.35
                         items.append(r'\kern%.3fbp' % (kk * em)); L += kk * em; i += 1; continue
                     if ch in VROT:
-                        t, l = self.inl.vform(ch, c, colw)
+                        t, l = self.inl.vform(ch, c, cw)
                         items.append(t); L += l * em; i += 1; continue
                     if is_latin(ch):
                         j = i
                         while j < len(text) and is_latin(text[j]): j += 1
                         run = text[i:j]
-                        items.append(r'\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (colw, self.inl.run(run, c)))
+                        items.append(r'\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (cw, self.inl.run(run, c)))
                         L += sum(0.62 if x.isupper() else 0.5 for x in run) * em; i = j; continue
-                    items.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (colw, -0.12 * em, em, self.inl.run(ch, c, True)))
+                    items.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (cw, -0.12 * em, em, self.inl.run(ch, c, True)))
                     L += em; i += 1
             return ''.join(items), L
         base = Ctx('DM', scale, color)
-        a, la = stack(segs(parts[0], base, []))
-        b, lb = stack(segs(parts[1], base, []))
-        if part: c, lc = stack([('(%s)' % part, Ctx('M', scale, color))])
-        else: c, lc = stack(segs(parts[2], base, []))
-        need = la + lb + lc + 2 * fs * scale
-        if need > H and la + lc + fs <= H:      # 길이가 모자라면 주요 역은 뺀다
-            b = ''
-        tex = r'\vbox to %.3fbp{\offinterlineskip %s\vfil %s\vfil %s}' % (H, a, b, c)
+        # 이름(노선)과 방향: 띠 왼쪽 부분에서 〔하행〕 앞까지가 이름, 방향은 모듈의 방향 표지(하행 속 빈·상행 속 찬)로
+        sg0, cut = [], False
+        for t, c in segs(parts[0], base, []):
+            if cut: continue
+            if '〔' in t:
+                t = t[:t.index('〔')].rstrip(); cut = True
+            if t: sg0.append((t, c))
+        mdir = re.search(r'〔(하행|상행)〕', parts[0].text())
+        route = re.sub(r'\s+', ' ', parts[1].text()).strip()
+        two = colw >= 3.5 * fs                     # 넓은 칸: 두 줄 (오른쪽 줄이 먼저)
+        cw = colw / 2 if two else colw
+        a, la = stack(sg0, cw)
+        if mdir:
+            bt, bh = self.dir_badge(mdir.group(1), mdir.group(1) == '하행', mdir.group(1) == '하행', scale * 0.9, cw)
+            a += r'\kern%.3fbp' % (0.4 * fs * scale) + bt; la += bh + 0.4 * fs * scale
+        rc = Ctx('M', scale * (0.9 if two else 0.85), color)
+        b, lb = stack([('（%s）' % route, rc)], cw) if route else ('', 0.0)
+        if part: c, lc = stack([('(%s)' % part, Ctx('M', scale * 0.9, color))], cw)
+        else: c, lc = '', 0.0
+        if two:
+            need = max(la + lc, lb) + fs * scale
+            if lb > H: b = ''
+            right = r'\vbox to %.3fbp{\offinterlineskip %s\vfil %s}' % (H, a, c)
+            left = r'\vbox to %.3fbp{\offinterlineskip\vfil %s\vfil}' % (H, b)
+            tex = r'\hbox to %.3fbp{%s%s}' % (colw, left, right)
+        else:
+            need = la + lb + lc + 2 * fs * scale
+            if need > H and la + lc + fs <= H:      # 길이가 모자라면 구간은 뺀다
+                b = ''
+            tex = r'\vbox to %.3fbp{\offinterlineskip %s\vfil %s\vfil %s}' % (H, a, b, c)
         return tex, need
 
     def split_center(self, node, W, ctx):
@@ -1195,7 +1224,7 @@ class Book:
         if self.hang_title: tx = x0           # 제목은 판면 밖(바깥 여백)에
         else: tx = x0 + (TW if side != 'R' else 0)
         fx0 = tx
-        VB = (pc.get('vbw') if pc and pc.get('vbw') else self.vband_w) if getattr(T, 'band_left', False) else 0     # 세로 띠 (오른쪽 면 조각은 바깥쪽인 오른쪽 끝에)
+        VB = (pc.get('vbw') if pc and pc.get('vbw') else self.vband_for(side)) if getattr(T, 'band_left', False) else 0     # 세로 띠 (펼침면 짝은 왼쪽 면에만)
         vsc = (pc.get('vbscale') or 1.0) if pc else 1.0
         xs = [tx + fw + fp + (VB if side != 'R' else 0)]
         for w in widths: xs.append(xs[-1] + w)
@@ -2032,8 +2061,11 @@ class Book:
                     if not filled: advance(job, c)
         for T in tables:
             ps = placed[id(T)]
-            for k, pc in enumerate(ps):
-                pc['part'] = (ORD_KO[k] if k < len(ORD_KO) else '%d째' % (k + 1)) if len(ps) > 1 else ''
+            # 세로 제목칸 표는 오른쪽 면 조각에 칸이 없으니, 칸이 있는 조각(펼침면 하나)마다 센다
+            shown = [pc for pc in ps if not (getattr(T, 'band_left', False) and pc['side'] == 'R')]
+            for pc in ps: pc['part'] = ''
+            for k, pc in enumerate(shown):
+                pc['part'] = (ORD_KO[k] if k < len(ORD_KO) else '%d째' % (k + 1)) if len(shown) > 1 else ''
         # 단(같은 높이)마다 맨 오른쪽 조각만 빈 열로 판면 끝까지 채운다
         for pg in pages:
             for pc in pg['pieces']:
@@ -2047,7 +2079,7 @@ class Book:
         extra = wide_w - self.vband_w
         sc = self.cfg.get('wideBandScale', 1.4)
         for pg in pages:
-            vps = [pc for pc in pg['pieces'] if getattr(pc['T'], 'band_left', False)]
+            vps = [pc for pc in pg['pieces'] if getattr(pc['T'], 'band_left', False) and pc['side'] == 'B']
             if not vps or extra <= 0: continue
             def spare(pc):
                 ch = pc['ch']
