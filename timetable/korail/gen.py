@@ -135,6 +135,9 @@ def day_range(s):
     if len(s) >= 3:
         k = WEEK.index(s[0])
         if all(WEEK[(k + i) % 7] == ch for i, ch in enumerate(s)): s = f'{s[0]}∼{s[-1]}'
+        else: s = '·'.join(s)
+    elif len(s) == 2: s = '·'.join(s)                     # 금·토 (「금토」는 한 낱말처럼 읽힌다)
+    else: s += '요일'                                      # 월요일 (「월 운행」은 달로도 읽힌다)
     return s + '/운행'                                     # 요일 | 운행 두 줄
 
 # 따로 조사한 도착 시각 {(열차번호, 역): 분}. arrivals.json 이 있으면 읽는다
@@ -385,10 +388,12 @@ class Table:
         self.split |= {i for i, s in enumerate(self.st) if s in SPLIT_ALL and self.stops(i)}
         # 상행·하행이 같은 주요역·착발역을 쓰도록 main 에서 두 방향을 모아 정한 값(shared)으로 덮어쓴다
         self.cand = {self.st[i]: (self.stops(i) + ends[i]) / N for i in major}
+        self.split -= {i for i in self.split if self.arr_unknown(i)}     # 도착 시각을 모르는 역(나주 등)은 착발을 합친다
         self.split_names = {self.st[i] for i in self.split}
         sh = getattr(self, 'shared', None)
         if sh:
             self.split = {i for i, s in enumerate(self.st) if s in sh['split']}
+            self.split -= {i for i in self.split if self.arr_unknown(i)}
             major = sorted({i for i, s in enumerate(self.st) if s in sh['major']} | self.split)
         L.append('[stations]')
         rules = set()
@@ -421,7 +426,7 @@ class Table:
                 hdr.append(q(f'{esc_txt(o)}/{hm(self.end_times(tr)[0])}'))
             # 열차번호 꼴. 짝이 요일로 바뀌면 칸에는 많이 다니는 짝, 다른 짝은 비고에 (금∼일/672)
             gs_ = self.cpl_main(tr)
-            cpv = (q(f'N{{{gs_[0]}}}') if gs_ else '_') if cp else None
+            cpv = (q('/'.join(f'N{{{x}}}' for x in gs_)) if gs_ else '_') if cp else None   # 짝이 요일로 바뀌면 두 줄, 비고에 요일
             if cp and cp['pos'] == 'head': hdr.append(cpv)
             cells = self.cells(tr)
             ft = []
@@ -471,11 +476,25 @@ class Table:
         L += notes
         return '\n'.join(L)
 
+    def arr_unknown(self, i):
+        """이 역에 서는(떠나거나 끝나지 않는) 열차 가운데 도착 시각을 알 수 없는 것이 있는가 (SPLIT_ALL 역은 늘 나눈다)"""
+        st = self.st[i]
+        if st in SPLIT_ALL: return False
+        for tr in self.trains:
+            x = tr['times'][i]
+            if not isinstance(x, int): continue
+            o, d = self.ends_of(tr)
+            if st in (o, d): continue
+            a = tr.get('arr_at', {}).get(st, ARR.get((tr['no'], st)))
+            if a is not None and 0 <= (x - a) % 1440 <= 15: continue
+            if DWELL.get((grade(tr['type']), st)) is None: return True
+        return False
+
     def cpl_note(self, tr):
-        """병결 짝이 요일로 바뀌는 열차의 비고: 칸에 적지 않은 짝의 요일과 번호 「금∼일/672」"""
+        """병결 짝이 요일로 바뀌는 열차의 비고: 짝마다 번호와 요일 「668 월∼목/672 금∼일」"""
         gs = self.cpl_main(tr)
         if len(gs) < 2: return None
-        return '/'.join(f'{day_range(self.cpl["days"][x]).split("/")[0]}/{x}' for x in gs[1:])
+        return '/'.join(f'{x} {day_range(self.cpl["days"][x]).split("/")[0]}' for x in gs)      # 「668 월∼목/672 금∼일」
 
     def cpl_main(self, tr):
         """짝 열차들. 운행일이 많은 것부터"""

@@ -902,7 +902,17 @@ class Book:
                         cl.node = nd
                         cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
                         continue
-                    m = re.match(r'[월화수목금토일∼~·]+', t)
+                    pr = re.findall(r'(\d+)([월화수목금토일∼~·요]+)', t)
+                    if pr and ''.join(a + b for a, b in pr) == t:     # 「668 월∼목/672 금∼일」(병결 짝): 작은 가로 글씨로 번호·요일
+                        sm = Node('span', [('class', 'tt-small')])
+                        for k_, (a, b) in enumerate(pr):
+                            if k_: sm.kids.append(Node('br', []))
+                            sm.kids += [a, Node('br', []), b]
+                        nd = Node('td', []); nd.kids.append(sm)
+                        cl.node = nd
+                        cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
+                        continue
+                    m = re.match(r'[월화수목금토일∼~·요]+', t)
                     if not m: continue
                     days, rest = m.group(0), t[m.end():]
                     if len(days) <= 3:               # 범위(금∼일)·두 자 이하: 보통 크기 세로쓰기로 「…운행」
@@ -1854,7 +1864,8 @@ class Book:
             js = []
             for g in range(full):
                 trs = Tc[off + g * capS:off + (g + 1) * capS]
-                js.append({'T': T, 'kind': 'single', 'trs': trs, 'rows': rows, 'notes': False, 'sB': capS, 'side': 'B',
+                # 상행의 가운데 쪽(왼쪽 면) 다음 오른쪽 면이면 펼침면 하나로: 역명은 오른쪽에만
+                js.append({'T': T, 'kind': 'single', 'trs': trs, 'rows': rows, 'notes': False, 'sB': capS, 'side': 'B', 'contR': T is Tu,
                            'narrow': False, 'nat': self.fixed_w(T, 'B') + len(trs) * self.P0, 'bw': bwf, 'h': h})
             fulls.append(js)
             rt = Tc[full * capS:] if T is Td else Tc[:r]
@@ -2036,7 +2047,8 @@ class Book:
                             return True
                 if job['sB'] >= k and top(c) + h <= PH + 0.01:
                     y0 = top(c)
-                    put(T, c, trs, rows, y0, notes, h, 0.0, job['narrow'], job['side'], job['bw'])
+                    sd = 'R' if job.get('contR') and c % 2 == 1 and any(q['T'] is T for q in page(c - 1)['pieces']) else job['side']
+                    put(T, c, trs, rows, y0, notes, h, 0.0, job['narrow'], sd, job['bw'])
                     ys[c] = y0 + h
                     return True
                 return False
