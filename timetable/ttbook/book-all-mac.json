@@ -99,5 +99,11 @@
    "line": "동해선",
    "title": "KTX"
   }
+ ],
+ "besideRight": [
+  {
+   "line": "대구선",
+   "with": "영동선"
+  }
  ]
 }
