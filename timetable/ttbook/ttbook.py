@@ -3442,7 +3442,10 @@ class Book:
         if not f: return
         data = json.load(open(os.path.join(self.base, f), encoding='utf-8'))
         R, fs = self.R, self.fs
-        NC = 2; gut = 1.5 * fs
+        NC = 2; gut = 0.0                                   # 단 사이도 띄우지 않고 맞붙인다
+        cf_ = self.cfg.get('airCodes')                      # 편명 앞 두 자(IATA) → 세 자 항공사 부호(ICAO): 「KAL 1122」
+        codes = json.load(open(os.path.join(self.base, cf_), encoding='utf-8')) if cf_ else {}
+        self._fno = lambda no: (codes.get(no[:2], no[:2]), no[2:])
         colw = (self.cw - (NC - 1) * gut) / NC
         TH, SH = 2 * R, R                                   # 머리 행, 칸 이름 행
         pad = 0.5 * fs
@@ -3465,7 +3468,7 @@ class Book:
             n = max(len(P['out']), len(P['in']))
             items = [('r', k) for k in range(n)]
             for nos, lab in P['notes']:
-                items += [('n', ln) for ln in wrap('※%s %s' % ('・'.join(nos), lab))]
+                items += [('n', ln) for ln in wrap('※%s %s' % ('・'.join(''.join(self._fno(x)) for x in nos), lab))]
             i = 0
             while i < len(items):
                 gap = 0.0                                   # 덩이끼리는 띄우지 않고 맞붙인다 (표처럼)
@@ -3481,7 +3484,7 @@ class Book:
                 if i < len(items): newcol()
         if col: newcol()
         if cols: pages.append(cols)
-        nos_ = [r[0] for P in data['pairs'] for L in (P['out'], P['in']) for r in L]
+        nos_ = [self._fno(r[0])[1] for P in data['pairs'] for L in (P['out'], P['in']) for r in L]
         self._air_nw = max([self.inl.wc.get(self.inl.run(x, Ctx('M', 1.0)), len(x)) * fs for x in nos_] + [3 * fs])
         self._air = (colw, gut, TH, SH, pad)
         for i, p in enumerate(pages):
@@ -3493,10 +3496,10 @@ class Book:
         tex, rects, ops = [], [], []
         y0 = self.mt
         hw = colw / 2
-        cT, cA, cM = 2.3 * fs, 1.1 * fs, 0.9 * fs            # 시각 칸, 화살표 칸, ※ 칸
-        room_ = hw - 2 * pad - 2 * cT - cA - cM             # 편명에 쓸 폭: 가장 긴 편명이 넘치면 가로로 좁힌다
+        cT, cA, cM, cC = 2.3 * fs, 1.1 * fs, 0.9 * fs, 2.7 * fs   # 시각 칸, 화살표 칸, ※ 칸, 항공사 부호 칸
+        room_ = hw - 2 * pad - 2 * cT - cA - cM - cC        # 편 번호에 쓸 폭: 가장 긴 것이 넘치면 가로로 좁힌다
         hsN = min(1.0, (room_ - 0.3 * fs) / self._air_nw)
-        cN = cM + min(room_, self._air_nw + 0.3 * fs)
+        cN = cM + cC + min(room_, self._air_nw + 0.3 * fs)
         hmf = lambda t: str(int(t[:2])) + t[2:]
         rgb0 = '0 0 0'
         def seg(text, size):                                # {…}: 다른 시각은 표 글꼴
@@ -3538,7 +3541,9 @@ class Book:
                             no, t, a, lab_ = L[r_]
                             hx = xx + side * hw + pad
                             if lab_: tex.append(self.put_box(hx, yy, cM, R, self.inl.run('※', Ctx('M', 0.8)), 'l', 'm'))
-                            tex.append(self.put_box(hx + cM, yy, cN - cM, R, self.inl.run(no, Ctx('M', 1.0).but(hscale=hsN)), 'l', 'm'))
+                            co_, nu_ = self._fno(no)
+                            tex.append(self.put_box(hx + cM, yy, cC, R, self.inl.run(co_, Ctx('G', 0.85)), 'l', 'm'))
+                            tex.append(self.put_box(hx + cM + cC, yy, cN - cM - cC, R, self.inl.run(nu_, Ctx('M', 1.0).but(hscale=hsN)), 'l', 'm'))
                             if one:
                                 tex.append(self.put_box(hx + cN, yy, cT + cA, R, self.inl.run(hmf(t), Ctx('DM', 1.0)), 'r', 'm'))
                                 continue

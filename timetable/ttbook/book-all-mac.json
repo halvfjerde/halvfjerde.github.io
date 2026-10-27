@@ -197,5 +197,6 @@
   "title": "시각표",
   "sub": "2026년 11월호"
  },
- "air": "air.json"
+ "air": "air.json",
+ "airCodes": "iata2icao.json"
 }
