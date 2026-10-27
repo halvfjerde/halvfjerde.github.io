@@ -1780,13 +1780,14 @@ class Book:
         return min(self.cap(T, 'L', True), k)
 
     def stack_parts(self, T, G):
-        """펼침면 G 개에 고르게 나눈 열차 무리: [(왼쪽 면 열차, 오른쪽 면 열차)]"""
+        """펼침면 G 개에 앞에서부터 채운 열차 무리: [(왼쪽 면 열차, 오른쪽 면 열차)] (빈 열은 끝에만)"""
         _, Tc, _ = self.blocks(T)
-        capL = self.cap(T, 'L', True)
-        base, ex = divmod(len(Tc), G)
+        n = len(Tc)
+        Cn = self.cap(T, 'L') + self.cap(T, 'R')
+        C = Cn if n <= G * Cn else self.cap(T, 'L', True) + self.cap(T, 'R', True)
         out, ti = [], 0
         for g in range(G):
-            k = base + (1 if g < ex else 0)
+            k = min(C, n - ti)
             kA = self.split_lr(T, k)
             out.append((Tc[ti:ti + kA], Tc[ti + kA:ti + k])); ti += k
         return out
@@ -1846,6 +1847,28 @@ class Book:
                              'h': self.piece_h(T, rows[id(T)], False, bw)})
         return jobs
 
+    def stackn_jobs(self, Td, Tu, N):
+        """하행을 위 단, 상행을 아래 단에 N 쪽에 걸쳐 가로로 (왼쪽 면에서 시작: 왼·오·왼…). 앞 쪽부터 채운다"""
+        fw, PH = self.frame_w, self.ch
+        bw = self.band_w(self.cw)
+        for T in (Td, Tu): T.band_left = T.head is not None; T.fold = False
+        rd, ru = list(range(Td.nrow)), list(range(Tu.nrow))
+        hd, hu = self.piece_h(Td, rd, False, bw), self.piece_h(Tu, ru, False, bw)
+        if hd + hu - fw > PH + 0.01: return None
+        sides = ['L' if i % 2 == 0 else 'R' for i in range(N)]
+        def split(T, sq):
+            _, Tc, _ = self.blocks(T)
+            out, ti = [], 0
+            for sd in sides:
+                k = min(self.cap(T, sd, sq), len(Tc) - ti)
+                out.append(Tc[ti:ti + k]); ti += k
+            return out if ti == len(Tc) else None
+        pd_ = split(Td, False) or split(Td, True)
+        pu_ = split(Tu, False) or split(Tu, True)
+        if not pd_ or not pu_: return None
+        return [{'T': Td, 'Tu': Tu, 'kind': 'stackN', 'sides': sides, 'd': (pd_, rd, hd), 'u': (pu_, ru, hu),
+                 'h': hd + hu - fw, 'trs': pd_[0], 'rows': rd, 'notes': False, 'bw': bw}]
+
     def half_w(self):
         return (self.cw + self.frame_w) / 2          # 좌우 대칭으로 나란히 둘 때 한 표의 폭 (가운데 틀을 함께 쓴다)
 
@@ -1899,7 +1922,8 @@ class Book:
     def tail_with_jobs(self, Td, Tu, Sd, Su):
         """tailSide 에 같은 노선의 작은 별표를 곁들여: 하 | 하 끝·하 별표 | 상 | 상 끝·상 별표 (끝 몇 편과 별표를 한 쪽에 좌우로)"""
         if self.cfg.get('rightStubSingle', True): return None
-        for T in (Td, Tu, Sd, Su): T.band_left = False; T.fold = False
+        bl = Td.line in self.cfg.get('bandLeftLines', [])            # 제목을 왼쪽 세로 띠로
+        for T in (Td, Tu, Sd, Su): T.band_left = bl and T.head is not None; T.fold = False
         PH = self.ch
         half = self.half_w()
         bwf, bwh = self.band_w(self.cw), self.band_w(half)
@@ -2001,8 +2025,7 @@ class Book:
         if fold:                        # 접어 싣기: 한 쪽 폭의 띠(strip)를 위아래로 쌓는다
             sS = self.cap(T, self.strip_side, True)
             k = -(-n // sS)
-            base, ex = divmod(n, k)
-            groups = [('single', base + (1 if g < ex else 0)) for g in range(k)]
+            groups = [('single', min(sS, n - g * sS)) for g in range(k)]      # 앞에서부터 채운다 (빈 열은 끝에만)
             sB = sS
         elif n <= sB:
             groups = [('single', n)]
@@ -2018,10 +2041,9 @@ class Book:
                     else:
                         kA = self.split_lr(T, r); groups.append(('pair', kA, r - kA))
             else:
-                base, ex = divmod(n, G)
                 groups = []
                 for g in range(G):
-                    k = base + (1 if g < ex else 0)
+                    k = min(sL + sR, n - g * (sL + sR))     # 앞에서부터 채운다 (빈 열은 끝에만)
                     kA = self.split_lr(T, k); groups.append(('pair', kA, k - kA))
         jobs = []
         for si, (b0, b1) in enumerate(secs):
@@ -2100,6 +2122,18 @@ class Book:
                     pc_ = put(T_, c, trs_, rows_, y, False, h_, k_ * (half - fw), True, sd, job['bw'])
                     pc_['fixw'] = half
                 ys[c] = y + h
+                return True
+            if job['kind'] == 'stackN':           # 여러 쪽에 걸쳐 위(하행)·아래(상행) (왼쪽 면에서 시작)
+                if c % 2 == 1: return False
+                N_ = len(job['sides'])
+                y = max(top(c + i) for i in range(N_))
+                if y + h > PH + 0.01: return False
+                pd_, rd, hd = job['d']; pu_, ru, hu = job['u']
+                for i, sd in enumerate(job['sides']):
+                    n_ = max(len(pd_[i]), len(pu_[i]))
+                    if pd_[i]: put(T, c + i, pd_[i], rd, y, False, hd, side=sd)['ncol'] = n_
+                    if pu_[i]: put(job['Tu'], c + i, pu_[i], ru, y + hd - fw, False, hu, side=sd)['ncol'] = n_
+                    ys[c + i] = y + h
                 return True
             if job['kind'] == 'stack':            # 펼침면에서만 (왼쪽 면에서 시작)
                 if c % 2 == 1: return False
@@ -2244,8 +2278,18 @@ class Book:
                         dn[0].side_with, up[0].stacked = up[0], True
                         continue
                     for T, (f, b) in zip(ts, old): T.fold, T.band_left = f, b
+            # stackPages: 지정한 표는 하행 위·상행 아래로 N 쪽에 걸쳐
+            sp = next((x for x in self.cfg.get('stackPages', []) if len(ts) == 2 and all(T.line == x['line'] and x.get('title', '') in T.title.text() for T in ts)), None)
+            if sp:
+                dn = [T for T in ts if '하행' in T.title.text()]
+                up = [T for T in ts if '상행' in T.title.text()]
+                if len(dn) == 1 and len(up) == 1:
+                    sj = self.stackn_jobs(dn[0], up[0], sp['pages'])
+                    if sj:
+                        dn[0].custom_jobs, up[0].stacked = sj, True
+                        continue
             # 굵은 세로줄(덧붙인 덩어리)이 있으면 거기서 나눈다: 본표는 하행·상행 한 단씩, 덩어리는 따로 한 쪽에 좌우로
-            if len(ts) == 2 and all(getattr(T, 'rules', None) for T in ts):
+            if self.cfg.get('ruleSplit', True) and len(ts) == 2 and all(getattr(T, 'rules', None) for T in ts):
                 dn = [T for T in ts if '하행' in T.title.text()]
                 up = [T for T in ts if '상행' in T.title.text()]
                 if len(dn) == 1 and len(up) == 1:

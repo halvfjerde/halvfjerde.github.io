@@ -72,5 +72,23 @@
    "line": "전라선",
    "title": "수서"
   }
+ ],
+ "holdAfter": [
+  {
+   "line": "경전선",
+   "title": "",
+   "after": "경부선"
+  }
+ ],
+ "stackPages": [
+  {
+   "line": "경부선",
+   "title": "수서",
+   "pages": 3
+  }
+ ],
+ "ruleSplit": false,
+ "bandLeftLines": [
+  "전라선"
  ]
 }
