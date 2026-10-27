@@ -522,13 +522,17 @@ class Table:
         for tr in self.trains:
             if tr.get('block', 0) != prev_block: L.append('---'); prev_block = tr.get('block', 0)   # 덧붙인 덩어리 앞에 굵은 세로줄
             fl = self.from_line(tr) if self.notecol else None
-            if fl and fl != prev_fl:                     # 주석 열: 첫 역 줄에 ↱, 그 밑에 「…선에서」 세로
-                nslot = sum(2 if k in self.split else 1 for k in range(len(self.st)))
-                toks = []
+            if fl and fl != prev_fl:                     # 주석 열: 첫 역 줄에 ↱, 그 밑에 「…선 경유」 세로 (필요한 칸만, 나머지는 ‥)
+                need = 1 + math.ceil((len(fl) + 0.3) / 1.26) + 1          # 화살표 + 세로 글 + (인쇄의 쪽 번호)
+                slots = [(k, p_) for k in range(len(self.st)) for p_ in range(2 if k in self.split else 1)]
+                need = min(need, len(slots))
+                toks, j = [], 0
                 for k in range(len(self.st)):
-                    ps = ['!'] * (2 if k in self.split else 1)
-                    if k == 0: ps[0] = q(f'^{nslot} va=t; ↱/VR{{{esc_txt(fl)}에서}}')
-                    toks.append(','.join(ps))
+                    ps = []
+                    for p_ in range(2 if k in self.split else 1):
+                        ps.append(q(f'^{need} va=t; ↱/VR{{{esc_txt(fl)}/경유}}') if j == 0 else '!' if j < need else 'x')
+                        j += 1
+                    toks.append(','.join(ps) if len(ps) > 1 and ps != ['x', 'x'] else ps[0])
                 ph = ['_', '_'] + (['_'] if has_fr else []) + (['_'] if cp and cp['pos'] == 'head' else [])
                 L.append(' '.join(ph) + ' : ' + ' '.join(compress(toks)) + (' : ' + ' '.join(['_'] * nft) if nft else ''))
             prev_fl = fl

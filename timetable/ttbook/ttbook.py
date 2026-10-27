@@ -1641,7 +1641,7 @@ class Book:
         """열차 칸의 주가 다른 표를 가리키면 {kind: via|train, ...}: 「…선 경유」(그 노선 표의 같은 열차), 「…로 연결·분리」「…/발/654」(그 번호의 열차)"""
         if T.kind[cell.c][0] != 'T' or cell.r < T.hEnd: return None
         t = re.sub(r'\s', '', cell.node.text())
-        m = re.fullmatch(r'↑?(.+선)경유', t)
+        m = re.fullmatch(r'[↑↱]?(.+선)경유', t)
         if m: return {'kind': 'via', 'name': m.group(1)}
         if re.search(r'연결|분리', t) or re.fullmatch(r'\D+(발|착)\d+', t):
             nos = []
@@ -1692,7 +1692,8 @@ class Book:
         for mk, r in self.refs.items():
             T = r['T']
             if r['kind'] == 'via':
-                no = self.colno(T).get(r['col'])
+                cn_ = self.colno(T)
+                no = cn_.get(r['col']) or next((cn_[j] for j in sorted(cn_) if j > r['col']), None)   # 주석 열: 바로 오른쪽 열차
                 nm = r['name']
                 ok = (lambda X: self.is_ktx(X) and nm.replace('고속선', '고속철도') in X.title.text()) if nm.endswith('고속선') else (lambda X: X.line == nm)
                 ps = sorted(p for p, X in where.get(no, []) if ok(X) and X is not T)
