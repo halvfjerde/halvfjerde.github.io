@@ -545,6 +545,11 @@ class Inline:
                 lines[-1].append(('obj', r'\hbox to %.3fbp{\hss %s\hss}' % (0.36 * c2.size * self.fs, self.run(k.text(), c2.but(font='M'))),
                                   0.36 * c2.size, 1.25 * c2.size, c2.size)); continue
             if 'tt-small' in cls: c2 = c2.but(size=c2.size * 0.75)
+            if 'tt-darrow' in cls:          # 이어짐 화살표(모듈의 굵은 화살표 ➡ 를 아래로)
+                em_ = c2.size * self.fs
+                lines[-1].append(('obj', r'\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (1.0 * em_, self.run('➡', c2.but(font='DG'))),
+                                  1.0 * c2.size, 1.1 * c2.size, c2.size))
+                continue
             if 'jtt-b' in cls: c2 = c2.but(font='DGB', size=c2.size * 1.2)
             elif 'jtt-k' in cls: c2 = c2.but(font='DGB')
             if 'jtt-g' in cls: c2 = c2.but(size=c2.size * 1.2)
@@ -676,13 +681,13 @@ def strut(size, fs):
     c = REF_C * s
     return r'\rule[%.3fbp]{0pt}{%.3fbp}' % (-(L / 2 - c), L)
 
-def line_tex(line, W, halign, fs, inl, sqcenter=False):
+def line_tex(line, W, halign, fs, inl, sqcenter=False, padem=0.06):
     """줄 하나 → \\hbox to W"""
     if not line: return None
     size = max(it[-1] if it[0] != 'obj' else it[4] for it in line)
     has_v = any(it[0] == 'obj' and len(it) > 5 for it in line)
     st = '' if has_v else strut(size, fs)
-    pad = 0.06 * size * fs                # 칸 양옆에 남길 여백: 넘치는 것만 글자를 가로로 좁힌다 (시각·두 글자는 그대로)
+    pad = padem * size * fs                # 칸 양옆에 남길 여백: 넘치는 것만 글자를 가로로 좁힌다 (시각·두 글자는 그대로)
     if len(line) == 1 and line[0][0] == 'just':
         chars = line[0][1]
         wj = sum(inl.wc.get(x, 1.0) for x in chars) * fs if inl else 0
@@ -841,6 +846,14 @@ class Book:
                     t = re.sub(r'\s', '', cl.node.text())
                     # 요일 뭉치만 작은 가로 글씨로(세 자까지 한 줄, 넷~여섯 자는 두 자씩 세 줄까지).
                     # 나머지(「운행」, 「…선 경유」 등)는 관습대로 보통 크기 세로쓰기
+                    mv = re.match(r'(.+선)경유$', t)
+                    if mv:          # 「…선 경유」: 굵은 화살표 밑에 두 줄 세로쓰기(…선 | 경유)
+                        ar = Node('span', [('class', 'tt-darrow')])
+                        vt = Node('span', [('class', 'jtt-v tt-rl')]); vt.kids += [mv.group(1), Node('br', []), '경유']
+                        nd = Node('td', []); nd.kids += [ar, Node('br', []), vt]
+                        cl.node = nd
+                        cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
+                        continue
                     m = re.match(r'[월화수목금토일∼~·]+', t)
                     if not m: continue
                     days, rest = m.group(0), t[m.end():]
@@ -1070,11 +1083,11 @@ class Book:
         if len(color or '') == 3: color = ''.join(c * 2 for c in color)
         return parts, color
 
-    def vband(self, T, part, H):
+    def vband(self, T, part, H, colw=None, scale=1.0):
         """띠를 세로로: 위에 방향·노선, 가운데에 주요 역, 아래에 몇째. (tex, 필요한 길이 bp)"""
         fs = self.fs
         parts, color = self.band_nodes(T)
-        colw = self.vband_w
+        colw = colw or self.vband_w
         def segs(node, ctx, out):
             for k in node.kids:
                 if isinstance(k, str):
@@ -1110,12 +1123,12 @@ class Book:
                     items.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (colw, -0.12 * em, em, self.inl.run(ch, c, True)))
                     L += em; i += 1
             return ''.join(items), L
-        base = Ctx('DM', 1.0, color)
+        base = Ctx('DM', scale, color)
         a, la = stack(segs(parts[0], base, []))
         b, lb = stack(segs(parts[1], base, []))
-        if part: c, lc = stack([('(%s)' % part, Ctx('M', 1.0, color))])
+        if part: c, lc = stack([('(%s)' % part, Ctx('M', scale, color))])
         else: c, lc = stack(segs(parts[2], base, []))
-        need = la + lb + lc + 2 * fs
+        need = la + lb + lc + 2 * fs * scale
         if need > H and la + lc + fs <= H:      # 길이가 모자라면 주요 역은 뺀다
             b = ''
         tex = r'\vbox to %.3fbp{\offinterlineskip %s\vfil %s\vfil %s}' % (H, a, b, c)
@@ -1182,7 +1195,8 @@ class Book:
         if self.hang_title: tx = x0           # 제목은 판면 밖(바깥 여백)에
         else: tx = x0 + (TW if side != 'R' else 0)
         fx0 = tx
-        VB = self.vband_w if getattr(T, 'band_left', False) else 0     # 세로 띠 (오른쪽 면 조각은 바깥쪽인 오른쪽 끝에)
+        VB = (pc.get('vbw') if pc and pc.get('vbw') else self.vband_w) if getattr(T, 'band_left', False) else 0     # 세로 띠 (오른쪽 면 조각은 바깥쪽인 오른쪽 끝에)
+        vsc = (pc.get('vbscale') or 1.0) if pc else 1.0
         xs = [tx + fw + fp + (VB if side != 'R' else 0)]
         for w in widths: xs.append(xs[-1] + w)
         fx1 = xs[-1] + (VB if side == 'R' else 0) + fp + fw
@@ -1197,7 +1211,7 @@ class Book:
         # 틀: 왼쪽·오른쪽 변은 굵게. 위 변은 위에 붙은 조각에 따라(같은 표면 띠 사이 괘선, 다른 표면 표 사이 괘선)
         top = pc['top'] if pc else 'frame'
         bottom = pc['bottom'] if pc else True
-        VB0 = self.vband_w if getattr(T, 'band_left', False) else 0
+        VB0 = VB
         rects.append(('v', fx0 + fw / 2, y0, fy1, 2)); rects.append(('v', fx1 - fw / 2, y0, fy1, 2))
         if top == 'frame': rects.append(('h', fx0, fx1, y0 + fw / 2, 2))
         elif top == 'table': rects.append(('h', fx0, fx1, y0 + fw / 2, self.table_rule))
@@ -1222,13 +1236,13 @@ class Book:
             if run and run[2] > 1:            # 같은 표의 띠 여럿에 걸친 제목칸: 첫 띠에서 한 번에
                 if run[0] == 0:
                     Hh = run[1] - 2 * (fw + fp) - 2 * self.vpad
-                    vt, _ = self.vband(T, None, Hh)
+                    vt, _ = self.vband(T, None, Hh, VB, vsc)
                     tex.append(self.put_box(bx, ty + self.vpad, VBc, Hh, vt, 'c', 't'))
                 y_a = y0 if run[0] > 0 else ty
                 y_b = fy1 if run[0] < run[2] - 1 else ys[-1]
                 rects.append(('v', xs[0] if side != 'R' else xs[-1], y_a, y_b, 1))
             else:
-                vt, _ = self.vband(T, part, ys[-1] - ty - 2 * self.vpad)
+                vt, _ = self.vband(T, part, ys[-1] - ty - 2 * self.vpad, VB, vsc)
                 tex.append(self.put_box(bx, ty + self.vpad, VBc, ys[-1] - ty - 2 * self.vpad, vt, 'c', 't'))
                 rects.append(('v', xs[0] if side != 'R' else xs[-1], ty, ys[-1], 1))
         # 노선 머리띠
@@ -1327,7 +1341,10 @@ class Book:
                 else:   # space-evenly
                     chars = ln[0][1]
                     t = r'\hbox to %.3fbp{%s\hfill %s\hfill}' % (W, strut(ln[0][2], fs), r'\hfill '.join(chars))
-            if t is None: t = line_tex(ln, W, al, fs, self.inl, sqc)
+            if t is None:
+                # 열차 번호(네 자리)는 괘선에 닿지 않게 양옆을 조금 더 비운다
+                pe = 0.2 if cell.node.find(lambda n: 'jtt-no' in n.cls) else 0.06
+                t = line_tex(ln, W, al, fs, self.inl, sqc, pe)
             if t: lts.append(t)
         if not lts: return
         has_v = any(it[0] == 'obj' and len(it) > 5 for ln in cell.lines for it in ln)
@@ -1506,8 +1523,8 @@ class Book:
             if k: dot()
             for ln, cc in sg:
                 if cc == 'DIR':
-                    t_, _ = self.dir_badge(ln, ln == '하행', False, size * 0.8, 1.2 * em)
-                    items.append(r'\kern%.3fbp' % (0.25 * em)); items.append(t_)
+                    t_, _ = self.dir_badge(ln, ln == '하행', ln == '하행', size * 0.8, 1.2 * em)   # 하행은 속이 빈, 상행은 속이 찬
+                    items.append(r'\kern%.3fbp' % (0.6 * em)); items.append(t_)
                     continue
                 e2 = cc.size * self.fs
                 if cc is cd: items.append(r'\kern%.3fbp' % (0.15 * em))
@@ -2024,6 +2041,26 @@ class Book:
                 avail = min(others[0]['x'] - TWh - gapX - pc['x'], pc['nat']) if others else (self.cw - pc['x'])
                 if pc.get('fixw'): avail = pc['fixw']
                 pc['ch'] = self.make_chunk(pc['T'], pc['side'], pc['trains'], avail, pc.get('ncol'))
+                pc['avail'] = avail
+        # 세로 제목칸: 빈 열이 넉넉한 쪽에서는 열 두 칸 폭으로 넓히고 글자도 키운다 (쪽 안의 세로 띠는 모두 같이)
+        wide_w = self.cfg.get('wideBand', 2) * self.P0
+        extra = wide_w - self.vband_w
+        sc = self.cfg.get('wideBandScale', 1.4)
+        for pg in pages:
+            vps = [pc for pc in pg['pieces'] if getattr(pc['T'], 'band_left', False)]
+            if not vps or extra <= 0: continue
+            def spare(pc):
+                ch = pc['ch']
+                return sum(ch['P'] for c in ch['trains'] if isinstance(c, tuple)) + ch['extra']
+            if not all(spare(pc) >= extra + 0.01 for pc in vps): continue
+            # 글자 크기: 세로 길이가 들어가는 가장 큰 배율 (쪽 안에서 같게)
+            def fits(s_):
+                return all(self.vband(pc['T'], pc.get('part') or None, 100, wide_w, s_)[1]
+                           <= (pc['vrun'][1] if pc.get('vrun') else pc['h']) - 2 * (fw + self.frame_pad) - 2 * self.vpad for pc in vps)
+            s_ok = next((x for x in (sc, 1.3, 1.2, 1.1, 1.0) if x <= sc and fits(x)), 1.0)
+            for pc in vps:
+                pc['ch'] = self.make_chunk(pc['T'], pc['side'], pc['trains'], pc['avail'] - extra, pc.get('ncol'))
+                pc['vbw'], pc['vbscale'] = wide_w, s_ok
         # 쪽 아래 남는 자리: 단(같은 높이에서 시작하는 조각들)마다 비고 행을 늘여 채운다 (다른 행 높이는 그대로).
         # 낮은 단부터 같은 높이가 되도록 나눠 준다(두 단이면 반반에 가깝게). 펼침면에 걸친 단은 두 쪽에서 같은 만큼
         if self.cfg.get('stretchRemarks', True):

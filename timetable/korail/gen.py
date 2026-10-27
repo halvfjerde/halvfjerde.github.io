@@ -111,6 +111,7 @@ def vert(s):
 WEEK = '월화수목금토일'
 def day_range(s):
     """이어지는 요일 셋 이상은 범위로: 금토일 → 금∼일, 월화수목금 → 월∼금 (주를 넘어가도: 금토일월 → 금∼월)"""
+    if s.endswith(' 경유'): return s[:-3] + '/경유'        # 「중앙선/경유」 두 줄 세로쓰기
     if len(s) < 3 or any(ch not in WEEK for ch in s): return s
     k = WEEK.index(s[0])
     if all(WEEK[(k + i) % 7] == ch for i, ch in enumerate(s)): return f'{s[0]}∼{s[-1]}'
