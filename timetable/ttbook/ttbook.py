@@ -1065,16 +1065,17 @@ class Book:
         else:
             R = seg(parts[2])
         gap = 1.0 * fs
-        if L[1] + C[1] + R[1] + 2 * gap <= W or not C[0]:
+        if not C[0] or not self.cfg.get('bandTwoLines', True):
             plan = [(L[0], C[0], R[0], max(L[2], C[2], R[2], 1.25))]
         else:
+            # 두 줄로: 윗줄에 노선·방향과 몇째를 하나로 묶어 가운데, 아랫줄에 구간(명조 괄호)을 가운데
             plan = []
-            if L[0] or R[0]: plan.append((L[0], '', R[0], max(L[2], R[2], 1.25)))
-            # 줄이 바뀌면 가운데(주요 역)는 다른 한쪽이 있는 반대편으로 민다
-            al = 'r' if (L[0] and not R[0]) else 'l' if (R[0] and not L[0]) else 'c'
+            if L[0] or R[0]:
+                top = L[0] + (r'\hskip %.3fbp ' % (0.6 * fs) if (L[0] and R[0]) else '') + R[0]
+                plan.append(('', top, '', max(L[2], R[2], 1.25), 'c'))
             for node in self.split_center(parts[1], W, ctx):
                 t = seg(node)
-                plan.append(('', t[0], '', max(t[2], 1.25), al))
+                plan.append(('', t[0], '', max(t[2], 1.25), 'c'))
         self._bands[key] = plan
         return plan
 

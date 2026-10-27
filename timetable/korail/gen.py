@@ -112,10 +112,11 @@ WEEK = '월화수목금토일'
 def day_range(s):
     """이어지는 요일 셋 이상은 범위로: 금토일 → 금∼일, 월화수목금 → 월∼금 (주를 넘어가도: 금토일월 → 금∼월)"""
     if s.endswith(' 경유'): return s[:-3] + '/경유'        # 「중앙선/경유」 두 줄 세로쓰기
-    if len(s) < 3 or any(ch not in WEEK for ch in s): return s
-    k = WEEK.index(s[0])
-    if all(WEEK[(k + i) % 7] == ch for i, ch in enumerate(s)): return f'{s[0]}∼{s[-1]}'
-    return s
+    if any(ch not in WEEK for ch in s): return s
+    if len(s) >= 3:
+        k = WEEK.index(s[0])
+        if all(WEEK[(k + i) % 7] == ch for i, ch in enumerate(s)): s = f'{s[0]}∼{s[-1]}'
+    return s + '/운행'                                     # 요일 | 운행 두 줄
 
 # 따로 조사한 도착 시각 {(열차번호, 역): 분}. arrivals.json 이 있으면 읽는다
 ARR = {}
@@ -335,9 +336,10 @@ class Table:
                 if idx[0] == c and len(idx) > 1: nxt[idx[1]] += 1
                 if idx[-1] == c and len(idx) > 1: nxt[idx[-2]] += 1
             return nxt.most_common(1)[0][0] if nxt else None
+        self.junc = set()        # 연결선으로 붙는 종착역: 착발은 나누지 않지만 주요역(*)으로
         for c in sorted(self.split, key=lambda i: min(i, n - 1 - i)):
             j = junction(c)
-            if j is not None and j in self.split and j != c: self.split.discard(c)
+            if j is not None and j in self.split and j != c: self.split.discard(c); self.junc.add(self.st[c])
         if ktx:
             for i, s in enumerate(self.st):
                 trav = sum(1 for tr in self.trains if isinstance(tr['times'][i], int) or tr['times'][i] == 'v')
@@ -363,7 +365,7 @@ class Table:
         for i, s in enumerate(self.st):
             if i in rules: L.append('---')
             ad = '着発' if i in self.split else '発' if i == 0 else '着' if i == n - 1 else '〃'
-            mk = '**' if i in self.split else '*' if i in major else ''
+            mk = '**' if i in self.split else '*' if (i in major or s in self.junc) else ''
             nm = mk + s
             hj = RENAME_HANJA.get(s) or self.hanja.get(s) or self.hanja.get(next((k for k, v in RENAME.items() if v == s), ''), '')
             r = f' r={q(mk + hj)}' if hj else ''
