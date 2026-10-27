@@ -465,8 +465,8 @@ class Table:
             slots = [(k, p) for k in range(k0, k1 + 1) for p in range(phys(k))]
             if len(slots) < 2: return None
             text = via.replace(' ', '')
-            text = text.replace('경유', ' 경유')
-            need = -(-(len(text) + 2) * 10 // 12)          # 글자(괄호 포함) 1em, 행 1.2em
+            text = text.replace('경유', '/경유')             # 「태백선/경유」 두 줄 세로쓰기
+            need = -(-(max(len(x) for x in text.split('/')) + 2) * 10 // 12)   # 긴 줄(괄호 포함) 1em, 행 1.2em
             if need > len(slots): need = 0                   # 자리가 모자라면 주석 없이 ║ 만 (행이 굵어지지 않게)
             s0 = (len(slots) - need) // 2
             parts = collections.defaultdict(list)

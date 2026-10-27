@@ -547,8 +547,9 @@ class Inline:
             if 'tt-small' in cls: c2 = c2.but(size=c2.size * 0.75)
             if 'tt-darrow' in cls:          # 이어짐 화살표(모듈의 굵은 화살표 ➡ 를 아래로)
                 em_ = c2.size * self.fs
-                lines[-1].append(('obj', r'\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (1.0 * em_, self.run('➡', c2.but(font='DG'))),
-                                  1.0 * c2.size, 1.1 * c2.size, c2.size))
+                # 위 괘선에 붙이고 밑에 반 줄 비운다
+                lines[-1].append(('obj', r'\vbox{\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}\kern%.3fbp}' % (
+                    1.0 * em_, self.run('➡', c2.but(font='DG')), 0.5 * em_), 1.0 * c2.size, 1.6 * c2.size, c2.size))
                 continue
             if 'jtt-b' in cls: c2 = c2.but(font='DGB', size=c2.size * 1.2)
             elif 'jtt-k' in cls: c2 = c2.but(font='DGB')
@@ -643,9 +644,11 @@ class Inline:
         def bk(n, top):
             nonlocal h
             g = self.run(n.text(), ctx.but(font='DM'))
-            parts.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (1.05 * em, -0.14 * em, em, g))
+            parts.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (cwid, -0.14 * em, em, g))
             h += 1
             parts.append(r'\kern%.3fbp' % (0.15 * em)); h += 0.15
+        ncol = max(1, len(self.text_cols(vb, ctx))) if vb is not None else 1
+        cwid = 1.05 * em * ncol                 # 여러 줄이면 괄호는 줄들 가운데에
         if bks and 'jtt-bk--o' in bks[0].cls: bk(bks[0], True)
         if vb is not None:
             cols = self.text_cols(vb, ctx)
@@ -661,9 +664,9 @@ class Inline:
             parts.append(r'\kern%.3fbp' % (0.15 * em)); h += 0.15
             for b in cl:
                 g = self.run(b.text(), ctx.but(font='DM'))
-                parts.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (1.05 * em, -0.14 * em, em, g)); h += 1
+                parts.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (cwid, -0.14 * em, em, g)); h += 1
         tex = r'\vtop{\kern0pt\vbox{\offinterlineskip ' + ''.join(parts) + '}}'
-        return ('obj', tex, 1.05, h, ctx.size, 'v')
+        return ('obj', tex, 1.05 * ncol, h, ctx.size, 'v')
 
 # ───────────────────────── 칸 그리기 ─────────────────────────
 def line_height(line, fs_em=1.0):
@@ -1385,6 +1388,7 @@ class Book:
         vmargin = 0
         if has_v:
             vmargin = (0.2 if rc & {'jtt-f1', 'jtt-fr'} else 0.1) * fs
+        if cell.node.find(lambda n: 'tt-darrow' in n.cls): vmargin = 0      # 이어짐 화살표는 위 괘선에 붙인다
         box = r'\vbox{\offinterlineskip %s}' % ''.join(lts)
         tex.append(self.put_box(x + pad * fs, y + (vmargin if va == 't' else 0), W, h - (vmargin if va in 't' else 0) - (vmargin if va == 'b' else 0), box, 'l', va))
 
