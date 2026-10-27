@@ -912,13 +912,15 @@ class Book:
     def arrow_rects(self, x, y0, y1, dr):
         """진행 방향 화살표: 첫 역 행부터 끝 역 행까지 축, 끝에 칠한 촉, 뒤에 V 깃"""
         em = self.fs
-        hw, hl, fv = 0.26 * em, 0.85 * em, 0.38 * em
-        yt, yb = y0 + 0.25 * em, y1 - 0.15 * em
-        if dr == 'u': yt, yb = y1 - 0.25 * em, y0 + 0.15 * em      # 위로: 꼬리가 아래
+        hw, hl = 0.27 * em, 0.9 * em          # 촉: 속 빈 세모
+        fw_, fv, fd = 0.27 * em, 0.42 * em, 0.3 * em   # 깃: 속 빈 V (🔰 꼴 띠)
+        lw = 0.35
+        yt, yb = y0 + 0.2 * em, y1 - 0.12 * em
+        if dr == 'u': yt, yb = y1 - 0.2 * em, y0 + 0.12 * em      # 위로: 꼬리가 아래
         s = 1 if yb > yt else -1
-        out = [('line', [(x, yt), (x, yb - s * hl * 0.6)], 0.45),
-               ('fill', [(x - hw, yb - s * hl), (x + hw, yb - s * hl), (x, yb)]),
-               ('line', [(x - hw, yt), (x, yt + s * fv), (x + hw, yt)], 0.45)]
+        out = [('line', [(x, yt + s * (fv + fd)), (x, yb - s * hl)], lw),
+               ('closed', [(x - fw_, yt), (x, yt + s * fv), (x + fw_, yt), (x + fw_, yt + s * fd), (x, yt + s * (fv + fd)), (x - fw_, yt + s * fd)], lw),
+               ('closed', [(x - hw, yb - s * hl), (x + hw, yb - s * hl), (x, yb)], lw)]
         return out
 
     def aim_rects(self, x, y, w, h):
@@ -1856,9 +1858,11 @@ class Book:
                 _, x0, y0, x1, y1, t = r
                 rect(x0, y0, x1 - x0, t); rect(x0, y1 - t, x1 - x0, t)
                 rect(x0, y0, t, y1 - y0); rect(x1 - t, y0, t, y1 - y0)
-            elif r[0] in ('line', 'fill'):          # 꺾은선(굵기) / 칠한 다각형
+            elif r[0] in ('line', 'fill', 'closed'):          # 꺾은선(굵기) / 칠한 다각형 / 속 빈 다각형(굵기)
                 pts = ' '.join('%.3f %.3f %s' % (x, H - y, 'm' if i == 0 else 'l') for i, (x, y) in enumerate(r[1]))
-                extra.append(('q %.3f w 0 J 0 j 0 G %s S Q' % (r[2], pts)) if r[0] == 'line' else ('q 0 g %s h f Q' % pts))
+                if r[0] == 'line': extra.append('q %.3f w 0 J 0 j 0 G %s S Q' % (r[2], pts))
+                elif r[0] == 'closed': extra.append('q %.3f w 0 J 0 j 0 G 1 g %s h b Q' % (r[2], pts))
+                else: extra.append('q 0 g %s h f Q' % pts)
         return '0 g ' + ' '.join(ops) + ' f ' + ' '.join(extra)
 
     # ── 글꼴 정의: 이름이 아니라 찾아 둔 파일로 (TeX 쪽 이름 찾기에 기대지 않는다) ──
