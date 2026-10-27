@@ -3456,7 +3456,7 @@ class Book:
         wd = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.9)), len(t)) * fs
         def wrap(lab):                                     # 운항일이 길면 「・」·띄어쓰기에서 줄을 바꾼다
             if not lab: return ['']
-            toks = re.findall(r'[^・ ]+[・ ]?', lab)
+            toks = re.findall(r'(?:[^・ ]| \{)+[・ ]?', lab)        # 날과 그날의 시각({…}) 사이에서는 줄을 바꾸지 않는다
             out, cur = [], ''
             for t_ in toks:
                 if cur and wd((cur + t_).rstrip()) > avail: out.append(cur.rstrip()); cur = t_
@@ -3510,7 +3510,9 @@ class Book:
                 tex.append(self.put_box(xx + cN, Y, cT, rh, self.inl.run(hmf(t), Ctx('DM', 1.0)), 'r', 'm'))
                 tex.append(self.put_box(xx + cN + cT, Y, cT, rh, self.inl.run(hmf(a), Ctx('DM', 1.0)), 'r', 'm'))
                 for li, lab in enumerate(labs):
-                    if lab: tex.append(self.put_box(xx + cN + 2 * cT + 0.8 * fs, Y + li * rh, colw - cN - 2 * cT - 0.8 * fs, rh, self.inl.run(lab, Ctx('M', 0.9)), 'l', 'm'))
+                    # {…}: 본디와 다른 시각은 표 글꼴(DiaPro)로
+                    body_ = ''.join(self.inl.run(p_, Ctx('DM' if k_ % 2 else 'M', 0.9)) for k_, p_ in enumerate(re.split(r'[{}]', lab)) if p_)
+                    if lab: tex.append(self.put_box(xx + cN + 2 * cT + 0.8 * fs, Y + li * rh, colw - cN - 2 * cT - 0.8 * fs, rh, body_, 'l', 'm'))
                 n_ += 1
                 if n_ % 5 == 0: rects.append(('h', xx, xx + colw, Y + len(labs) * rh, 1))
         tex += self.page_side_title(recto, [('', '항공')])

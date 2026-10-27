@@ -39,7 +39,7 @@ def label(days):
     if W and len(plus) + len(minus) <= 4:
         base = '매일' if len(W) == 7 else wdl(W)
         return base + ('・%s일' % '・'.join(map(str, plus)) if plus else '') + ('(%s일 빼고)' % '・'.join(map(str, minus)) if minus else '')
-    return '・'.join(str(x) for x in sorted(days)) + '일' if len(days) <= 8 else '%d∼%d일 사이 %d일' % (lo, hi, len(days))
+    return '・'.join(str(x) for x in sorted(days)) + '일'      # 맞는 꼴이 없으면 날짜를 죽
 fl = collections.defaultdict(lambda: collections.defaultdict(set))     # (dep,arr) → (no,t,a) → days
 for f in d['flights']:
     fl[(f['dep'], f['arr'])][(f['no'], f['t'], f['a'])].add(int(f['day'][6:]))
@@ -75,7 +75,7 @@ for (a, b), _ in sorted(pairs.items(), key=lambda x: -x[1]):
                 alls = set().union(*(x[2] for x in gs))
                 lab = label(alls)
                 for t2, a2, d2 in gs[1:]:
-                    lab = (lab + ' ' if lab else '') + '%s %s발' % (label(d2) or '', str(int(t2[:2])) + t2[2:])
+                    lab = (lab + ' ' if lab else '') + '(%s {%s})' % (label(d2) or '', str(int(t2[:2])) + t2[2:])   # 다른 시각은 괄호에 그날과 함께 ({…}: 책에서 표 글꼴로)
                 rows.append((no, t, aa, lab.strip()))
         rows.sort(key=lambda r: (r[1], r[0]))
         blocks.append({'title': '%s → %s' % (short(aps[p]), short(aps[q])), 'rows': rows})
