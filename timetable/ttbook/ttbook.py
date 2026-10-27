@@ -1995,8 +1995,9 @@ class Book:
         H = self.H
         y0 = self.mt
         W, Hh = self.cw, self.ch
-        if k == 0:
-            mp = json.load(open(os.path.join(self.base, self.cfg.get('frontMap', 'map.json')), encoding='utf-8'))
+        fm = self.cfg.get('frontMap')                   # 없으면 노선도 없이 색인(앞쪽)·범례(뒤쪽)
+        if k == 0 and fm:
+            mp = json.load(open(os.path.join(self.base, fm), encoding='utf-8'))
             st = mp['st']
             lats = [v[0] for v in st.values()]; lons = [v[1] for v in st.values()]
             asp = 1.0 / math.cos(math.radians(36.3))
@@ -2051,6 +2052,8 @@ class Book:
                 elif dr == 't': tex.append(self.put_box(x - bw / 2, y - 16, bw, 10, body_, 'c', 'm'))
                 else: tex.append(self.put_box(x - bw / 2, y + 6, bw, 10, body_, 'c', 'm'))
         else:
+          yy = y0
+          if fm or k == 0:
             tex.append(self.put_box(x0, y0, W, 14, self.inl.run('색인', Ctx('GB', 14 / fs)), 'l', 't'))
             rows = self.line_pages(first)
             items = list(rows.items())
@@ -2066,8 +2069,9 @@ class Book:
                 tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(nm, c_), 'l', 'm'))
                 tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(pg_, Ctx('M', 1.1)), 'r', 'm'))
                 ops.append('q 0.3 w 0 G [0.6 1.6] 0 d %.3f %.3f m %.3f %.3f l S Q' % (xx + 62, H - (yy + lh * 0.7), xx + colw - 26, H - (yy + lh * 0.7)))
-            # 범례: 등급 표지(모듈로 그린 것)와 기호
             yy = y0 + 26 + per * lh + 24
+          if fm or k == 1:
+            # 범례: 등급 표지(모듈로 그린 것)와 기호
             tex.append(self.put_box(x0, yy, W, 14, self.inl.run('범례', Ctx('GB', 14 / fs)), 'l', 't'))
             yy += 24
             lg = self.cfg.get('legend', [])
