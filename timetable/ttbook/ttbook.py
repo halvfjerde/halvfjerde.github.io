@@ -3449,7 +3449,7 @@ class Book:
         colw = (self.cw - (NC - 1) * gut) / NC
         TH, SH = 2 * R, R                                   # 머리 행, 칸 이름 행
         pad = 0.5 * fs
-        nw = colw - 2 * pad                                 # 주의 글줄 폭
+        nw = colw / 2 - 2 * pad                             # 주의 글줄 폭: 가는 편의 주는 왼쪽 반, 오는 편의 주는 오른쪽 반
         wd = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.85)), len(t)) * fs
         def wrap(text):                                     # 주: 「・」·띄어쓰기에서 (괄호 속은 날 뒤에서만)
             toks = re.findall(r'(?:\([^)]*\)|[^・ ])+[・ ]?', text)
@@ -3459,31 +3459,50 @@ class Book:
                 else: cur += t_
             out.append(cur.rstrip())
             return out
-        pages, cols, col, y = [], [], [], 0.0
-        def newcol():
-            nonlocal col, y, cols
-            cols.append(col); col, y = [], 0.0
-            if len(cols) == NC: pages.append(cols); cols = []
+        seq = []                                            # (덩이, 줄들): r=편 줄, n=주 줄
         for P in data['pairs']:
-            n = max(len(P['out']), len(P['in']))
-            items = [('r', k) for k in range(n)]
-            for nos, lab in P['notes']:
-                items += [('n', ln) for ln in wrap('※%s %s' % ('・'.join(nos), lab))]
-            i = 0
-            while i < len(items):
-                gap = 0.0                                   # 덩이끼리는 띄우지 않고 맞붙인다 (표처럼)
+            items = [('r', k) for k in range(max(len(P['out']), len(P['in'])))]
+            def side_notes(L):
+                g = collections.OrderedDict()
+                for no, t, a, lab in L:
+                    if lab: g.setdefault(re.sub(r'^\((.*)\)$', r'\1', lab) if lab.count('(') == 1 and lab.startswith('(') else lab, []).append(no)
+                return [ln for lab, nos in g.items() for ln in wrap('※%s %s' % ('・'.join(nos), lab))]
+            nl, nr = side_notes(P['out']), side_notes(P['in'])
+            items += [('n', nl[k] if k < len(nl) else '', nr[k] if k < len(nr) else '') for k in range(max(len(nl), len(nr)))]
+            seq.append((P, items))
+        def flow(start, cap):
+            """seq 를 start=(덩이, 줄)부터 높이 cap 인 단들로 흘린다 → [(단, 그 단의 시작)]"""
+            out, col, y = [], [], 0.0
+            s0 = start
+            pi, i = start
+            while pi < len(seq):
+                P, items = seq[pi]
                 head = TH + (SH if items[i][0] == 'r' else 0)
-                room = int((self.ch - y - gap - head - pad) / R + 1e-6)
+                room = int((cap - y - head - pad) / R + 1e-6)
                 left = len(items) - i
-                if room < min(3, left): newcol(); continue
+                if room < min(3, left):
+                    if not col: return None                 # 한 덩이 머리도 못 들어간다
+                    out.append((col, s0)); col, y, s0 = [], 0.0, (pi, i); continue
                 k = min(room, left)
                 if left - k in (1, 2) and k > 3: k = left - 3
-                col.append({'P': P, 'y': y + gap, 'items': items[i:i + k], 'first': i == 0})
-                y += gap + head + k * R + pad
+                col.append({'P': P, 'y': y, 'items': items[i:i + k], 'first': i == 0})
+                y += head + k * R + pad
                 i += k
-                if i < len(items): newcol()
-        if col: newcol()
-        if cols: pages.append(cols)
+                if i >= len(items): pi, i = pi + 1, 0
+                else: out.append((col, s0)); col, y, s0 = [], 0.0, (pi, i)
+            if col: out.append((col, s0))
+            return out
+        cols = flow((0, 0), self.ch)
+        pages = [[c for c, _ in cols[k:k + NC]] for k in range(0, len(cols), NC)]
+        # 마지막 쪽: 단의 높이를 고르게 (왼쪽·오른쪽 반반)
+        last0 = cols[(len(pages) - 1) * NC][1]
+        lo, hi = 4 * R, self.ch
+        for _ in range(30):
+            mid = (lo + hi) / 2
+            f_ = flow(last0, mid)
+            if f_ is not None and len(f_) <= NC: hi = mid
+            else: lo = mid
+        pages[-1] = [c for c, _ in flow(last0, hi)]
         nos_ = [self._fno(r[0])[1] for P in data['pairs'] for L in (P['out'], P['in']) for r in L]
         self._air_nw = max([self.inl.wc.get(self.inl.run(x, Ctx('M', 1.0)), len(x)) * fs for x in nos_] + [3 * fs])
         self._air = (colw, gut, TH, SH, pad)
@@ -3561,9 +3580,12 @@ class Book:
                     rects.append(('v', xx + hw, r0 - SH, yy, 1))
                 notes = [it for it in pc['items'] if it[0] == 'n']
                 if notes:
-                    for _, ln in notes:
-                        tex.append(self.put_box(xx + pad, yy, colw - 2 * pad, R, seg(ln, 0.85), 'l', 'm'))
+                    n0 = yy
+                    for _, l_, r_ in notes:
+                        if l_: tex.append(self.put_box(xx + pad, yy, hw - 2 * pad, R, seg(l_, 0.85), 'l', 'm'))
+                        if r_: tex.append(self.put_box(xx + hw + pad, yy, hw - 2 * pad, R, seg(r_, 0.85), 'l', 'm'))
                         yy += R
+                    rects.append(('v', xx + hw, n0, yy, 1))
                 yy += pad
                 rects.append(('box', xx, Y, xx + colw, yy, self.rw[1]))
         tex += self.page_side_title(recto, [('', '항공')])
