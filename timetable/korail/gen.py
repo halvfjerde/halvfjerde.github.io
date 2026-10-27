@@ -735,6 +735,7 @@ class Table:
         elif (self.cat, self.line) in COUPLE_GUEST and self.variant != '수서':
             notes.append(f'수서 발착 열차는 수서 발착 병결 표에')
         if self.loop_note: notes.append(self.loop_note)
+        notes += getattr(self, 'xfer', [])            # 환승·같은 구간 안내 (인쇄에서 쪽 번호를 붙인다)
         ab_ = [k for k, v in END_ABBR.items() if any(k in self.ends_of(tr) for tr in self.trains)]
         if ab_ and not getattr(self, 'both', False): notes.append('시발·종착역의 ' + ', '.join(f'{END_ABBR[k]}는 {k}' for k in ab_))
         for st_, via_ in self.skipped:
@@ -1064,6 +1065,41 @@ def main():
     for t in data['tables']: LINE_STATIONS.setdefault((t['cat'], t['line']), set()).update(clean_name(x) for x in t['stations'])
     book_items = []
     index = []
+    # 환승 안내: 노선(재래선 표)마다 역 차례. 같은 구간을 셋 이상 함께 달리면 「갑∼을 … 표도 참조」, 한두 역만 겹치면 「환승 역 노선」
+    LST = {}
+    for line_, parts_ in BOOK:
+        for c_, sh_, _ in parts_:
+            if c_ != 'gen' or (c_, sh_, 'down') not in tabs: continue
+            st_ = [clean_name(x) for x in tabs[(c_, sh_, 'down')]['stations']]
+            for gk, gh in MERGE_GEN.items():
+                if gh == (c_, sh_) and gk + ('down',) in tabs: st_ = st_ + [clean_name(x) for x in tabs[gk + ('down',)]['stations'] if clean_name(x) not in st_]
+            LST[line_] = st_
+    def xfer_notes(line_, st):
+        shared, jn = {}, {}
+        S = set(st)
+        for b, sb in LST.items():
+            if b == line_: continue
+            runs, cur = [], []
+            for x in st:
+                if x in sb: cur.append(x)
+                elif cur: runs.append(cur); cur = []
+            if cur: runs.append(cur)
+            if any(len(r_) >= 3 for r_ in runs):          # 같은 구간을 달리는 노선: 그 구간만 (환승은 적지 않는다)
+                for r_ in runs:
+                    if len(r_) >= 3: shared.setdefault((r_[0], r_[-1]), []).append(b)
+                continue
+            for r_ in runs:
+                for x in r_:
+                    i = sb.index(x)
+                    nb = [sb[k] for k in (i - 1, i + 1) if 0 <= k < len(sb)]
+                    if any(y not in S for y in nb) and x not in jn.get(b, []): jn.setdefault(b, []).append(x)
+        out = []
+        if jn:          # 같은 역들끼리 묶어: 「동대구 동해선·중앙선, 천안·평택 서해선」
+            byst = {}
+            for b, xs in jn.items(): byst.setdefault(tuple(xs), []).append(b)
+            out.append('환승 ' + ', '.join(f"{'·'.join(xs)} {'·'.join(bs)}" for xs, bs in byst.items()))
+        out += [f"{x}∼{y} 간은 {'·'.join(bs)} 표도 참조" for (x, y), bs in shared.items()]
+        return out
     for line, parts in BOOK:
         P = [f'{{{{시각표테마}}}}', f'{{{{상위문서|{PREFIX}}}}}',
              f"'''{line}'''({LINE_HANJA[line]}) 시각표. {EDITION}(가상), 코레일 {'관광열차 시각(2026년 9월 1일)' if line == '관광열차' else '2026년 10월 발표 자료'} 기준." + ''.join(f" {k[1]}(동대구–경주) 열차도 이 표에 함께 싣는다." for k, v in MERGE_GEN.items() if v[1] == line), '']
@@ -1169,6 +1205,7 @@ def main():
                         t['loop_note'] = f"{clean_name(next(tr for tr in tabs[(cat, sheet, d)]['trains'] if is_loop(tr))['from'])} 순환 열차는 {LOOP_NAME[(cat, sheet)]} 표에"
                 T = Table(t, data['hanja']); T.line_disp = LINE_DISP.get((cat, sheet), sheet.replace('(', ' (') if cat == 'tour' else line); T.cpl = cpl
                 T.both = cat == 'tour' or (cat, sheet, variant) in BOTH_TABLES
+                if cat == 'gen' and variant is None and line in LST: T.xfer = xfer_notes(line, T.st if d == 'down' else T.st[::-1])
                 T.wiki(sub); pair[d] = T
             shared = share(list(pair.values()))
             if (cat == 'tour' or (cat, sheet, variant) in BOTH_TABLES) and len(pair) == 2:          # 관광열차 등: 상하행을 한 표에 (가운데 역명)

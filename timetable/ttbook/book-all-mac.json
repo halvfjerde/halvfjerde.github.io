@@ -161,5 +161,7 @@
  ],
  "lastLines": [
   "관광열차"
- ]
+ ],
+ "frontPages": 2,
+ "frontMap": "map.json"
 }

@@ -896,6 +896,23 @@ class Book:
             else: h += 0.2
         return h
 
+    def aim_rows(self, T):
+        """조준선을 긋는 행: 착발을 나누지 않은(한 행) 굵은 역명(주요역)의 행"""
+        if getattr(T, '_aim', None) is not None: return T._aim
+        out = set()
+        for cl in T.cells:
+            if 'jtt-st' in cl.cls and 'jtt-th' not in cl.cls and cl.rs == 1 and T.kind[cl.c][0] == 'L' and T.hEnd <= cl.r < T.fStart \
+                    and cl.node.find(lambda n: n.cls & {'jtt-b', 'jtt-k', 'tt-bold'}) is not None:
+                out.add(cl.r)
+        T._aim = out
+        return out
+
+    def aim_rects(self, x, y, w, h):
+        """조준선: 칸 가운데 높이에 긴 점 셋"""
+        t = 0.35; dl = 0.18 * w
+        ym = y + h / 2 - t / 2
+        return [('box', x + 0.11 * w + 0.30 * w * k, ym, x + 0.11 * w + 0.30 * w * k + dl, ym + t, t) for k in range(3)]
+
     def prepare(self, T):
         """칸마다 줄 목록·필요 높이, 행 높이(R 의 배수)"""
         fs = self.fs
@@ -1015,6 +1032,9 @@ class Book:
             if col.startswith('#'):
                 col = col[1:].upper()
                 c = c.but(color=''.join(x * 2 for x in col) if len(col) == 3 else col)
+            m_fs = re.match(r'\s*([\d.]+)(em|%)', (cell.style or {}).get('font-size', ''))     # fs= (1.44em 등): 글자 크기
+            if m_fs: c = c.but(size=c.size * float(m_fs.group(1)) / (100.0 if m_fs.group(2) == '%' else 1.0))
+            if 'jtt-text' in (cell.style or {}).get('font-family', ''): c = c.but(font='M')     # font=text: 본문 명조로 (DiaPro 기호 대신)
             if ('jtt-fb' in cell.cls or '700' in (cell.style or {}).get('font-weight', '')) and c.font == 'DM' \
                     and re.fullmatch(r'[\d\s,]*\d[\d\s,]*', cell.node.text() or ''): c = c.but(font='DGB')   # 굵게는 시각에만
             cell.lines = self.inl.lines(cell.node, c)
@@ -1512,12 +1532,17 @@ class Book:
         if side in ('R', 'B') and self.cur_mirror:
             pass
         seen = set()
+        aims_ = []
         for r in rows:
             for j in cols:
                 cell = cell_of(T, r, j)
                 if cell is None or id(cell) in seen: continue
                 if isinstance(cell, Ghost):
                     seen.add(id(cell))
+                    if T.hEnd <= r < T.fStart and r in rowpos and r in self.aim_rows(T):     # 주요역 행: 조준선
+                        ci = colpos[j]; ri = rowpos[r]
+                        aims_.append((xs[ci], ys[ri], xs[ci + 1] - xs[ci], ys[ri + 1] - ys[ri]))
+                        continue
                     if T.hEnd <= r < T.fStart and r in rowpos:     # 빈 열의 역 행: ‥
                         ci = colpos[j]; ri = rowpos[r]
                         g = self.inl.run('‥', Ctx('DM'))
@@ -1532,7 +1557,10 @@ class Book:
                 ci0, ci1 = min(colpos[x] for x in cc), max(colpos[x] for x in cc)
                 cx, cy = xs[ci0], ys[ri0]
                 cw, chh = xs[ci1 + 1] - cx, ys[ri1 + 1] - cy
+                if cell.rs == 1 and cell.r in self.aim_rows(T) and kind_of(T, j)[0] == 'T' and cell.node.text().strip() in ('', '‥'):
+                    aims_.append((cx, cy, cw, chh)); continue          # 주요역 행의 빈칸·‥: 조준선
                 self.draw_cell(T, cell, cx, cy, cw, chh, tex)
+        for a_ in aims_: rects += self.aim_rects(*a_)
         # 괘선
         rects += self.grid_rules(T, rows, cols, xs, ys, side)
         # 주기
@@ -1845,7 +1873,109 @@ class Book:
         return '\\directlua{\n' + '\n'.join(lua) + '\n}\n' + '\n'.join(tex)
 
     # ── 머리글·쪽 번호 ──
-    def page_side_title(self, recto, lines, dirs=None):
+    # ── 앞 펼침면: 노선도와 색인 ──
+    def line_pages(self, first):
+        """노선 표지별 실린 쪽 [(이름, 첫 쪽, 끝 쪽, 열쇠)] (처음 나오는 차례)"""
+        out = collections.OrderedDict()
+        for pi, pg in enumerate(self.pages):
+            for pc in pg['pieces']:
+                k = self.line_key(pc['T'])
+                nm = ('KTX ' + k[1]) if k[0] == 'KTX' else k[1]
+                if nm not in out: out[nm] = [pi + first, pi + first, pc['T']]
+                out[nm][1] = pi + first
+        return out
+
+    def map_key_page(self, key, first):
+        """map.json 의 노선 열쇠 → 그 노선 표가 처음 실린 쪽"""
+        ktx = key.startswith('KTX:')
+        nm = key[4:] if ktx else key
+        for pi, pg in enumerate(self.pages):
+            for pc in pg['pieces']:
+                T = pc['T']
+                if ktx and self.is_ktx(T) and (nm in T.title.text() or T.line == nm): return pi + first
+                if not ktx and not self.is_ktx(T) and T.line == nm: return pi + first
+        return None
+
+    def front_page(self, k, x0, first):
+        fs = self.fs
+        tex, ops = [], []
+        H = self.H
+        y0 = self.mt
+        W, Hh = self.cw, self.ch
+        if k == 0:
+            mp = json.load(open(os.path.join(self.base, self.cfg.get('frontMap', 'map.json')), encoding='utf-8'))
+            st = mp['st']
+            lats = [v[0] for v in st.values()]; lons = [v[1] for v in st.values()]
+            asp = 1.0 / math.cos(math.radians(36.3))
+            top_ = 22.0
+            sc = min((W - 70) / (max(lons) - min(lons)), (Hh - top_ - 20) / ((max(lats) - min(lats)) * asp))
+            ox = x0 + (W - (max(lons) - min(lons)) * sc) / 2
+            oy = y0 + top_ + (Hh - top_ - (max(lats) - min(lats)) * asp * sc) / 2
+            def P(n):
+                la, lo = st[n]
+                return ox + (lo - min(lons)) * sc, oy + (max(lats) - la) * asp * sc
+            tex.append(self.put_box(x0, y0, W, 14, self.inl.run('노선도', Ctx('GB', 14 / fs)), 'l', 't'))
+            tex.append(self.put_box(x0, y0 + 2, W, 12, self.inl.run('굵은 파란 줄은 고속철도·KTX 노선, 네모 안 숫자는 그 표의 첫 쪽', Ctx('M', 0.85)), 'r', 'b'))
+            def stroke(pts, w, rgb, dash=None):
+                c_ = ' '.join('%.3f' % v for v in rgb)
+                d_ = ('[%s] 0 d ' % ' '.join('%.2f' % v for v in dash)) if dash else '[] 0 d '
+                path = ' '.join(('%.3f %.3f %s' % (x, H - y, 'm' if i == 0 else 'l')) for i, (x, y) in enumerate(pts))
+                ops.append('q %.2f w 1 J 1 j %s RG %s%s S Q' % (w, c_, d_, path))
+            blue = (0.04, 0.37, 0.88)
+            for ln in mp['lines']:
+                if ln.get('hsr'): stroke([P(n) for n in ln['path']], 1.8, blue)
+            for ln in mp['lines']:
+                if not ln.get('hsr'): stroke([P(n) for n in ln['path']], 1.1, (0.1, 0.1, 0.1), [2.0, 1.2] if ln.get('dash') else None)
+            # 역: 흰 동그라미, 이름은 바깥쪽에
+            kq = 0.5523
+            for n in mp['names']:
+                x, y = P(n); r = 1.7
+                circ = '%.3f %.3f m ' % (x + r, H - y)
+                for a, b_ in ((0, 1), (1, 0), (0, -1), (-1, 0)):
+                    pass
+                Y = H - y
+                circ = ('%.3f %.3f m %.3f %.3f %.3f %.3f %.3f %.3f c %.3f %.3f %.3f %.3f %.3f %.3f c %.3f %.3f %.3f %.3f %.3f %.3f c %.3f %.3f %.3f %.3f %.3f %.3f c' %
+                        (x + r, Y, x + r, Y + kq * r, x + kq * r, Y + r, x, Y + r, x - kq * r, Y + r, x - r, Y + kq * r, x - r, Y,
+                         x - r, Y - kq * r, x - kq * r, Y - r, x, Y - r, x + kq * r, Y - r, x + r, Y - kq * r, x + r, Y))
+                ops.append('q 0.6 w 1 g 0 G %s b Q' % circ)
+                sd = mp.get('nameSide', {}).get(n) or ('l' if st[n][1] > 128.95 else 'r')
+                dy = -4 if 'u' in sd else 4 if 'd' in sd else 0
+                lab = self.inl.run(n, Ctx('M', 0.95))
+                if sd.startswith('l'): tex.append(self.put_box(x - 52.5, y - 4 + dy, 50, 8, lab, 'r', 'm'))
+                else: tex.append(self.put_box(x + 2.8, y - 4 + dy, 50, 8, lab, 'l', 'm'))
+            # 노선 이름표: 이름 + 첫 쪽
+            for ln in mp['lines']:
+                if 'label' not in ln: continue
+                at, dr = ln['label']
+                x, y = P(at)
+                nm = ln['key'][4:] if ln['key'].startswith('KTX:') else ln['key']
+                pg_ = self.map_key_page(ln['key'], first)
+                c_ = Ctx('GB', 1.05, '0A5FE0' if ln.get('hsr') else None)
+                body_ = self.inl.run(nm, c_) + ((r'\kern%.3fbp ' % (0.25 * fs)) + self.page_badge(pg_, 1.05, '0A5FE0' if ln.get('hsr') else None) if pg_ else '')
+                bw = 80
+                if dr == 'r': tex.append(self.put_box(x + 10, y - 5, bw, 10, body_, 'l', 'm'))
+                elif dr == 'l': tex.append(self.put_box(x - 10 - bw, y - 5, bw, 10, body_, 'r', 'm'))
+                elif dr == 't': tex.append(self.put_box(x - bw / 2, y - 16, bw, 10, body_, 'c', 'm'))
+                else: tex.append(self.put_box(x - bw / 2, y + 6, bw, 10, body_, 'c', 'm'))
+        else:
+            tex.append(self.put_box(x0, y0, W, 14, self.inl.run('색인', Ctx('GB', 14 / fs)), 'l', 't'))
+            rows = self.line_pages(first)
+            items = list(rows.items())
+            lh = 13.0
+            colw = (W - 12) / 2
+            per = int(math.ceil(len(items) / 2.0))
+            for i_, (nm, (a, b, T)) in enumerate(items):
+                col, r_ = divmod(i_, per)
+                xx = x0 + col * (colw + 12); yy = y0 + 26 + r_ * lh
+                kt = self.is_ktx(T)
+                c_ = Ctx('GB', 1.1, '0A5FE0' if kt else None)
+                pg_ = ('%d' % a) if a == b else ('%d∼%d' % (a, b))
+                tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(nm, c_), 'l', 'm'))
+                tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(pg_, Ctx('M', 1.1)), 'r', 'm'))
+                ops.append('q 0.3 w 0 G [0.6 1.6] 0 d %.3f %.3f m %.3f %.3f l S Q' % (xx + 62, H - (yy + lh * 0.7), xx + colw - 26, H - (yy + lh * 0.7)))
+        return tex, ' '.join(ops)
+
+    def page_side_title(self, recto, lines, dirs=None, nos=None):
         """쪽의 노선 이름: 바깥 여백에 세로로 크게 (쪽마다 하나)"""
         if not lines: return []
         size = self.cfg.get('pageTitleSize', 10) / self.fs
@@ -1858,6 +1988,9 @@ class Book:
             d = dirs.get(key, set())
             if len(d) != 1 or '' in d: return []
             return [(next(iter(d)), 'DIR')]           # 쪽에 한 방향만: 모듈의 방향 표지(오각형)
+        nos = nos or {}
+        def nmark(key):
+            return [('(%d)' % nos[key], cd)] if key in nos else []
         # KTX 표의 노선은 「KTX 경부선·호남선」으로 묶는다. 쪽에 한 방향만 실렸으면 노선 이름 뒤에 그 방향을
         segs_all = []
         ktx = [(k, ln) for k, ln in lines if k == 'KTX']
@@ -1865,10 +1998,10 @@ class Book:
             sg = [('KTX ', c)]
             for i, key in enumerate(ktx):
                 if i: sg.append(('·', c))
-                sg += [(key[1], c)] + dmark(key)
+                sg += [(key[1], c)] + nmark(key) + dmark(key)
             segs_all.append(sg)
         for key in [x for x in lines if x[0] != 'KTX']:
-            segs_all.append([(key[1], c)] + dmark(key))
+            segs_all.append([(key[1], c)] + nmark(key) + dmark(key))
         dot = lambda: items.append(r'\kern%.3fbp\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}\kern%.3fbp' % (
             0.2 * em, 1.2 * em, -0.12 * em, em, self.inl.run('·', c, True), 0.2 * em))
         for k, sg in enumerate(segs_all):
@@ -1889,6 +2022,11 @@ class Book:
                     if ch in VROT:
                         t, l = self.inl.vform(ch, cc, 1.2 * em)
                         items.append(t); i += 1; continue
+                    if ch.isdigit():          # 숫자(부번): 가로로 세워서
+                        j = i
+                        while j < len(ln) and ln[j].isdigit(): j += 1
+                        items.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (1.2 * em, -0.12 * e2, e2, self.inl.run(ln[i:j], cc, True)))
+                        i = j; continue
                     if is_latin(ch):          # 로마자는 눕혀서
                         j = i
                         while j < len(ln) and is_latin(ln[j]) and ln[j] != ' ': j += 1
@@ -1937,7 +2075,25 @@ class Book:
             sz = self.cfg.get('legendSize', 5.0) / fs
             parts = [self.inl.flat(self.inl.lines(d, Ctx('M', sz))[0]) for d in legend]
             # 「…는 ○○ 표에」: 그 표가 실린 쪽 번호를 네모 표지로 덧붙인다
+            def line_page(b):
+                ps = [p for p, X in getattr(self, '_tpages', []) if X.line == b and not self.is_ktx(X)]
+                return min(ps) + self.cfg.get('firstFolio', 2) if ps else None
+            def with_badges(text):
+                # 「환승 김천 경북선, …」「갑∼을 간은 호남선·전라선 표도 참조」: 노선 이름마다 그 노선 표의 첫 쪽 번호
+                out, pos = [], 0
+                for m_ in re.finditer(r'[가-힣]+선', text):
+                    nm = m_.group(0)
+                    pg_ = line_page(nm)
+                    if pg_ is None: continue
+                    out.append(self.inl.run(text[pos:m_.end()], Ctx('M', sz)))
+                    out.append(r'\kern%.3fbp ' % (0.2 * sz * fs) + self.page_badge(pg_, sz / 0.76 * 0.9, None))
+                    pos = m_.end()
+                out.append(self.inl.run(text[pos:], Ctx('M', sz)) if text[pos:] else '')
+                return ''.join(out)
             for i_, d in enumerate(legend):
+                t_ = re.sub(r'\s+', ' ', d.text()).strip()
+                if t_.startswith('환승 ') or t_.endswith('표도 참조'):
+                    parts[i_] = with_badges(t_); continue
                 m = re.search(r'.*는 (.+?) 표에\s*$', re.sub(r'\s+', ' ', d.text()))
                 if not m: continue
                 ps = [p for p, X in getattr(self, '_tpages', []) if m.group(1) in X.title.text()]
@@ -2342,7 +2498,9 @@ class Book:
             while len(pages) <= i: pages.append({'pieces': [], 'lines': []})
             return pages[i]
         ys = collections.defaultdict(float)
-        cur = {'c': 0}
+        FP = int(self.cfg.get('frontPages', 0))          # 앞에 비워 두는 쪽 (노선도·색인)
+        for i_ in range(FP): page(i_)['front'] = i_
+        cur = {'c': FP}
         def top(p): return ys[p] + gap if ys[p] > 0 else 0.0
         def side_of(p): return 'L' if p % 2 == 0 else 'R'
         def put(T, p, trains, rows, y, notes, h, x=0.0, narrow=False, side=None, bw=None):
@@ -3086,18 +3244,32 @@ class Book:
         first = self.cfg.get('firstFolio', 2)
         self._tpages = [(p, pc['T']) for p, pg in enumerate(self.pages) for pc in pg['pieces']]
         body = []
+        # 여러 쪽에 걸친 노선: 쪽마다 부번 (경부선 (1), (2) …)
+        seqno = collections.defaultdict(dict)
+        for pi, pg in enumerate(self.pages):
+            for k in pg['lines']: seqno[k][pi] = len(seqno[k]) + 1
         for pi, pg in enumerate(self.pages):
             folio = first + pi
             recto = folio % 2 == 1
             x0 = self.mi if recto else self.mo
             tex, rects = [], []
+            if 'front' in pg:                     # 노선도(왼쪽 면)·색인(오른쪽 면)
+                t_, lit_ = self.front_page(pg['front'], x0, first)
+                tex += t_
+                tex += self.page_furniture(folio, recto, '', '', None)
+                body.append(r'\begin{picture}(%.3f,%.3f)' % (self.W, self.H))
+                if lit_: body.append(r'\put(0,0){\pdfextension literal{%s}}' % lit_)
+                body += tex
+                body.append(r'\end{picture}')
+                body.append(r'\newpage')
+                continue
             for pc in pg['pieces']:
                 t, r, w, h = self.render_piece(pc['T'], pc['ch'], pc['rows'], x0 + pc.get('x', 0), self.mt + pc['y'], pc['notes'],
                                                line=pc['T'].line, part=pc['part'], hb=pc['hb'], pc=pc)
                 tex += t; rects += r
             # 머리글은 노선 이름만 (책을 넘기며 찾는 자리). 몇째 조각인지는 표의 세로 제목 끝에
             if self.page_title:
-                tex += self.page_side_title(recto, pg['lines'], pg.get('dirs'))
+                tex += self.page_side_title(recto, pg['lines'], pg.get('dirs'), {k: seqno[k][pi] for k in pg['lines'] if len(seqno[k]) > 1})
                 tex += self.page_furniture(folio, recto, '', '', self.page_legend([pc['T'] for pc in pg['pieces']]))
             else:
                 tex += self.page_furniture(folio, recto, '·'.join(ln for _, ln in pg['lines']), '')

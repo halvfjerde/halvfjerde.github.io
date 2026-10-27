@@ -1807,6 +1807,23 @@ local function build_grid(m, dir)
         rows[r] = new
       end
     end
+    -- 방향 행: 맨 위에 하행 쪽 ⇩・상행 쪽 ⇧（굵게 크게）, 가운데에「⇩하행·상행⇧」
+    local nu = #utr
+    local function span(n, txt)
+      local r = {}
+      if n <= 0 then return r end
+      r[1] = "<" .. n .. " al=c fs=xl fw=b font=text; " .. txt
+      for q = 2, n do r[q] = "!!;" end
+      return r
+    end
+    local drow = span(nt, U(0x2193))
+    local mid = { "<" .. L .. " al=c; " .. U(0x2193) .. " 하행 · 상행 " .. U(0x2191) }
+    for q = 2, L do mid[q] = "!!;" end
+    append(drow, mid); append(drow, span(nu, U(0x2191)))
+    local at = nhead + #m.pre + 1
+    table.insert(rows, at, drow)
+    table.insert(rinfo, at, { kind = "hdr", key = "_dir" })
+    nH = nH + 1
     for t = 1, nt do cinfo[t] = { kind = "train", ti = t, tr = trains[t] } end
     for q, role in ipairs(cols) do cinfo[nt + q] = { kind = "left", role = role } end
     for t = 1, #utr do cinfo[nt + L + t] = { kind = "train", ti = nt + t, tr = utr[t] } end
