@@ -466,7 +466,7 @@ class Table:
             if len(slots) < 2: return None
             text = via.replace(' ', '')
             text = text.replace('경유', '/경유')             # 「태백선/경유」 두 줄 세로쓰기
-            need = -(-(max(len(x) for x in text.split('/')) + 2) * 10 // 12)   # 긴 줄(괄호 포함) 1em, 행 1.2em
+            need = math.ceil((max(len(x) for x in text.split('/')) + 1.2) / 1.26)   # 긴 줄 1em + 괄호 둘 0.6em씩, 행 1.26em
             if need > len(slots): need = 0                   # 자리가 모자라면 주석 없이 ║ 만 (행이 굵어지지 않게)
             s0 = (len(slots) - need) // 2
             parts = collections.defaultdict(list)

@@ -549,7 +549,7 @@ class Inline:
                 em_ = c2.size * self.fs
                 # 위 괘선에 붙이고 밑에 반 줄 비운다
                 lines[-1].append(('obj', r'\vbox{\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}\kern%.3fbp}' % (
-                    1.0 * em_, self.run('➡', c2.but(font='DG')), 0.5 * em_), 1.0 * c2.size, 1.6 * c2.size, c2.size))
+                    1.0 * em_, self.run('➡', c2.but(font='DG')), 0.1 * em_), 1.0 * c2.size, 1.2 * c2.size, c2.size))
                 continue
             if 'jtt-b' in cls: c2 = c2.but(font='DGB', size=c2.size * 1.2)
             elif 'jtt-k' in cls: c2 = c2.but(font='DGB')
@@ -641,30 +641,33 @@ class Inline:
         parts, h = [], 0.0
         vb = k.find(lambda n: 'jtt-vb' in n.cls)
         bks = [x for x in k.kids if isinstance(x, Node) and 'jtt-bk' in x.cls]
+        BK = 0.6                                  # 괄호 자리 (잉크가 얇아 한 자보다 작게)
         def bk(n, top):
             nonlocal h
             g = self.run(n.text(), ctx.but(font='DM'))
-            parts.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (cwid, -0.14 * em, em, g))
-            h += 1
-            parts.append(r'\kern%.3fbp' % (0.15 * em)); h += 0.15
+            # 여는 괄호는 잉크가 아래쪽에 있으므로 자리의 아래에 붙인다
+            parts.append(r'\hbox to %.3fbp{\hss\raisebox{%.3fbp}[%.3fbp][0pt]{%s}\hss}' % (cwid, 0.0, BK * em, g))
+            h += BK
         ncol = max(1, len(self.text_cols(vb, ctx))) if vb is not None else 1
         cwid = 1.05 * em * ncol                 # 여러 줄이면 괄호는 줄들 가운데에
         if bks and 'jtt-bk--o' in bks[0].cls: bk(bks[0], True)
         if vb is not None:
             cols = self.text_cols(vb, ctx)
             boxes, hm = [], 0
+            hs_ = []
             for col in cols:
                 b, hh = self.vcol(col, ctx)
-                boxes.append(b); hm = max(hm, hh)
-            boxes = boxes[::-1]
-            parts.append(r'\hbox{' + ''.join(r'\hbox to %.3fbp{\hss\vtop{\kern0pt %s}\hss}' % (1.05 * em, b) for b in boxes) + '}')
+                boxes.append(b); hs_.append(hh); hm = max(hm, hh)
+            boxes, hs_ = boxes[::-1], hs_[::-1]
+            # 짧은 줄은 괄호 사이 가운데에
+            parts.append(r'\hbox{' + ''.join(r'\hbox to %.3fbp{\hss\vtop{\kern%.3fbp %s}\hss}' % (1.05 * em, (hm - hh) / 2 * em, b)
+                                             for b, hh in zip(boxes, hs_)) + '}')
             h += hm
         cl = [b for b in bks if 'jtt-bk--c' in b.cls]
         if cl:
-            parts.append(r'\kern%.3fbp' % (0.15 * em)); h += 0.15
             for b in cl:
                 g = self.run(b.text(), ctx.but(font='DM'))
-                parts.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (cwid, -0.14 * em, em, g)); h += 1
+                parts.append(r'\hbox to %.3fbp{\hss\raisebox{%.3fbp}[%.3fbp][0pt]{%s}\hss}' % (cwid, BK * em - em, BK * em, g)); h += BK
         tex = r'\vtop{\kern0pt\vbox{\offinterlineskip ' + ''.join(parts) + '}}'
         return ('obj', tex, 1.05 * ncol, h, ctx.size, 'v')
 
@@ -1388,7 +1391,7 @@ class Book:
         vmargin = 0
         if has_v:
             vmargin = (0.2 if rc & {'jtt-f1', 'jtt-fr'} else 0.1) * fs
-        if cell.node.find(lambda n: 'tt-darrow' in n.cls): vmargin = 0      # 이어짐 화살표는 위 괘선에 붙인다
+        if cell.node.find(lambda n: 'tt-darrow' in n.cls): vmargin = 0.1 * fs  # 이어짐 화살표는 위 괘선 가까이
         box = r'\vbox{\offinterlineskip %s}' % ''.join(lts)
         tex.append(self.put_box(x + pad * fs, y + (vmargin if va == 't' else 0), W, h - (vmargin if va in 't' else 0) - (vmargin if va == 'b' else 0), box, 'l', va))
 
@@ -2084,7 +2087,7 @@ class Book:
                 pc['ch'] = self.make_chunk(pc['T'], pc['side'], pc['trains'], avail, pc.get('ncol'))
                 pc['avail'] = avail
         # 세로 제목칸: 빈 열이 넉넉한 쪽에서는 열 두 칸 폭으로 넓히고 글자도 키운다 (쪽 안의 세로 띠는 모두 같이)
-        sc = self.cfg.get('wideBandScale', 1.4)
+        sc = self.cfg.get('wideBandScale', 1.0)          # 노선 이름 크기는 어디서나 같게
         for pg in pages:
             vps = [pc for pc in pg['pieces'] if getattr(pc['T'], 'band_left', False) and pc['side'] == 'B']
             if not vps: continue
