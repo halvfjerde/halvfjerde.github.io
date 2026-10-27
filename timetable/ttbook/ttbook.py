@@ -907,6 +907,20 @@ class Book:
         T._aim = out
         return out
 
+    ARW = 0.75          # 진행 방향 화살표 자리 (em)
+
+    def arrow_rects(self, x, y0, y1, dr):
+        """진행 방향 화살표: 첫 역 행부터 끝 역 행까지 축, 끝에 칠한 촉, 뒤에 V 깃"""
+        em = self.fs
+        hw, hl, fv = 0.26 * em, 0.85 * em, 0.38 * em
+        yt, yb = y0 + 0.25 * em, y1 - 0.15 * em
+        if dr == 'u': yt, yb = y1 - 0.25 * em, y0 + 0.15 * em      # 위로: 꼬리가 아래
+        s = 1 if yb > yt else -1
+        out = [('line', [(x, yt), (x, yb - s * hl * 0.6)], 0.45),
+               ('fill', [(x - hw, yb - s * hl), (x + hw, yb - s * hl), (x, yb)]),
+               ('line', [(x - hw, yt), (x, yt + s * fv), (x + hw, yt)], 0.45)]
+        return out
+
     def aim_rects(self, x, y, w, h):
         """조준선: 칸 가운데 높이에 긴 점 셋"""
         t = 0.35; dl = 0.18 * w
@@ -1531,6 +1545,16 @@ class Book:
         colpos = {j: i for i, j in enumerate(cols)}
         if side in ('R', 'B') and self.cur_mirror:
             pass
+        # 진행 방향 화살표: 역명 칸의 착발 칸 쪽 (상하병기는 왼쪽 ↓·오른쪽 ↑)
+        arr_ = []
+        for ci, j in enumerate(cols):
+            if kind_of(T, j) != ('L', 'st'): continue
+            for dci, sd in ((1, 'r'), (-1, 'l')):
+                k2 = ci + dci
+                if 0 <= k2 < len(cols) and kind_of(T, cols[k2]) == ('L', 'ad'):
+                    arr_.append((ci, j, sd, ('u' if sd == 'r' else 'd') if getattr(T, 'both', False) else 'd'))
+        self.cur_arrow = {}
+        for ci, j, sd, _ in arr_: self.cur_arrow.setdefault(j, set()).add(sd)
         seen = set()
         aims_ = []
         for r in rows:
@@ -1561,6 +1585,12 @@ class Book:
                     aims_.append((cx, cy, cw, chh)); continue          # 주요역 행의 빈칸·‥: 조준선
                 self.draw_cell(T, cell, cx, cy, cw, chh, tex)
         for a_ in aims_: rects += self.aim_rects(*a_)
+        srows = [i for i, r in enumerate(rows) if T.hEnd <= r < T.fStart]
+        if len(srows) >= 2:
+            for ci, j, sd, dr in arr_:
+                rects += self.arrow_rects(xs[ci] + self.ARW * fs / 2 + 0.12 * fs if sd == 'l' else xs[ci + 1] - self.ARW * fs / 2 - 0.12 * fs,
+                                          ys[srows[0]], ys[srows[-1] + 1], dr)
+        self.cur_arrow = {}
         # 괘선
         rects += self.grid_rules(T, rows, cols, xs, ys, side)
         # 주기
@@ -1579,6 +1609,10 @@ class Book:
     def draw_cell(self, T, cell, x, y, w, h, tex):
         fs = self.fs
         cls, st = cell.cls, cell.style
+        sd_ = getattr(self, 'cur_arrow', {}).get(cell.c)
+        if sd_ and 'jtt-st' in cls and 'jtt-th' not in cls and T.hEnd <= cell.r < T.fStart:   # 화살표 자리를 비운다
+            if 'l' in sd_: x += self.ARW * fs; w -= self.ARW * fs
+            if 'r' in sd_: w -= self.ARW * fs
         rc = T.rowcls[cell.r]
         if not cell.lines: return
         # 여백
@@ -1703,6 +1737,7 @@ class Book:
             labs = [(len(c.node.text().strip()), sum(T.colW[c.c + i] for i in range(1, c.cs))) for c in T.cells
                     if c.c == j and 'jtt-th' in c.cls and c.node.text().strip()]
             need = max([x + 0.6 for x in names] + [x + 0.6 - w / em for x, w in labs] + [3.0]) * em
+            if k == 'L': need += self.ARW * em * (2 if getattr(T, 'both', False) else 1)    # 진행 방향 화살표 자리
             T.colW[j] = min(T.colW[j], need)
 
     def ref_of(self, T, cell):
@@ -1793,7 +1828,7 @@ class Book:
         return out
 
     def pdf_ops(self, rects):
-        ops = []
+        ops, extra = [], []
         H = self.H
         def rect(x, y, w, h):          # 위→아래 좌표
             ops.append('%.3f %.3f %.3f %.3f re' % (x, H - y - h, w, h))
@@ -1821,7 +1856,10 @@ class Book:
                 _, x0, y0, x1, y1, t = r
                 rect(x0, y0, x1 - x0, t); rect(x0, y1 - t, x1 - x0, t)
                 rect(x0, y0, t, y1 - y0); rect(x1 - t, y0, t, y1 - y0)
-        return '0 g ' + ' '.join(ops) + ' f'
+            elif r[0] in ('line', 'fill'):          # 꺾은선(굵기) / 칠한 다각형
+                pts = ' '.join('%.3f %.3f %s' % (x, H - y, 'm' if i == 0 else 'l') for i, (x, y) in enumerate(r[1]))
+                extra.append(('q %.3f w 0 J 0 j 0 G %s S Q' % (r[2], pts)) if r[0] == 'line' else ('q 0 g %s h f Q' % pts))
+        return '0 g ' + ' '.join(ops) + ' f ' + ' '.join(extra)
 
     # ── 글꼴 정의: 이름이 아니라 찾아 둔 파일로 (TeX 쪽 이름 찾기에 기대지 않는다) ──
     FAMILIES = [  # 명령, 주 글꼴, 대체 글꼴들, 추가 기능
