@@ -68,6 +68,16 @@ BRANCH = {
     ('gen', '충북선'): [[[], ['대전']]],
 }
 
+# 끝에서 갈라지는 갈래 (수서 발착 표에 경전선·전라선 열차를 합친 것): 다른 갈래로 가는 열차에게 이 갈래는 ‥
+DIVERGE = {
+    ('ktx', '경부선'): [['물금', '구포', '부산'], ['진영', '창원중앙', '창원', '마산', '진주']],
+    ('ktx', '호남선'): [['김제', '정읍', '장성', '광주송정', '나주', '목포'], ['전주', '남원', '곡성', '구례구', '순천', '여천', '여수엑스포']],
+}
+# 수서를 드나드는 열차를 다른 노선의 수서 발착 표에 합치는 KTX 노선 (그 노선의 표에는 서울 쪽 열차만)
+SUSEO_TO = {('ktx', '경전선'): ('ktx', '경부선'), ('ktx', '전라선'): ('ktx', '호남선')}
+MERGE_SUSEO = False          # 시험해 보았으나 합친 수서 표가 길어져 위아래로 들지 않아 쪽이 늘어난다 (아직 쓰지 않음)
+if not MERGE_SUSEO: SUSEO_TO = {}
+
 # 착발을 나누지 않는 역: 연결선으로 애매하게 붙는 역
 NOSPLIT_ALL = {'행신'}
 SPLIT_ALL = {'수서'}         # 서는 열차가 있으면 늘 착발을 나눈다
@@ -143,6 +153,7 @@ class Table:
     def __init__(self, t, hanja):
         self.cat, self.line, self.dir = t['cat'], t['line'], t['dir']
         self.variant = t.get('variant')
+        self.merged = t.get('merged')       # 합친 노선 (경전선·전라선)
         st = [clean_name(s) for s in t['stations']]
         self.hanja = hanja
         trains = []
@@ -226,6 +237,15 @@ class Table:
                         if T[k] is None: T[k] = 'I'
                     continue
                 for k in range(u + 1, v): T[k] = 'I' if k in off else 'v'   # 다른 갈래를 달리는 동안은 ║
+            # 끝에서 갈라지는 갈래: 열차가 서는 갈래가 아닌 쪽은 지나지 않는다 (‥)
+            for alt in ([DIVERGE.get((self.cat, self.line), [])] if self.merged else []):
+                gi = [[self.st.index(s) for s in grp if s in self.st] for grp in alt]
+                used = [k for k, grp in enumerate(gi) if any(i in S for i in grp)]
+                if not used: continue
+                for k, grp in enumerate(gi):
+                    if k in used: continue
+                    for i in grp:
+                        if T[i] in ('v', 'I'): T[i] = None
 
     # ── 기준 시각으로 줄 세우기 ──
     def sort(self):
@@ -280,6 +300,7 @@ class Table:
         else: band_names = [self.st[i] for i in band]
         dirmark = 'k하행.' if self.dir == 'down' else 'n상행.'
         vlab = (' 수서발' if self.dir == 'down' else ' 수서행') if self.variant == '수서' else ''
+        if self.merged: vlab = f'·{self.merged}' + vlab           # 경부선·경전선 수서발
         name = ('KTX ' if ktx else '') + (self.line_disp) + vlab
         span = (f'{band_names[0]} > {band_names[-1]}' if band_names[0] != band_names[-1] else ' > '.join(band_names)) if not sub else ' > '.join(sub.split(' ─ ')[::-1] if self.dir == 'up' else sub.split(' ─ '))
         L = []
@@ -357,10 +378,16 @@ class Table:
             major = sorted({i for i, s in enumerate(self.st) if s in sh['major']} | self.split)
         L.append('[stations]')
         rules = set()
-        for alt in BRANCH.get((self.cat, self.line), []):
+        alts_r = list(BRANCH.get((self.cat, self.line), []))
+        if self.merged: alts_r.append(DIVERGE.get((self.cat, self.line), []))
+        for alt in alts_r:
             for grp in alt:
                 ix = [self.st.index(s) for s in grp if s in self.st]
                 if ix: rules |= {min(ix), max(ix) + 1}
+        if self.merged:      # 끝 갈래 안쪽은 가르지 않는다 (물금·구포·부산은 한 덩어리)
+            for grp in DIVERGE.get((self.cat, self.line), []):
+                ix = [self.st.index(s) for s in grp if s in self.st]
+                if ix: rules -= set(range(min(ix) + 1, max(ix) + 1))
         rules -= {0, n}
         for i, s in enumerate(self.st):
             if i in rules: L.append('---')
@@ -507,7 +534,7 @@ class Table:
                     if arr == '_': NEED.add((tr['no'], o, st, self.end_times(tr)[0]))
                     out.append(f'{arr},{t}')
             else:
-                out.append({'v': 'v', 'x': 'x', 'I': 'i'}[x])
+                out.append({'v': 'v', 'x': 'x', 'I': 'i'}.get(x, 'x'))   # None: 갈라진 다른 갈래 (‥)
         res = []
         for c in out:
             if res and res[-1][0] == c and c in ('v', 'x', 'i', '!'): res[-1][1] += 1
@@ -566,9 +593,28 @@ def main():
             for d in ('down', 'up'):
                 t = tabs.get((cat, sheet, d))
                 if not t: continue
-                if (cat, sheet) in SPLIT_SUSEO:
+                if (cat, sheet) in SPLIT_SUSEO or (cat, sheet) in SUSEO_TO:
                     k = next(i for i, x in enumerate(t['stations']) if clean_name(x) == '수서')
                     t = dict(t, variant=variant, trains=[tr for tr in t['trains'] if isinstance(tr['times'][k], int) == (variant == '수서')])
+                    # 수서 발착 표에 다른 노선(경전선·전라선)의 수서 열차를 합친다: 그 노선에만 있는 역은 끝의 갈래로
+                    if variant == '수서':
+                        for (gc, gs), host in SUSEO_TO.items():
+                            if host != (cat, sheet) or (gc, gs, d) not in tabs: continue
+                            g = tabs[(gc, gs, d)]
+                            gk = next(i for i, x in enumerate(g['stations']) if clean_name(x) == '수서')
+                            gtr = [tr for tr in g['trains'] if isinstance(tr['times'][gk], int)]
+                            hn = [clean_name(x) for x in t['stations']]
+                            extra = [x for x in g['stations'] if clean_name(x) not in hn]
+                            st2 = (list(t['stations']) + extra) if d == 'down' else (extra + list(t['stations']))
+                            nm2 = [clean_name(x) for x in st2]
+                            def remap(tr, names):
+                                pos = {clean_name(x): i for i, x in enumerate(names)}
+                                tt = [None] * len(st2)
+                                for j, x in enumerate(nm2):
+                                    if x in pos: tt[j] = tr['times'][pos[x]]
+                                return dict(tr, times=tt)
+                            t = dict(t, stations=st2, trains=[remap(tr, t['stations']) for tr in t['trains']] + [remap(tr, g['stations']) for tr in gtr])
+                            t['merged'] = gs
                 T = Table(t, data['hanja']); T.line_disp = line
                 T.wiki(sub); pair[d] = T
             shared = share(list(pair.values()))

@@ -664,8 +664,8 @@ class Inline:
             if not bb:
                 return r'\hbox to %.3fbp{\hss\raisebox{%.3fbp}[%.3fbp][0pt]{%s}\hss}' % (cwid, 0.0 if opening else -0.4 * em, 0.6 * em, g), 0.6
             _, y0, _, y1, _ = bb
-            S = (y1 - y0) + GAP
-            r = (GAP - y0) if opening else (S - GAP - y1)
+            S = (y1 - y0) + GAP + (0 if opening else 0.08)
+            r = (GAP - y0) if opening else (S - GAP - y1 - 0.08)     # 닫는 괄호는 조금 더 아래로
             return r'\hbox to %.3fbp{\hss\raisebox{%.3fbp}[%.3fbp][0pt]{%s}\hss}' % (cwid, r * em, S * em, g), S
         def bk(n, top):
             nonlocal h
