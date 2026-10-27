@@ -131,10 +131,10 @@
   }
  ],
  "hsrLast": true,
- "backOrder": [
-  "경부선",
-  "강릉선",
-  "중부내륙선",
-  "호남선"
+ "belowFacing": [
+  {
+   "line": "장항선",
+   "with": "교외선"
+  }
  ]
 }

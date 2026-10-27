@@ -2219,6 +2219,10 @@ class Book:
                 put(Td_, c, trd, rd_, y, False, hd_, 0.0, False, 'B', job['bw'])
                 put(Tu_, c + 1, tru, ru_, y, False, hu_, 0.0, False, 'B', job['bw'])
                 ys[c] = y + hd_; ys[c + 1] = y + hu_
+                for k_, bl_ in enumerate(job.get('below', [])):     # belowFacing: 밑에 다른 노선의 하행(왼쪽)·상행(오른쪽)
+                    Y, Yc, ry, hy = bl_
+                    put(Y, c + k_, Yc, ry, ys[c + k_] - fw, False, hy, 0.0, False, 'B', job['bw'])
+                    ys[c + k_] += hy - fw
                 cur['c'] = c + 2
                 return True
             if job['kind'] == 'stackN':           # 여러 쪽에 걸쳐 위(하행)·아래(상행) (오른쪽 면에서 시작하면 오·왼·오…)
@@ -2584,6 +2588,24 @@ class Book:
             for T in (Td, Tu, Yd, Yu): T.custom_jobs = None; T.stack_with = None; T.side_with = None; T.stacked = False
             Td.custom_jobs = [dict(sj[0], beside=(wR, ys_, nR))]
             Tu.stacked = Yd.stacked = Yu.stacked = True
+        # belowFacing: 마주 보는 하행·상행(facing) 밑에 다른 노선의 하행·상행을 (왼쪽 면 밑에 하행, 오른쪽 면 밑에 상행)
+        for bf in self.cfg.get('belowFacing', []):
+            pick = lambda ln, d: [T for T in tables if T.line == ln and not self.is_ktx(T) and d in T.title.text()]
+            if not all(len(pick(ln, d)) == 1 for ln in (bf['line'], bf['with']) for d in ('하행', '상행')): continue
+            Td, Yd, Yu = pick(bf['line'], '하행')[0], pick(bf['with'], '하행')[0], pick(bf['with'], '상행')[0]
+            fj = (Td.custom_jobs or [None])[0]
+            if not fj or fj['kind'] != 'facing': continue
+            bwf = self.band_w(self.cw)
+            bl_, ok = [], True
+            for (T_, trs_, rows_, h_), Y in zip(fj['parts'], (Yd, Yu)):
+                Y.fold = False; Y.band_left = False
+                _, Yc, _ = self.blocks(Y)
+                ry = list(range(Y.nrow)); hy = self.piece_h(Y, ry, False, bwf)
+                if len(Yc) > self.cap(Y, 'B', True) or h_ + hy - fw > PH + 0.01: ok = False; break
+                bl_.append((Y, Yc, ry, hy))
+            if not ok: continue
+            for Y in (Yd, Yu): Y.custom_jobs = None; Y.stack_with = None; Y.side_with = None; Y.stacked = True
+            Td.custom_jobs = [dict(fj, below=bl_)]
         # tailWith: 노선의 KTX 하행·상행에 같은 노선의 작은 별표(수서 발착 병결 등)를 곁들여 한 흐름으로
         for tw in self.cfg.get('tailWith', []):
             ks = [T for T in tables if self.is_ktx(T) and T.line == tw['line']]
