@@ -1827,8 +1827,38 @@ class Book:
         return [{'T': Td, 'Tu': Tu, 'kind': 'side', 'parts': js, 'h': max(j[3] for j in js), 'trs': js[0][1],
                  'rows': js[0][2], 'notes': False, 'bw': bw}]
 
+    def tail_side_jobs(self, Td, Tu):
+        """하행·상행 각각 한 쪽 가득한 단(오른쪽 역명 없이)을 싣고, 끝에 남는 몇 편은 둘을 한 쪽에 좌우로.
+        한 쪽에 단 하나만 들어가는 높이의 표에서, 펼침면 짝(오른쪽 면이 거의 빈)보다 쪽을 아낀다"""
+        if self.cfg.get('rightStubSingle', True): return None
+        for T in (Td, Tu): T.band_left = False; T.fold = False
+        PH, fw = self.ch, self.frame_w
+        half = self.half_w()
+        bwf, bwh = self.band_w(self.cw), self.band_w(half)
+        jobs, rems = [], []
+        for T in (Td, Tu):
+            _, Tc, _ = self.blocks(T)
+            capS = self.cap(T, 'B', True)
+            n = len(Tc)
+            full, r = divmod(n, capS)
+            if full < 1 or r == 0: return None
+            rows = list(range(T.nrow))
+            h = self.piece_h(T, rows, False, bwf)
+            if h > PH + 0.01: return None
+            for g in range(full):
+                trs = Tc[g * capS:(g + 1) * capS]
+                jobs.append({'T': T, 'kind': 'single', 'trs': trs, 'rows': rows, 'notes': False, 'sB': capS, 'side': 'B',
+                             'narrow': False, 'nat': self.fixed_w(T, 'B') + len(trs) * self.P0, 'bw': bwf, 'h': h})
+            rt = Tc[full * capS:]
+            if self.fixed_w(T, 'B') + len(rt) * self.P0 * self.squeeze > half + 0.01: return None
+            rems.append((T, rt, rows, self.piece_h(T, rows, False, bwh)))
+        jobs.append({'T': Td, 'Tu': Tu, 'kind': 'side', 'parts': rems, 'h': max(r[3] for r in rems), 'trs': rems[0][1],
+                     'rows': rems[0][2], 'notes': False, 'bw': bwh, 'nosplit': True})
+        return jobs
+
     def jobs_of(self, T):
         """표 하나를 실을 일감들: [{kind single|pair, trs, rows, h, ...}] (역 구간 먼저, 그 안에서 열차 무리 차례)"""
+        if getattr(T, 'custom_jobs', None): return T.custom_jobs
         if getattr(T, 'stack_with', None) is not None: return self.stack_jobs(T, T.stack_with)
         if getattr(T, 'side_with', None) is not None: return self.side_jobs(T, T.side_with)
         if getattr(T, 'stacked', False): return []
@@ -1956,7 +1986,7 @@ class Book:
             if job['kind'] == 'side':
                 y = top(c)
                 # 왼쪽 면에서 두 면의 높이가 같으면: 하행은 왼쪽 면, 상행은 오른쪽 면에 (펼침면 좌우로)
-                if c % 2 == 0 and abs(top(c) - top(c + 1)) < 0.01:
+                if c % 2 == 0 and abs(top(c) - top(c + 1)) < 0.01 and not job.get('nosplit'):
                     bwf = self.band_w(self.cw)
                     hs_ = [self.piece_h(T_, rows_, False, bwf) for T_, trs_, rows_, h_ in job['parts']]
                     hf = max(hs_)
@@ -2013,8 +2043,26 @@ class Book:
                 return True
             return False
 
+        def remeta(pg):
+            pg['lines'], pg['dirs'] = [], collections.defaultdict(set)
+            for q in pg['pieces']:
+                key = ('KTX', q['T'].line) if self.is_ktx(q['T']) else ('', q['T'].line)
+                if key not in pg['lines']: pg['lines'].append(key)
+                tt = q['T'].title.text() if q['T'].title is not None else ''
+                pg['dirs'][key].add('하행' if '하행' in tt else '상행' if '상행' in tt else '')
         def advance(job, c):
             if job['kind'] == 'stack':
+                # 펼침면으로 가야 해서 오른쪽 면이 통째로 빌 때: 앞 쪽 맨 아랫단의 작은 표(통째로 그 쪽에 있는 것)를 옮겨 채운다
+                if c % 2 == 1 and ys[c] == 0 and c >= 1 and page(c - 1)['pieces']:
+                    prev = page(c - 1)
+                    low = max(q['y'] for q in prev['pieces'])
+                    mv = [q for q in prev['pieces'] if abs(q['y'] - low) < 0.01]
+                    if low > 0 and all(q['side'] == 'B' and all(r in prev['pieces'] for r in placed[id(q['T'])]) for q in mv):
+                        for q in mv:
+                            prev['pieces'].remove(q); q['y'] = 0.0; page(c)['pieces'].append(q)
+                        ys[c - 1] = max(q['y'] + q['h'] for q in prev['pieces'])
+                        ys[c] = max(q['h'] for q in mv)
+                        remeta(prev); remeta(page(c))
                 cur['c'] = c + 1          # 오른쪽 면에서는 다른 작은 표로 채울 수 있게 한 쪽씩
             elif job['kind'] == 'pair' and c % 2 == 0:
                 # 왼쪽 면에 자리가 없고 오른쪽 면이 비었으면 오른쪽 면에서 시작해 넘겨 잇는다
@@ -2049,7 +2097,7 @@ class Book:
             if mode == 'left': T.band_left = fits
             else: T.band_left = fits and len(jl) <= len(jt) and 2 * hl - fw <= PH + 0.01 < 2 * ht - fw
         for T in tables:
-            T.band_left = False; T.fold = False; T.stack_with = None; T.stacked = False; T.side_with = None
+            T.band_left = False; T.fold = False; T.stack_with = None; T.stacked = False; T.side_with = None; T.custom_jobs = None
             if self.fold != 'off':
                 jt = self.jobs_of(T)
                 T.band_left = T.head is not None; T.fold = True
@@ -2102,6 +2150,16 @@ class Book:
                         Td.stack_with, Tu.stacked = Tu, True
                         continue
                     for T, (f, b) in zip(ts, old): T.fold, T.band_left = f, b
+                    # 한 쪽 가득한 단 + 끝에 남는 몇 편은 하행·상행을 한 쪽에 좌우로 (펼침면 짝보다 쪽이 적으면)
+                    if self.cfg.get('tailSide', True) and not any(T.fold for T in ts):
+                        tj = self.tail_side_jobs(Td, Tu)
+                        if tj:
+                            pages_t = sum(1 for j in tj if j['kind'] == 'single') + 1
+                            pages_p = sum(sum(2 if j['kind'] == 'pair' else 1 for j in self.jobs_of(T)) for T in ts)
+                            if pages_t < pages_p:
+                                Td.custom_jobs, Tu.stacked = tj, True
+                                continue
+                        for T, (f, b) in zip(ts, old): T.fold, T.band_left = f, b
             if any(T.band_left for T in ts) and not all(T.band_left for T in ts):
                 ok = True
                 for T in ts:
