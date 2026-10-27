@@ -1325,6 +1325,7 @@ class Book:
             R = (self.inl.flat(ln), self.inl.line_w(ln) * fs, line_height(ln))
         else:
             R = seg(parts[2], Ctx('M', 1.0, color))      # 오른쪽 주(운행일 등): 숫자까지 명조로
+        if L[0] and not C[0] and not R[0]: L, C = ('', 0.0, 0.0), L      # 이름만 있는 띠(관광열차): 가운데에
         gap = 1.0 * fs
         if L[1] + C[1] + R[1] + 2 * gap <= W or not C[0]:
             plan = [(L[0], C[0], R[0], max(L[2], C[2], R[2], 1.25))]
@@ -2057,13 +2058,15 @@ class Book:
             tex.append(self.put_box(x0, y0, W, 14, self.inl.run('색인', Ctx('GB', 14 / fs)), 'l', 't'))
             rows = self.line_pages(first)
             items = list(rows.items())
+            bk_ = [i for i, pg in enumerate(self.pages) if 'back' in pg and self.back[pg['back']]['cols']]
+            if bk_: items.append(('역명 색인', (bk_[0] + first, bk_[-1] + first, None)))
             lh = 13.0
             colw = (W - 12) / 2
             per = int(math.ceil(len(items) / 2.0))
             for i_, (nm, (a, b, T)) in enumerate(items):
                 col, r_ = divmod(i_, per)
                 xx = x0 + col * (colw + 12); yy = y0 + 26 + r_ * lh
-                kt = self.is_ktx(T)
+                kt = T is not None and self.is_ktx(T)
                 c_ = Ctx('GB', 1.1, '0A5FE0' if kt else None)
                 pg_ = ('%d' % a) if a == b else ('%d∼%d' % (a, b))
                 tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(nm, c_), 'l', 'm'))
@@ -2084,7 +2087,63 @@ class Book:
                     tex.append(self.put_box(x0, yy, 60, 12, self.inl.run(head_, Ctx('GB', 1.1)), 'l', 'm'))
                     tex.append(self.put_box(x0 + 62, yy, W - 62, 12, self.inl.flat(ln_[0]) if ln_ else '', 'l', 'm'))
                     yy += 15
+            if not fm: self.how_to_read(tex, ops, x0, yy + 14, W)
         return tex, ' '.join(ops)
+
+    def how_to_read(self, tex, ops, x0, yy, W):
+        """범례 쪽 아래: 표 안의 기호와 표 읽는 법 (표에 쓰는 글꼴·그림 그대로)"""
+        fs = self.fs
+        M_ = lambda t: self.inl.run(t, Ctx('M', 1.1))
+        def head(t):
+            nonlocal yy
+            tex.append(self.put_box(x0, yy, W, 14, self.inl.run(t, Ctx('GB', 14 / fs)), 'l', 't'))
+            yy += 24
+        def row(sym, text, h=12, sw=60):
+            nonlocal yy
+            if sym: tex.append(self.put_box(x0, yy, sw, h, sym, 'l', 'm'))
+            tex.append(self.put_box(x0 + sw + 2, yy, W - sw - 2, h, text, 'l', 'm'))
+            yy += h + 3
+        D = lambda t: self.inl.run(t, Ctx('DM', 1.3))
+        sp = r'\kern%.3fbp ' % (0.8 * fs)
+        head('기호')
+        row(D('\u21c2'), M_('서지 않고 지나감'))
+        row(D('\u2551'), M_('다른 선을 거쳐 감'))
+        row(D('\u2025'), M_('이 역・구간을 지나지 않음'))
+        def cells(a_, b_, text):           # 표 칸 두 개(위·아래)에 넣어 보인다: 종착 표지가 칸 위·아래에 붙는 모양 그대로
+            nonlocal yy
+            R_ = self.R; c_ = Ctx('DM', 1.0)
+            for i_, t_ in enumerate((a_, b_)):
+                tex.append(self.put_box(x0, yy + i_ * R_, self.P0, R_, self.inl.run(t_, c_), 'c', 'm'))
+            box_rects.append(('box', x0, yy, x0 + self.P0, yy + 2 * R_, self.rw[1]))
+            box_rects.append(('h', x0, x0 + self.P0, yy + R_, 1))
+            tex.append(self.put_box(x0 + 62, yy, W - 62, 2 * R_, text, 'l', 'm'))
+            yy += 2 * R_ + 3
+        box_rects = []
+        cells('1722', '\u2594', M_('이 역에서 끝남 (종착)'))
+        cells('\u2581', '1927', M_('상하병기 표의 상행 종착 (아래에서 위로 읽음)'))
+        row(M_('着') + sp + M_('發') + sp + M_('〃'), M_('도착　출발　출발 (착발을 나누지 않은 역)'))
+        row(self.page_badge(28, 1.1, None, 1.1), M_('이어지는 표가 실린 쪽'))
+        row(D('\u2b0f'), M_('표 끝 역에서 다른 선으로 넘어감 (세로 글씨는 그 노선)'))
+        yy += 10
+        head('표 읽는 법')
+        rects = box_rects
+        # 진행 방향 화살표: 착발 칸과 첫 열차 사이의 선을 대신한다
+        h = 3 * self.R
+        rects += self.arrow_rects(x0 + 8, yy, yy + h, 'd', self.rw[2])
+        tex.append(self.put_box(x0 + 94, yy, W - 94, h / 2, M_('열차가 달리는 방향. 위에서 아래로 읽는다'), 'l', 'm'))
+        tex.append(self.put_box(x0 + 94, yy + h / 2, W - 94, h / 2, M_('상하병기 표는 가운데 역명의 왼쪽이 하행, 오른쪽이 상행'), 'l', 'm'))
+        rects += self.arrow_rects(x0 + 20, yy, yy + h, 'u', self.rw[2])
+        yy += h + 6
+        rects += self.aim_rects(x0, yy, self.P0, self.R)
+        rects += self.aim_rects(x0 + self.P0, yy, self.P0, self.R)
+        row('', M_('조준선: 출발 시각만 적는 굵은 역(주요역)의 빈 칸에 긋는 점선'), sw=92)
+        G_ = lambda t: self.inl.run(t, Ctx('GB', 1.0))
+        m_ = lambda t: self.inl.run(t, Ctx('M', 1.0))
+        bd = lambda n: r'\kern%.3fbp ' % (0.25 * fs) + self.page_badge(n, 1.0, None, 1.0)
+        row(G_('대전∼조치원') + m_(': 경부선') + bd(4), M_('쪽 머리: 같은 구간을 함께 다니는 노선의 표'), sw=92)
+        row(G_('김천') + m_(': 경북선') + bd(23), M_('쪽 머리: 그 역에서 갈아탈 수 있는 노선의 표'), sw=92)
+        row(G_('경부선') + m_('(1)'), M_('바깥 여백의 노선 이름: 여러 펼침에 걸친 노선의 차례'), sw=92)
+        ops.append(self.pdf_ops(rects))
 
     def page_side_title(self, recto, lines, dirs=None, nos=None):
         """쪽의 노선 이름: 바깥 여백에 세로로 크게 (쪽마다 하나)"""
@@ -3378,6 +3437,116 @@ class Book:
                     q['vrun'] = (k, sum(r['h'] for r in run) - (len(run) - 1) * fw, len(run))
                     q['vrun_part'] = '・'.join(dict.fromkeys(r['part'] for r in run if r.get('part')))    # 한 칸에 걸친 몇째들: (첫째·둘째)
         self.pages = pages
+        self.plan_back()
+
+    # ── 책 뒤: 역명 색인과 판권 ──
+    def station_pages(self, first):
+        sp = collections.defaultdict(set)
+        for pi, pg in enumerate(self.pages):
+            for pc in pg.get('pieces', []):
+                T = pc['T']; rs = set(pc['rows'])
+                for cl in T.cells:
+                    if 'jtt-st' in cl.cls and 'jtt-th' not in cl.cls and cl.r in rs and T.kind[cl.c][0] == 'L':
+                        nm = re.sub(r'[\(（].*?[\)）]|\s', '', cl.node.text())
+                        if nm and nm != '〃': sp[nm].add(pi + first)
+        return sp
+
+    def plan_back(self):
+        self.back = []
+        si = self.cfg.get('stationIndex')
+        if not si: return
+        first = self.cfg.get('firstFolio', 2)
+        fs = self.fs
+        sp = self.station_pages(first)
+        def rng(ps):
+            ps = sorted(ps); out = []; a = b = ps[0]
+            for p in ps[1:]:
+                if p == b + 1: b = p
+                else: out.append((a, b)); a = b = p
+            out.append((a, b))
+            return ', '.join(str(a) if a == b else '%d∼%d' % (a, b) for a, b in out)
+        NC = si.get('cols', 4); gap = 10.0
+        colw = (self.cw - (NC - 1) * gap) / NC
+        lh = 1.38 * fs; top = 26.0
+        cap = int((self.ch - top) / lh)
+        wd = lambda t, c: self.inl.wc.get(self.inl.run(t, c), len(t)) * fs
+        CHO = 'ㄱㄱㄴㄷㄷㄹㅁㅂㅂㅅㅅㅇㅈㅈㅊㅋㅌㅍㅎ'
+        units, cur = [], None             # unit: 함께 둘 줄들 [(종류, …)]
+        for nm in sorted(sp):
+            c0 = CHO[(ord(nm[0]) - 0xAC00) // 588] if '가' <= nm[0] <= '힣' else nm[0]
+            ps = rng(sp[nm])
+            if wd(nm, Ctx('M', 1.0)) + wd(ps, Ctx('M', 1.0)) + 8 <= colw: ent = [('e', nm, ps)]
+            else:                          # 쪽이 많으면 이름 아래에 쪽을 몇 줄로 (단 폭에 맞춰 쉼표에서)
+                ent = [('n', nm, '')]; ln_ = ''
+                for part in ps.split(', '):
+                    t_ = (ln_ + ', ' + part) if ln_ else part
+                    if ln_ and wd(t_ + ',', Ctx('M', 1.0)) > colw - fs: ent.append(('p', '', ln_ + ',')); ln_ = part
+                    else: ln_ = t_
+                ent.append(('p', '', ln_))
+            if c0 != cur:
+                cur = c0; units.append([('h', c0, '')] + ent)
+            else: units.append(ent)
+        def fill(us, c_):
+            cols, col = [], []
+            for u in us:
+                if col and len(col) + len(u) > c_: cols.append(col); col = []
+                col += u
+            if col: cols.append(col)
+            return cols
+        cols = fill(units, cap)
+        pages = [cols[i:i + NC] for i in range(0, len(cols), NC)]
+        # 마지막 쪽: 단을 고르게, 아래에 판권
+        colo = self.cfg.get('colophon', [])
+        hc = (len(colo) + 2.5) * lh if colo else 0
+        n_before = sum(len(c) for p in pages[:-1] for c in p)
+        # 마지막 쪽에 든 단위들
+        cnt, idx = 0, 0
+        while idx < len(units) and cnt < n_before: cnt += len(units[idx]); idx += 1
+        rest = units[idx:]
+        t = max(1, math.ceil(sum(len(u) for u in rest) / NC))
+        while True:
+            lc = fill(rest, t)
+            if len(lc) <= NC: break
+            t += 1
+        pages[-1] = lc
+        fit = top + t * lh + hc <= self.ch
+        for i, p in enumerate(pages):
+            self.back.append({'cols': p, 'colophon': bool(colo) and fit and i == len(pages) - 1})
+        if colo and not fit: self.back.append({'cols': [], 'colophon': True})
+        self._ix = (colw, gap, lh, top)
+        for i in range(len(self.back)): self.pages.append({'pieces': [], 'lines': [], 'back': i})
+
+    def back_page(self, k, x0, recto):
+        fs = self.fs
+        tex, ops = [], []
+        H = self.H; y0 = self.mt
+        colw, gap, lh, top = self._ix
+        bp = self.back[k]
+        if bp['cols']:
+            tex.append(self.put_box(x0, y0, self.cw, 14, self.inl.run('역명 색인' + (' (이어서)' if k else ''), Ctx('GB', 14 / fs)), 'l', 't'))
+            if not k: tex.append(self.put_box(x0, y0 + 2, self.cw, 12, self.inl.run('역명과 그 역이 실린 쪽', Ctx('M', 0.85)), 'r', 'b'))
+        for ci, col in enumerate(bp['cols']):
+            xx = x0 + ci * (colw + gap)
+            for li, (kind, nm, ps) in enumerate(col):
+                yy = y0 + top + li * lh
+                if kind == 'h':
+                    tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(nm, Ctx('GB', 1.1)), 'l', 'm'))
+                    ops.append('q 0.3 w 0 G %.3f %.3f m %.3f %.3f l S Q' % (xx + 1.6 * fs, H - (yy + lh * 0.55), xx + colw, H - (yy + lh * 0.55)))
+                    continue
+                if nm: tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(nm, Ctx('M', 1.0)), 'l', 'm'))
+                if ps: tex.append(self.put_box(xx, yy, colw, lh, self.inl.run(ps, Ctx('M', 1.0)), 'r', 'm'))
+                if kind == 'e':
+                    a_ = xx + self.inl.wc.get(self.inl.run(nm, Ctx('M', 1.0)), 2) * fs + 2
+                    b_ = xx + colw - self.inl.wc.get(self.inl.run(ps, Ctx('M', 1.0)), 2) * fs - 2
+                    if b_ - a_ > 3: ops.append('q 0.3 w 0 G [0.6 1.6] 0 d %.3f %.3f m %.3f %.3f l S Q' % (a_, H - (yy + lh * 0.7), b_, H - (yy + lh * 0.7)))
+        if bp['colophon']:
+            colo = self.cfg.get('colophon', [])
+            yb = y0 + self.ch - len(colo) * lh * 1.1
+            ops.append('q 0.4 w 0 G %.3f %.3f m %.3f %.3f l S Q' % (x0, H - (yb - 0.8 * lh), x0 + self.cw, H - (yb - 0.8 * lh)))
+            for i, t in enumerate(colo):
+                tex.append(self.put_box(x0, yb + i * lh * 1.1, self.cw, lh, self.inl.run(t, Ctx('GB' if i == 0 else 'M', 1.15 if i == 0 else 0.95)), 'l', 'm'))
+        tex += self.page_side_title(recto, [('', '역명 색인')]) if bp['cols'] else []
+        return tex, ' '.join(ops)
 
     def emit(self, out_tex):
         first = self.cfg.get('firstFolio', 2)
@@ -3392,8 +3561,8 @@ class Book:
             recto = folio % 2 == 1
             x0 = self.mi if recto else self.mo
             tex, rects = [], []
-            if 'front' in pg:                     # 노선도(왼쪽 면)·색인(오른쪽 면)
-                t_, lit_ = self.front_page(pg['front'], x0, first)
+            if 'front' in pg or 'back' in pg:     # 노선도·색인·범례 / 역명 색인·판권
+                t_, lit_ = self.front_page(pg['front'], x0, first) if 'front' in pg else self.back_page(pg['back'], x0, recto)
                 tex += t_
                 tex += self.page_furniture(folio, recto, '', '', None)
                 body.append(r'\begin{picture}(%.3f,%.3f)' % (self.W, self.H))
