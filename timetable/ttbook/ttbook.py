@@ -937,6 +937,17 @@ class Book:
                     m = re.match(r'[월화수목금토일∼~·・요]+', t)
                     if not m: continue
                     days, rest = m.group(0), t[m.end():]
+                    lab_ = next((re.sub(r'\s', '', c_.node.text()) for c_ in T.cells if c_.r == cl.r and c_.c == 0), '')
+                    if lab_ == '운행일' and not rest:   # 운행일 행: 요일만 작은 가로 글씨로 (세 자까지 한 줄, 넘으면 두 자씩)
+                        sm = Node('span', [('class', 'tt-small')])
+                        per_ = 3 if len(days) <= 3 else 2
+                        for i in range(0, len(days), per_):
+                            if i: sm.kids.append(Node('br', []))
+                            sm.kids.append(days[i:i + per_])
+                        nd = Node('td', []); nd.kids.append(sm)
+                        cl.node = nd
+                        cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
+                        continue
                     if len(days) <= 3:               # 범위(금∼일)·두 자 이하: 보통 크기 세로쓰기로 「…운행」
                         # 두 줄 세로쓰기(오른쪽 줄이 먼저): 요일 | 운행
                         vt = Node('span', [('class', 'jtt-v tt-rl')]); vt.kids += [days, Node('br', []), rest or '운행']
@@ -1460,6 +1471,10 @@ class Book:
         ta = st.get('text-align')
         if ta: al = {'left': 'l', 'right': 'r', 'center': 'c'}.get(ta, al)
         va = {'top': 't', 'bottom': 'b', 'middle': 'm'}.get(st.get('vertical-align', 'middle'), 'm')
+        # 가로 명조 열차번호·세로쓰기 주: 글자 양옆 여백(글리프의 곁)이 이미 있으니 칸 폭을 거의 다 쓴다 (넘칠 때만 좁힌다)
+        isno = cell.node.find(lambda n: 'jtt-no' in n.cls) is not None
+        isv = any(it[0] == 'obj' and len(it) > 5 for ln in cell.lines for it in ln)
+        if isno or isv: pad = 0.03
         W = w - 2 * pad * fs
         lts = []
         jn = None
@@ -1476,7 +1491,7 @@ class Book:
                     t = r'\hbox to %.3fbp{%s\hfill %s\hfill}' % (W, strut(ln[0][2], fs), r'\hfill '.join(chars))
             if t is None:
                 # 열차 번호(네 자리)는 괘선에 닿지 않게 양옆을 조금 더 비운다
-                pe = 0.2 if cell.node.find(lambda n: 'jtt-no' in n.cls) else 0.06
+                pe = 0.0 if (isno or isv) else 0.06
                 t = line_tex(ln, W, al, fs, self.inl, sqc, pe)
             if t: lts.append(t)
         if not lts: return
@@ -1525,6 +1540,8 @@ class Book:
                     if seg and seg[0]: out.append(('v', xs[k], seg[1], seg[2], seg[0]))
                     seg = [w, y0, y1]
             if seg and seg[0]: out.append(('v', xs[k], seg[1], seg[2], seg[0]))
+        # 경유 등 세로 주석과 그 앞뒤로 이어지는 ║ 들: 한 덩어리로 보고 사이의 구획선은 긋지 않는다 (표의 맨 위·아래 괘선은 그대로)
+        nrun = self.note_runs(T)
         # 가로선: 행 사이 i (1..nR-1)
         for i in range(1, nR):
             seg = None
@@ -1536,6 +1553,7 @@ class Book:
                     _, _, _, ba = self.borders(T, a)
                     _, _, tb, _ = self.borders(T, b)
                     w = wmax(ba, tb)
+                    if id(a) in nrun and id(b) in nrun: w = 0
                     if band_start: w = 'd'
                     elif rows[i] != rows[i - 1] + 1 and w == 0: w = 1
                 x0, x1 = xs[k], xs[k + 1]
@@ -1544,6 +1562,40 @@ class Book:
                     if seg and seg[0]: out.append(('h', seg[1], seg[2], ys[i], seg[0]))
                     seg = [w, x0, x1]
             if seg and seg[0]: out.append(('h', seg[1], seg[2], ys[i], seg[0]))
+        return out
+
+    def narrow_st(self, T):
+        """역명 칸을 가장 긴 역 이름·머리 이름(열차번호 등)에 맞춰 좁힌다"""
+        em = self.fs
+        for j, (k, role) in enumerate(T.kind):
+            if role != 'st' or k not in ('L', 'R'): continue
+            names = [len(c.node.text().strip()) for c in T.cells if c.c == j and c.cs == 1 and 'jtt-th' not in c.cls and c.node.text().strip()]
+            labs = [(len(c.node.text().strip()), sum(T.colW[c.c + i] for i in range(1, c.cs))) for c in T.cells
+                    if c.c == j and 'jtt-th' in c.cls and c.node.text().strip()]
+            need = max([x + 0.6 for x in names] + [x + 0.6 - w / em for x, w in labs] + [3.0]) * em
+            T.colW[j] = min(T.colW[j], need)
+
+    def note_runs(self, T):
+        if getattr(T, '_nrun', None) is not None: return T._nrun
+        out = set()
+        for j in range(T.ncol):
+            if T.kind[j][0] != 'T': continue
+            run, has = [], False
+            def flush():
+                if has and len(run) > 1: out.update(id(c) for c in run)
+            r = T.hEnd
+            while r < T.fStart:
+                c = T.occ.get((r, j))
+                if c is None or isinstance(c, Ghost): flush(); run, has = [], False; r += 1; continue
+                t = c.node.text().strip()
+                isnote = c.rs > 1 and any(it[0] == 'obj' and len(it) > 5 for ln in (c.lines or []) for it in ln)
+                if t == '║' or isnote:
+                    run.append(c); has = has or isnote
+                else:
+                    flush(); run, has = [], False
+                r = c.r + c.rs
+            flush()
+        T._nrun = out
         return out
 
     def pdf_ops(self, rects):
@@ -2225,12 +2277,19 @@ class Book:
                     return True
                 return False
             kA = job['kA']
+            bes = job.get('beside')
+            if bes and c % 2 == 1: return False
             ya, yb = top(c), top(c + 1)
             if c % 2 == 0 and abs(ya - yb) < 10 * MM: ya = yb = max(ya, yb)
             if ya + h <= PH + 0.01 and yb + h <= PH + 0.01:
                 put(T, c, trs[:kA], rows, ya, False, h)
-                put(T, c + 1, trs[kA:], rows, yb, notes, h)
+                pr_ = put(T, c + 1, trs[kA:], rows, yb, notes, h)
                 ys[c] = ya + h; ys[c + 1] = yb + h
+                if bes:                               # 오른쪽 면의 끝 몇 편 옆에 다음 노선
+                    wR, ys_ = bes; pr_['fixw'] = wR; yy = yb
+                    for Y, Yc, ry, hy in ys_:
+                        put(Y, c + 1, Yc, ry, yy, False, hy, wR - fw, False, 'B', self.band_w(self.cw + fw - wR))
+                        yy += hy - fw
                 if c % 2 == 1: cur['c'] = c + 1
                 return True
             return False
@@ -2243,7 +2302,7 @@ class Book:
                 tt = q['T'].title.text() if q['T'].title is not None else ''
                 pg['dirs'][key].add('하행' if '하행' in tt else '상행' if '상행' in tt else '')
         def advance(job, c):
-            if job['kind'] in ('stack', 'facing'):
+            if job['kind'] in ('stack', 'facing') or (job['kind'] == 'pair' and job.get('beside') and c % 2 == 1):
                 # 펼침면으로 가야 해서 오른쪽 면이 통째로 빌 때: 앞 쪽 맨 아랫단의 작은 표(통째로 그 쪽에 있는 것)를 옮겨 채운다
                 if c % 2 == 1 and ys[c] == 0 and c >= 1 and page(c - 1)['pieces']:
                     prev = page(c - 1)
@@ -2317,6 +2376,15 @@ class Book:
             fits = all(self.vband(T, '열넷째' if len(jl) > 1 else None, 100)[1] <= j['h'] - 2 * (fw + self.frame_pad) - 2 * self.vpad for j in jl)
             if mode == 'left': T.band_left = fits
             else: T.band_left = fits and len(jl) <= len(jt) and 2 * hl - fw <= PH + 0.01 < 2 * ht - fw
+        # 한 쪽에 몇 편이 넘치는 표: 역명 칸을 글자만큼으로 좁혀 한 쪽에 들면 그렇게 (역 이름이 짧은 노선)
+        for T in tables:
+            T.band_left = False; T.fold = False
+            if self.is_ktx(T): continue
+            n_ = len(self.blocks(T)[1])
+            if n_ <= self.cap(T, 'B', True): continue
+            old_ = list(T.colW)
+            self.narrow_st(T)
+            if n_ > self.cap(T, 'B', True): T.colW = old_
         for T in tables:
             T.band_left = False; T.fold = False; T.stack_with = None; T.stacked = False; T.side_with = None; T.custom_jobs = None; T.pull_first = False
             if self.fold != 'off':
@@ -2440,6 +2508,25 @@ class Book:
             if not all(len(pick(ln, d)) == 1 for ln in (br['line'], br['with']) for d in ('하행', '상행')): continue
             Td, Tu, Yd, Yu = pick(br['line'], '하행')[0], pick(br['line'], '상행')[0], pick(br['with'], '하행')[0], pick(br['with'], '상행')[0]
             for T in (Td, Tu, Yd, Yu): T.fold = False; T.band_left = False
+            if br.get('kind') == 'pair':
+                # 방향마다 펼침면 하나: 왼쪽 면 가득 + 오른쪽 면에 끝 몇 편, 그 옆에 다음 노선의 같은 방향
+                bwf = self.band_w(self.cw)
+                js_ = []
+                for T, Y in ((Td, Yd), (Tu, Yu)):
+                    _, Tc, _ = self.blocks(T); _, Yc, _ = self.blocks(Y)
+                    kL = min(len(Tc) - 1, self.cap(T, 'L'))
+                    rows = list(range(T.nrow)); h = self.piece_h(T, rows, False, bwf)
+                    wR = self.fixed_w(T, 'R') + (len(Tc) - kL) * self.P0
+                    wY = self.cw + fw - wR
+                    ry = list(range(Y.nrow)); hy = self.piece_h(Y, ry, False, self.band_w(wY))
+                    if kL < 1 or h > PH + 0.01 or hy > PH + 0.01 or self.fixed_w(Y, 'B') + len(Yc) * self.P0 > wY + 0.01: break
+                    js_.append({'T': T, 'kind': 'pair', 'trs': Tc, 'kA': kL, 'rows': rows, 'h': h, 'notes': False, 'bw': bwf,
+                                'beside': (wR, [(Y, Yc, ry, hy)])})
+                if len(js_) != 2: continue
+                for T in (Td, Tu, Yd, Yu): T.custom_jobs = None; T.stack_with = None; T.side_with = None; T.stacked = False
+                Td.custom_jobs, Tu.custom_jobs = [js_[0]], [js_[1]]
+                Yd.stacked = Yu.stacked = True
+                continue
             sj = self.stack_jobs(Td, Tu)
             if not sj or len(sj) != 1 or sj[0]['kind'] != 'stack': continue
             da, db, rd, hd = sj[0]['d']; ua, ub, ru, hu = sj[0]['u']

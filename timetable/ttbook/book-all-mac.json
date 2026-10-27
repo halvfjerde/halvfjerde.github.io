@@ -102,8 +102,9 @@
  ],
  "besideRight": [
   {
-   "line": "대구선",
-   "with": "영동선"
+   "line": "중앙선",
+   "with": "경북선",
+   "kind": "pair"
   }
  ]
 }

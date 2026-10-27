@@ -150,7 +150,7 @@ KIND = {'KTX': '', 'KTX-산천': '산천', 'KTX산천': '산천', 'KTX_산천': 
 LBL = {  # 머리 이름 (한국어, 국한문)
     'fr': ('시발역', '始發驛'), 'no': ('열차번호', '列車番號'), 'kind': ('등급', '等級'), 'car': ('차종', '車種'),
     'to': ('종착역', '終着驛'), 'day': ('비고', '備考'),   # 운행일 등. 인쇄에서는 쪽의 남는 자리를 이 행이 받는다
-    'days': ('운행일주의', '運行日注意'),
+    'days': ('운행일', '運行日'),
     'cpl': ('병결열차', '倂結列車'),        # 갈림역에서 나뉘고 합치는 짝 열차의 번호                         # 기호(◆◇)로 적는 운행일: 한 줄. 그 밑에 빈 비고 행
 }
 def lbl(k): return LBL[k][1 if MIX else 0]
@@ -410,14 +410,17 @@ class Table:
         if has_to: L.append(f'to   {lbl("to")} r={LBL["to"][1]}')
         if cp and cp['pos'] == 'foot': L.append(cpl_row)
         cpn = any(self.cpl_note(tr) for tr in self.trains)
-        has_day = cpn or any(tr['note'] for tr in self.trains)
-        days = {tr['note'] for tr in self.trains if tr['note']}
-        self.daysym = {'월화수목금': '◆', '토일': '◇'} if days and days <= {'월화수목금', '토일'} and not cpn else None
-        # 모든 표의 끝은 비고 행 (인쇄에서 쪽의 남는 자리를 받는다). 기호로 적는 운행일은 그 위에 한 줄로
-        self.rem_empty = not has_day or bool(self.daysym)
-        if has_day and self.daysym: L.append(f'days {lbl("days")} r={LBL["days"][1]}')
-        elif has_day: L.append(f'day  {lbl("day")} r={LBL["day"][1]} style=va=t')
-        if self.rem_empty: L.append(f'rem  {lbl("day")} r={LBL["day"][1]} style=va=t')
+        # 운행일은 제 행에 (기호 ◆◇ 또는 요일), 비고 행에는 병결·그 밖의 주. 모든 표의 끝은 비고 행 (인쇄에서 쪽의 남는 자리를 받는다)
+        isday = lambda s: bool(s) and all(ch in WEEK for ch in s)
+        days = {tr['note'] for tr in self.trains if isday(tr['note'])}
+        self.has_days = bool(days)
+        self.daysym = {'월화수목금': '◆', '토일': '◇'} if days and days <= {'월화수목금', '토일'} else None
+        has_day = cpn or any(tr['note'] and not isday(tr['note']) for tr in self.trains)     # 비고에 적을 것
+        self.rem_empty = not has_day
+        if self.has_days: L.append(f'days {lbl("days")} r={LBL["days"][1]} style=va=t')
+        if has_day: L.append(f'day  {lbl("day")} r={LBL["day"][1]} style=va=t')
+        elif not self.has_days: L.append(f'rem  {lbl("day")} r={LBL["day"][1]} style=va=t')
+        self.rem_row = has_day or not self.has_days        # 빈 비고 행은 운행일 행이 없을 때만 (있으면 운행일 행이 끝 행으로 남는 자리를 받는다)
         L.append('')
         thru = collections.Counter()
         for tr in self.trains:
@@ -502,12 +505,17 @@ class Table:
                 o, d = self.ends_of(tr)
                 ft.append(q(f'{esc_txt(d)}/{hm(self.end_times(tr)[1])}'))
             if cp and cp['pos'] == 'foot': ft.append(cpv)
+            nt = tr['note']
+            if self.has_days:
+                if not isday(nt): ft.append('_')
+                elif self.daysym: ft.append(self.daysym[nt])
+                else: ft.append(q(vert(day_range(nt).rsplit('/운행', 1)[0])))      # 운행일 행: 요일만 (월요일・금・토・월∼목)
             if has_day:
-                nt = tr['note']
                 cn = self.cpl_note(tr)
-                if cn: ft.append(q(vert(((day_range(nt).replace('/', ' ') + '/') if nt else '') + cn)))   # 줄마다 한 항목 (개조식)
-                else: ft.append('_' if not nt else self.daysym[nt] if self.daysym else q(vert(day_range(nt))))
-            if self.rem_empty: ft.append('_')
+                if cn: ft.append(q(vert(cn)))
+                elif nt and not isday(nt): ft.append(q(vert(day_range(nt))))
+                else: ft.append('_')
+            elif self.rem_row: ft.append('_')
             line = ' '.join(hdr) + ' : ' + ' '.join(cells)
             if ft: line += ' : ' + ' '.join(ft)
             L.append(line)
@@ -530,13 +538,13 @@ class Table:
                 sub_ = [f'S{{{KIND[x]}}}은 `{x}`' for x in ks if KIND.get(x)]
                 parts.append('파란 글씨는 KTX' + (f"({', '.join(sub_)})" if sub_ else ''))
             if parts: notes.append('등급 ' + ', '.join(parts))
-        if has_day:   # 운행일 관련은 한 줄로
+        if self.has_days:   # 운행일 관련은 한 줄로
             dn = []
             if self.daysym:
                 used = {tr['note'] for tr in self.trains}
                 if '월화수목금' in used: dn.append('◆ 평일(월∼금) 운행')
                 if '토일' in used: dn.append('◇ 토·일 운행')
-            dn.append(('운행일주의' if self.daysym else '비고') + ' 무표시는 매일 운행')
+            dn.append('운행일 무표시는 매일 운행')
             notes.append(', '.join(dn))
         cp = getattr(self, 'cpl', None)
         if cp: pass                          # 어버이 열차는 비고에 「…로 분리·연결」
