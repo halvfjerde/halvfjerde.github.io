@@ -24,7 +24,6 @@ BOOK = [
     ('서해선',     [('gen', '서해선', None)]),
     ('충북선',     [('gen', '충북선', None)]),
     ('경북선',     [('gen', '경북선', None)]),
-    ('대구선',     [('gen', '대구선', None)]),
     ('영동선',     [('gen', '영동선', None)]),
     ('태백선',     [('gen', '태백선', None)]),
     ('목포보성선', [('gen', '목포보성선', None)]),
@@ -41,6 +40,42 @@ for _k, _g in MERGE_KTX.items(): MERGE_INTO.setdefault(_g, []).append(_k)
 VIA_HSR = {('ktx', '경전선'): '경부고속선', ('ktx', '전라선'): '호남고속선', ('ktx', '동해선(서울~포항)'): '경부고속선'}
 KTX_STYLE = ['style=fc=' + KTX_COLOR, 'tstyle=fw=b']
 SUSEO_COLOR = '#d1007a'         # 수서 발착 열차(옛 SRT)는 자주색
+
+# 다른 재래선 표를 합친다 (대구선 → 동해선: 동대구–아화를 경주 앞(상행은 뒤)에 갈래로). 같은 번호 열차는 시각을 채우고,
+# 경주에서 방향을 바꾸는 열차(동대구–부전)는 두 토막으로 (갈래 쪽 토막은 반대 방향 표에. 「…선 경유」로 잇는다)
+MERGE_GEN = {('gen', '대구선'): ('gen', '동해선')}
+LINE_DISP = {('gen', '동해선'): '동해선・대구선'}      # 합친 표의 노선 이름 (띠·제목·인쇄의 바깥 표지)
+MERGE_GEN_INTO = {}
+for _k, _g in MERGE_GEN.items(): MERGE_GEN_INTO.setdefault(_g, []).append(_k)
+
+def merge_gen(h, g):
+    hn = [clean_name(x) for x in h['stations']]
+    gn = [clean_name(x) for x in g['stations']]
+    extra = [x for x in gn if x not in hn]
+    if extra:
+        j0 = gn.index(extra[0])
+        nxt = next((x for x in gn[j0:] if x in hn), None)
+        prv = next((x for x in reversed(gn[:j0]) if x in hn), None)
+        pos = hn.index(nxt) if nxt else hn.index(prv) + 1
+        st = hn[:pos] + extra + hn[pos:]
+    else: st = hn
+    def remap(tr, names):
+        p_ = {x: i for i, x in enumerate(names)}
+        return dict(tr, times=[tr['times'][p_[x]] if x in p_ else None for x in st])
+    trs = [remap(tr, hn) for tr in h['trains']]
+    by = {tr['no']: tr for tr in trs}
+    ex = {st.index(x) for x in extra}
+    for tr in g['trains']:
+        r = remap(tr, gn)
+        if not any(isinstance(r['times'][i], int) for i in ex): continue      # 갈래에 서지 않는 열차는 이미 h 에
+        if r['no'] in by:                                                     # 지나는 열차: 갈래 쪽 시각을 채우고 「대구선 경유」를 지운다
+            hh = by[r['no']]
+            hh['times'] = [x if isinstance(x, int) else r['times'][i] if i in ex and isinstance(r['times'][i], int) else None if isinstance(x, str) else x
+                           for i, x in enumerate(hh['times'])]
+            for k in ('from', 'to', 'fromT', 'toT'):
+                if r.get(k) and not hh.get(k): hh[k] = r[k]
+        else: trs.append(r)
+    return dict(h, stations=st, trains=trs)
 
 def merge_into(g, k, insert=True, via=None):
     """재래선 표 g 에 KTX 표 k 의 열차를 합친다. k 에만 있는 역은 k 의 차례대로 g 사이에 끼운다(insert).
@@ -119,6 +154,7 @@ BRANCH = {
     ('gen', '중앙선'): [[[], ['하양', '동대구']]],
     ('gen', '호남선'): [[[], ['극락강', '광주']]],
     ('gen', '충북선'): [[[], ['대전']]],
+    ('gen', '동해선'): [[['부전', '센텀', '신해운대', '기장', '좌천', '월내', '남창', '덕하', '태화강', '효문', '호계', '북울산'], ['동대구', '하양', '영천', '아화']]],
 }
 
 # 끝에서 갈라지는 갈래 (수서 발착 표에 경전선·전라선 열차를 합친 것): 다른 갈래로 가는 열차에게 이 갈래는 ‥
@@ -441,7 +477,12 @@ class Table:
         fls = [self.from_line(tr) for tr in self.trains]
         runs = sum(1 for i, f in enumerate(fls) if f and (i == 0 or fls[i - 1] != f))
         self.notecol = bool(runs) and len(self.trains) + runs <= NOTE_COL_MAX
-        cpn = any(self.cpl_note(tr) for tr in self.trains) or (any(fls) and not self.notecol) or any(self.rem_via(tr) for tr in self.trains)
+        # 표의 끝 역에서 다른 선으로 나가는 열차: 비고가 비어 있으면 비고에 「…선 경유」, 아니면 그 열차(잇달아 나가는 열차들) 뒤에 주석 열(「…선 경유」 세로 + ⬏)
+        isday_ = lambda s: bool(s) and all(ch in WEEK for ch in s)
+        tls = [self.to_line(tr) for tr in self.trains]
+        busy = lambda tr, f: bool(self.cpl_note(tr) or self.rem_via(tr) or (f and not self.notecol) or (tr['note'] and not isday_(tr['note'])))
+        self.tl_col = any(t_ and busy(tr, f) for tr, f, t_ in zip(self.trains, fls, tls))
+        cpn = any(self.cpl_note(tr) for tr in self.trains) or (any(fls) and not self.notecol) or any(self.rem_via(tr) for tr in self.trains) or (any(tls) and not self.tl_col)
         # 운행일은 제 행에 (기호 ◆◇ 또는 요일), 비고 행에는 병결·그 밖의 주. 모든 표의 끝은 비고 행 (인쇄에서 쪽의 남는 자리를 받는다)
         isday = lambda s: bool(s) and all(ch in WEEK for ch in s)
         days = {tr['note'] for tr in self.trains if isday(tr['note'])}
@@ -567,12 +608,30 @@ class Table:
                 if cn: ft.append(q(cn))
                 elif rv: ft.append(q(vert(rv)))
                 elif fl and not self.notecol and not (nt and '경유' in nt): ft.append(q(vert(f'↑{fl}/경유')))     # 표의 첫 역에서 다른 선에서 들어온 열차: 위 화살표 밑에 세로쓰기(…선 | 경유)
+                elif self.to_line(tr) and not self.tl_col: ft.append(q(vert(f'{self.to_line(tr)}/경유')))     # 끝 역에서 다른 선으로 나가는 열차
                 elif nt and not isday(nt): ft.append(q(vert(day_range(nt))))
                 else: ft.append('_')
             elif self.rem_row: ft.append('_')
             line = ' '.join(hdr) + ' : ' + ' '.join(cells)
             if ft: line += ' : ' + ' '.join(ft)
             L.append(line)
+            tl = self.to_line(tr) if self.tl_col else None
+            ti = self.trains.index(tr)
+            if tl and (ti + 1 == len(self.trains) or self.to_line(self.trains[ti + 1]) != tl or self.trains[ti + 1].get('block', 0) != tr.get('block', 0)):
+                # 주석 열: 끝 역 줄에 ⬏, 그 위에 「…선 경유」 세로 (필요한 칸만, 나머지는 ‥)
+                need = 1 + math.ceil((len(tl) + 0.3) / 1.26) + 1
+                slots = [(k, p_) for k in range(len(self.st)) for p_ in range(2 if k in self.split else 1)]
+                need = min(need, len(slots))
+                s0 = len(slots) - need
+                toks, j = [], 0
+                for k in range(len(self.st)):
+                    ps = []
+                    for p_ in range(2 if k in self.split else 1):
+                        ps.append(q(f'^{need} va=b; VR{{{esc_txt(tl)}/경유}}/⬏') if j == s0 else '!' if j > s0 else 'x')
+                        j += 1
+                    toks.append(','.join(ps) if len(ps) > 1 and ps != ['x', 'x'] else ps[0])
+                ph = ['_', '_'] + (['_'] if has_fr else []) + (['_'] if cp and cp['pos'] == 'head' else [])
+                L.append(' '.join(ph) + ' : ' + ' '.join(compress(toks)) + (' : ' + ' '.join(['_'] * nft) if nft else ''))
         L.append('')
         L.append('[notes]')
         notes = []
@@ -670,6 +729,18 @@ class Table:
         if o == s0 or o in self.st: return None
         for (c, ln), sts in LINE_STATIONS.items():
             if ln.split('(')[0] != self.line and o in sts and s0 in sts and c == self.cat: return ln.split('(')[0]
+        return None
+
+    def to_line(self, tr):
+        """표의 끝 역까지 서는데 종착역은 표 밖: 나가는 다른 노선(종착역과 끝 역을 함께 지나는 노선) 이름"""
+        idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
+        if not idx or idx[-1] != len(self.st) - 1 or tr.get('via_out') or tr.get('ktx'): return None
+        if tr['note'] and '경유' in tr['note']: return None          # 비고에 이미 (「중앙선 경유」)
+        _, d = self.ends_of(tr)
+        s1 = self.st[-1]
+        if d == s1 or d in self.st: return None
+        for (c, ln), sts in LINE_STATIONS.items():
+            if ln.split('(')[0] != self.line and d in sts and s1 in sts and c == self.cat: return ln.split('(')[0]
         return None
 
     def is_suseo(self, tr):
@@ -916,7 +987,7 @@ def main():
     index = []
     for line, parts in BOOK:
         P = [f'{{{{시각표테마}}}}', f'{{{{상위문서|{PREFIX}}}}}',
-             f"'''{line}'''({LINE_HANJA[line]}) 시각표. {EDITION}(가상), 코레일 2026년 10월 발표 자료 기준.", '']
+             f"'''{line}'''({LINE_HANJA[line]}) 시각표. {EDITION}(가상), 코레일 2026년 10월 발표 자료 기준." + ''.join(f" {k[1]}(동대구–경주) 열차도 이 표에 함께 싣는다." for k, v in MERGE_GEN.items() if v[1] == line), '']
         book_items.append({'type': 'divider', 'text': line, 'sub': '', 'inline': True})
         idx = 0
         title = f'{PREFIX}/{line}'
@@ -945,6 +1016,8 @@ def main():
                         kt = dict(kt, trains=[dict(tr, arr_at=gby_.get(tr['no'], {}).get('arr_at', {})) for tr in kt['trains']])
                         kt = branch_only(kt, BRANCH_AT[kk])
                     t = merge_into(t, kt, insert=kk not in BRANCH_AT, via=VIA_HSR.get(kk))
+                for gk in MERGE_GEN_INTO.get((cat, sheet), []):
+                    if gk + (d,) in tabs: t = merge_gen(t, tabs[gk + (d,)])
                 if (cat, sheet) in SPLIT_SUSEO or (cat, sheet) in SUSEO_TO:
                     k = next(i for i, x in enumerate(t['stations']) if clean_name(x) == '수서')
                     t = dict(t, variant=variant, trains=[tr for tr in t['trains'] if isinstance(tr['times'][k], int) == (variant == '수서')])
@@ -1013,7 +1086,7 @@ def main():
                     elif out_: t['loop_note'] = f"{clean_name(out_[0]['from'])} 순환 열차는 {next(iter(LOOP_NAME.values()))} 표에"
                     if (cat, sheet) in SPLIT_LOOP and variant is None and any(is_loop(tr) for tr in tabs[(cat, sheet, d)]['trains']):
                         t['loop_note'] = f"{clean_name(next(tr for tr in tabs[(cat, sheet, d)]['trains'] if is_loop(tr))['from'])} 순환 열차는 {LOOP_NAME[(cat, sheet)]} 표에"
-                T = Table(t, data['hanja']); T.line_disp = line; T.cpl = cpl
+                T = Table(t, data['hanja']); T.line_disp = LINE_DISP.get((cat, sheet), line); T.cpl = cpl
                 T.wiki(sub); pair[d] = T
             shared = share(list(pair.values()))
             for d in ('down', 'up'):
@@ -1030,6 +1103,8 @@ def main():
                 print(f'{line:6} {head:16} {d:4} {len(T.st):3} st {len(T.trains):4} tr')
         open(os.path.join(outdir, f'{line}.wiki'), 'w').write('\n'.join(P) + '\n')
         index.append(line)
+    for (c_, ln_), (hc_, hl_) in MERGE_GEN.items():      # 합친 노선의 문서는 넘겨주기
+        open(os.path.join(outdir, f'{ln_}.wiki'), 'w').write(f'#REDIRECT [[{PREFIX}/{hl_}]]\n')
     # 목차 문서
     I = ['{{시각표테마}}', f'시각표 {EDITION}(가상). 코레일 2026년 10월 발표 자료(일반열차·고속열차) 기준, JTB 시각표 꼴로 재구성.', '',
          '* 시각은 분 단위(초 버림)', '* 오른쪽 역명은 한자', '', '== 노선 ==']

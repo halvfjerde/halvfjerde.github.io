@@ -1047,7 +1047,9 @@ class Book:
                 def nospace(n):
                     n.kids = [k.replace(' ', '') if isinstance(k, str) else (nospace(k) or k) for k in n.kids]
                 nd = copy.deepcopy(cell.node); nospace(nd); cell.node = nd
-                cell.lines = [l for l in self.inl.lines(nd, c)] + [gap_, item]
+                ls_ = [l for l in self.inl.lines(nd, c)]
+                # 끝 역에서 나가는 주석 열(「…선 경유」 + ⬏): 표지는 화살표 앞에
+                cell.lines = (ls_[:-1] + [gap_, item] + ls_[-1:]) if re.sub(r'\s', '', cell.node.text()).endswith('⬏') and len(ls_) > 1 else ls_ + [gap_, item]
                 cell.refin = True
                 cell.need = self.cell_need(T, cell, cell.lines)
         R = self.R / fs                     # em
@@ -1651,7 +1653,7 @@ class Book:
         """열차 칸의 주가 다른 표를 가리키면 {kind: via|train, ...}: 「…선 경유」(그 노선 표의 같은 열차), 「…로 연결·분리」「…/발/654」(그 번호의 열차)"""
         if T.kind[cell.c][0] != 'T' or cell.r < T.hEnd: return None
         t = re.sub(r'\s', '', cell.node.text())
-        m = re.fullmatch(r'[↑↱]?(.+?선)경유(?:.+선경유)?', t)
+        m = re.fullmatch(r'[↑↱]?(.+?선)경유(?:.+선경유)?⬏?', t)
         if m: return {'kind': 'via', 'name': m.group(1)}
         if re.search(r'연결|분리', t) or re.fullmatch(r'\D+(발|착)\d+', t):
             nos = []
@@ -1964,7 +1966,7 @@ class Book:
         m = re.search(r'([가-힣]+고속철도)', t)
         if m: return ('', m.group(1))
         if not self.is_ktx(T):                      # 노선 안의 다른 이름 표(평택선 등)는 그 이름
-            m = re.search(r'(?:하행|상행)\s*([가-힣·]+선)', t)
+            m = re.search(r'(?:하행|상행)\s*([가-힣·・]+선)', t)
             if m and m.group(1) != T.line: return ('', m.group(1))
         return ('KTX', T.line) if self.is_ktx(T) else ('', T.line)
 
