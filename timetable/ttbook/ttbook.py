@@ -3456,7 +3456,17 @@ class Book:
         wd = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.9)), len(t)) * fs
         def wrap(lab):                                     # 운항일이 길면 「・」·띄어쓰기에서 줄을 바꾼다
             if not lab: return ['']
-            toks = re.findall(r'(?:[^・ ]| \{)+[・ ]?', lab)        # 날과 그날의 시각({…}) 사이에서는 줄을 바꾸지 않는다
+            # 괄호(그날의 다른 시각)는 날 뒤에서만 끊는다: 「(월・금 / 645발 800착)」. 날이 한 줄보다 길 때만 날 사이에서도
+            toks, pos = [], 0
+            sp_ = lambda x: re.findall(r'[^・ ]+[・ ]?', x)
+            for m_ in re.finditer(r'\([^)]*\)', lab):
+                toks += sp_(lab[pos:m_.start()])
+                g_ = m_.group(0); k_ = g_.find(' {')
+                d_, t_ = (g_[:k_ + 1], g_[k_ + 1:]) if k_ > 0 else ('', g_)
+                if d_: toks += sp_(d_) if wd(d_.rstrip()) > avail else [d_]
+                toks.append(t_ + ' ')
+                pos = m_.end()
+            toks += sp_(lab[pos:])
             out, cur = [], ''
             for t_ in toks:
                 if cur and wd((cur + t_).rstrip()) > avail: out.append(cur.rstrip()); cur = t_
