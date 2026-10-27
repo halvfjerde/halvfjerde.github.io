@@ -75,7 +75,11 @@ for (a, b), _ in sorted(pairs.items(), key=lambda x: -x[1]):
                 alls = set().union(*(x[2] for x in gs))
                 lab = label(alls)
                 for t2, a2, d2 in gs[1:]:
-                    lab = (lab + ' ' if lab else '') + '(%s {%s})' % (label(d2) or '', str(int(t2[:2])) + t2[2:])   # 다른 시각은 괄호에 그날과 함께 ({…}: 책에서 표 글꼴로)
+                    mm = lambda x: int(x[:2]) * 60 + int(x[2:])
+                    hh_ = lambda x: str(int(x[:2])) + x[2:]
+                    # 다른 시각은 괄호에 그날과 함께: 「(수 650발)」, 도착이 출발만큼 옮겨지지 않았으면 「(수 650발 805착)」 ({…}: 책에서 표 글꼴로)
+                    same_dur = (mm(a2) - mm(t2)) % 1440 == (mm(aa) - mm(t)) % 1440
+                    lab = (lab + ' ' if lab else '') + '(%s{%s}발%s)' % ((label(d2) + ' ') if label(d2) else '', hh_(t2), '' if same_dur else ' {%s}착' % hh_(a2))
                 rows.append((no, t, aa, lab.strip()))
         rows.sort(key=lambda r: (r[1], r[0]))
         blocks.append({'title': '%s → %s' % (short(aps[p]), short(aps[q])), 'rows': rows})
