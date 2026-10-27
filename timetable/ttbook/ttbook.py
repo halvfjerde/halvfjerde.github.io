@@ -907,7 +907,7 @@ class Book:
         T._aim = out
         return out
 
-    ARW = 0.75          # 진행 방향 화살표 자리 (em): 착발 칸의 열차 쪽
+    ARW = 0.4           # 진행 방향 화살표 곁 여백 (em): 착발 칸을 이만큼 넓혀 글자를 화살표에서 띄운다
 
     def arrow_ads(self, T):
         """화살표를 둘 착발 칸 {열: 'l'|'r'} (열차 열과 맞닿은 쪽)"""
@@ -940,15 +940,15 @@ class Book:
         Ht = max(1.2 * em, 1.8 * self.R - 0.4 * em)    # 깃 높이 (행 1.8개 남짓)
         hl = 1.0 * em                             # 촉 길이
         lw = self.rw[1]
-        yt, yb = y0 + 0.3 * em, y1 - 0.25 * em          # 위아래로 조금 띄운다
-        if dr == 'u': yt, yb = y1 - 0.3 * em, y0 + 0.25 * em      # 위로: 꼬리가 아래
+        yt, yb = y0 + 0.08 * em, y1 - 0.06 * em
+        if dr == 'u': yt, yb = y1 - 0.08 * em, y0 + 0.06 * em      # 위로: 꼬리가 아래
         s = 1 if yb > yt else -1
         notch = yt + s * 0.32 * Ht
         side = yt + s * 0.72 * Ht
         tail = [(x - W, yt), (x, notch), (x + W, yt), (x + W, side), (x, yt + s * Ht), (x - W, side)]
         back = yb - s * hl
         head = [(x - W, back), (x + W, back), (x, yb)]          # 촉: 역삼각형
-        return [('line', [(x, notch), (x, back)], shaft or lw),
+        return [('line', [(x, notch), (x, yb)], shaft or lw),      # 축은 촉 끝까지 (촉 속으로 지나간다)
                 ('line', tail + [tail[0]], lw),
                 ('line', head + [head[0]], lw)]
 
@@ -1138,6 +1138,7 @@ class Book:
             if n > tot: rows[cell.r + cell.rs - 1] += n - tot
         T.rowH = [n * self.R for n in rows]
         T.colW = self.col_widths(T)
+        self.arrow_room(T)
 
     def dir_badge(self, t, down, hollow, size, colw):
         """방향 표지(모듈의 jtt-dir: 뾰족한 오각형 안에 하행·상행). (tex, 높이 bp)"""
@@ -1585,7 +1586,7 @@ class Book:
             k2 = ci + (1 if sd == 'r' else -1)
             if not (0 <= k2 < len(cols)) or kind_of(T, cols[k2])[0] != 'T': continue
             arr_.append((ci, j, sd, ('u' if sd == 'r' else 'd') if getattr(T, 'both', False) else 'd'))
-        self.cur_arrow = {}
+        self.cur_arrow = {j: {sd} for ci, j, sd, _ in arr_}
         self.arrow_bounds = {(ci + 1 if sd == 'r' else ci) for ci, j, sd, _ in arr_}     # 이 경계의 세로 괘선은 화살표가 대신한다
         seen = set()
         aims_ = []
@@ -1643,6 +1644,9 @@ class Book:
         fs = self.fs
         cls, st = cell.cls, cell.style
         sd_ = getattr(self, 'cur_arrow', {}).get(cell.c)
+        if sd_ and 'jtt-ad' in cls and 'jtt-th' not in cls and T.hEnd <= cell.r < T.fStart:   # 화살표 곁을 비운다
+            if 'l' in sd_: x += self.ARW * fs
+            w -= self.ARW * fs
 
         rc = T.rowcls[cell.r]
         if not cell.lines: return
