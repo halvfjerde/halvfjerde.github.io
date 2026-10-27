@@ -1789,6 +1789,16 @@ class Book:
             rd_ = ru_ = None
         if any(len(a) > self.cap(T, 'L', True) or len(b) > self.cap(T, 'R', True)
                for T, ps in ((Td, pd_), (Tu, pu_)) for a, b in ps): return None
+        # 위아래 단은 왼쪽 면에 같은 수의 열을 (한쪽만 좁혀 열이 어긋나지 않게)
+        al = []
+        for (da, db), (ua, ub) in zip(pd_, pu_):
+            kd, ku = len(da) + len(db), len(ua) + len(ub)
+            kA = self.split_lr(Td, max(kd, ku))
+            dd, uu = da + db, ua + ub
+            al.append((dd[:kA], dd[kA:], uu[:kA], uu[kA:]))
+        if any(len(a) > self.cap(Td, 'L', True) or len(b) > self.cap(Td, 'R', True) or len(c) > self.cap(Tu, 'L', True)
+               or len(d) > self.cap(Tu, 'R', True) for a, b, c, d in al): return None
+        pd_ = [(a, b) for a, b, c, d in al]; pu_ = [(c, d) for a, b, c, d in al]
         jobs = []
         for (da, db), (ua, ub) in zip(pd_, pu_):
             jobs.append({'T': Td, 'Tu': Tu, 'kind': 'stack', 'd': (da, db, rows[id(Td)], hd), 'u': (ua, ub, rows[id(Tu)], hu),
@@ -2086,7 +2096,9 @@ class Book:
                     Td, Tu = dn[0], up[0]
                     old = [(T.fold, T.band_left) for T in ts]
                     for T in ts: T.fold = False; T.band_left = T.head is not None
-                    if self.stack_jobs(Td, Tu):
+                    sj = self.stack_jobs(Td, Tu)
+                    # 끝에 남는 몇 편을 한 쪽에 따로 실어야 하면, 위아래 펼침면 대신 그냥 접어 싣는다 (쪽 수는 같고 덜 어수선하다)
+                    if sj and not any(j['kind'] == 'single' for j in sj):
                         Td.stack_with, Tu.stacked = Tu, True
                         continue
                     for T, (f, b) in zip(ts, old): T.fold, T.band_left = f, b
@@ -2175,18 +2187,11 @@ class Book:
                 hs = [max(q['h'] for q in t) for t in ts]
                 give = [0.0] * len(ts)
                 ok = [can(t) for t in ts]
-                # 물 채우기: 가장 낮은 단을 다음 낮은 단 높이까지 올리기를 되풀이
-                for _ in range(200):
-                    if left < 0.05: break
-                    cand = [i for i in range(len(ts)) if ok[i] and give[i] < smax - 0.01]
-                    if not cand: break
-                    cur_h = [hs[i] + give[i] for i in cand]
-                    lo = min(cur_h)
-                    low_i = [i for i, h_ in zip(cand, cur_h) if h_ - lo < 0.01]
-                    higher = [h_ for h_ in cur_h if h_ - lo >= 0.01]
-                    step = min([left / len(low_i)] + [h_ - lo for h_ in higher] + [smax - give[i] for i in low_i])
-                    for i in low_i: give[i] += step
-                    left -= step * len(low_i)
+                # 남는 자리는 각 단의 높이(내용의 양)에 비례해 나눈다
+                cand = [i for i in range(len(ts)) if ok[i]]
+                tot_h = sum(hs[i] for i in cand)
+                for i in cand:
+                    give[i] = min(smax, left * hs[i] / tot_h) if tot_h > 0 else 0.0
                 alloc[p] = (ts, give)
             # 펼침면에 걸친 단: 마주 보는 쪽과 같은 만큼(작은 쪽에 맞춘다)
             for p in list(alloc):
