@@ -85,12 +85,15 @@
    "line": "경부선",
    "title": "수서",
    "pages": 3
+  },
+  {
+   "line": "호남선",
+   "title": "호남고속철도",
+   "not": "수서",
+   "pages": 3
   }
  ],
  "ruleSplit": false,
- "bandLeftLines": [
-  "전라선"
- ],
  "bandTop": [
   {
    "line": "동해선",

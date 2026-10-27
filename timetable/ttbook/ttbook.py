@@ -199,6 +199,7 @@ class Ctx:
     def but(self, **kw):
         c = Ctx(self.font, self.size, self.color)
         c.track = getattr(self, 'track', 0.0)
+        c.hscale = getattr(self, 'hscale', 1.0)
         for k, v in kw.items(): setattr(c, k, v)
         return c
 
@@ -436,6 +437,9 @@ class Inline:
                 body = r'\raisebox{%.3fbp}{%s}' % (up * ctx.size * self.fs, body)
             out.append(body)
         res = '{' + ''.join(out) + '}'
+        hs_ = getattr(ctx, 'hscale', 1.0)
+        if hs_ < 0.999 and not vertical:
+            res = r'{\scalebox{%.3f}[1]{%s}}' % (hs_, res); wsum *= hs_
         self.wc[res] = wsum
         return res
 
@@ -460,7 +464,7 @@ class Inline:
             if it[0] == 'tex': w += self.wc.get(it[1], 1.0 * len(it[1]) / 20)
             elif it[0] == 'just': w += sum(self.wc.get(x, 1.0) for x in it[1])
             elif it[0] == 'obj': w += it[2]
-            elif it[0] == 'sq': w += 2.0 * it[3]
+            elif it[0] == 'sq': w += it[3]
         return w
 
     CHAIN = {'M': ['mincho', 'minchoKo', 'dia'], 'DM': ['dia', 'mincho', 'minchoKo'],
@@ -545,7 +549,7 @@ class Inline:
             c2 = ctx
             for cl, f in FONT_OF_CLASS.items():
                 if cl in cls: c2 = c2.but(font=f)
-            if 'jtt-no' in cls: c2 = c2.but(track=-0.04)     # 열차번호(명조) 숫자는 자간을 살짝 좁게
+            if 'jtt-no' in cls and len(re.sub(r'\D', '', k.text())) >= 4: c2 = c2.but(hscale=0.84)   # 네 자리 열차번호는 장평을 좁게
             if 'jtt-lit' in cls and ctx.font in ('DGB', 'GB'): c2 = c2.but(font='GB')   # 굵은 글 안의 로마자(KTX 등)는 고딕 굵게 그대로
             if 'jtt-j' in cls:
                 chars = [self.run(x.text(), c2) for x in k.kids if isinstance(x, Node)]
@@ -560,7 +564,8 @@ class Inline:
                 r = float(k.style.get('--r', '1'))
                 inner = self.lines(k, c2)
                 tex = ''.join(self.flat(l) for l in inner)
-                lines[-1].append(('sq', tex, r, c2.size)); continue
+                wn = max((self.line_w(l) for l in inner), default=0.0)       # 실제 폭(em): 넘칠 때만 좁힌다
+                lines[-1].append(('sq', tex, r, wn, c2.size)); continue      # 끝 자리는 글자 크기 (높이 계산이 it[-1] 을 쓴다)
             if 'jtt-td' in cls:
                 lines[-1].append(('obj', r'\hbox to %.3fbp{\hss %s\hss}' % (0.36 * c2.size * self.fs, self.run(k.text(), c2.but(font='M'))),
                                   0.36 * c2.size, 1.25 * c2.size, c2.size)); continue
@@ -606,8 +611,9 @@ class Inline:
 
     # 세로쓰기 (jtt-v: 왼쪽→오른쪽 열, jtt-vb: 오른쪽→왼쪽)
     def vcol(self, line_items, ctx):
-        """한 열의 글자들을 쌓은 \\vbox 와 높이(em)"""
+        """한 열의 글자들을 쌓은 \\vbox 와 높이(em). 가로로 쓴 숫자가 있으면 그 폭을 self._vcolw 에"""
         rows, h = [], 0.0
+        wcol = 1.0
         em = ctx.size * self.fs
         for (txt, c) in line_items:
             i = 0
@@ -618,14 +624,14 @@ class Inline:
                 if ch in VROT:
                     t, l = self.vform(ch, c, em)
                     rows.append(t); h += l; i += 1; continue
-                if ch.isdigit():                 # 숫자(열차번호 등): 명조로, 세로쓰기 안에서 글자를 눕혀(오른쪽으로 90°) 한 덩어리로
+                if ch.isdigit():                 # 숫자(열차번호 등): 명조로, 세로쓰기 안에서도 가로로 (열 폭은 숫자만큼 넓어진다)
                     j = i
                     while j < len(txt) and txt[j].isdigit(): j += 1
                     run = txt[i:j]
-                    wl = 0.52 * len(run) + 0.1
-                    rows.append(r'\kern%.3fbp\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}' % (
-                        0.05 * em, em, self.run(run, c.but(font='M'))))
-                    h += wl; i = j; continue
+                    g_ = self.run(run, c.but(font='M'), True)
+                    wcol = max(wcol, self.wc.get(g_, 0.55 * len(run)) * c.size)
+                    rows.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (em, -0.12 * em, em, g_))
+                    h += 1; i = j; continue
                 if is_latin(ch):
                     j = i
                     while j < len(txt) and is_latin(txt[j]): j += 1
@@ -635,6 +641,7 @@ class Inline:
                     h += wl; i = j; continue
                 rows.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (em, -0.12 * em, em, self.run(ch, c, True)))
                 h += 1; i += 1
+        self._vcolw = wcol
         return r'\vbox{\offinterlineskip ' + ''.join(rows) + '}', h
 
     def text_cols(self, node, ctx):
@@ -658,11 +665,11 @@ class Inline:
         boxes, hmax = [], 0
         for col in cols:
             b, h = self.vcol(col, ctx)
-            boxes.append(b); hmax = max(hmax, h)
+            boxes.append((b, max(pitch, self._vcolw))); hmax = max(hmax, h)
         if not lr: boxes = boxes[::-1]
         em = ctx.size * self.fs
-        tex = r'\hbox{' + ''.join(r'\hbox to %.3fbp{\hss\vtop{\kern0pt %s}\hss}' % (pitch * em, b) for b in boxes) + '}'
-        return ('obj', tex, pitch * len(boxes), hmax, ctx.size, 'v')
+        tex = r'\hbox{' + ''.join(r'\hbox to %.3fbp{\hss\vtop{\kern0pt %s}\hss}' % (w_ * em, b) for b, w_ in boxes) + '}'
+        return ('obj', tex, sum(w_ for _, w_ in boxes), hmax, ctx.size, 'v')
 
     def vbox(self, k, ctx):
         # VP{…}: 괄호(DiaPro 세로 괄호, 1em 줄 하나씩) + 오른쪽→왼쪽 세로 글
@@ -746,9 +753,9 @@ def line_tex(line, W, halign, fs, inl, sqcenter=False, padem=0.06):
         elif it[0] == 'just': body.append(''.join(it[1]))
         elif it[0] == 'obj': body.append(it[1])
         elif it[0] == 'sq':
-            w2 = 2.0 * it[3] * fs
-            al = r'\hss' if sqcenter else r'\hss'
-            body.append(r'\hbox to %.3fbp{%s\scalebox{%.3f}[1]{%s}%s}' % (w2, al, it[2], it[1], r'\hss' if sqcenter else ''))
+            wn = it[3] * fs
+            sc = min(1.0, (W - 2 * pad) / wn) if wn > 0 else 1.0       # 칸에 넘칠 때만 가로로 좁힌다 (두 글자는 그대로)
+            body.append(r'\scalebox{%.3f}[1]{%s}' % (sc, it[1]) if sc < 0.999 else it[1])
     b = ''.join(body)
     wl = inl.line_w(line) * fs if inl and not any(it[0] == 'sq' for it in line) else 0
     if wl > W - 2 * pad and wl > 0:
@@ -960,7 +967,8 @@ class Book:
             if col.startswith('#'):
                 col = col[1:].upper()
                 c = c.but(color=''.join(x * 2 for x in col) if len(col) == 3 else col)
-            if ('jtt-fb' in cell.cls or '700' in (cell.style or {}).get('font-weight', '')) and c.font == 'DM': c = c.but(font='DGB')
+            if ('jtt-fb' in cell.cls or '700' in (cell.style or {}).get('font-weight', '')) and c.font == 'DM' \
+                    and re.fullmatch(r'[\d\s,]*\d[\d\s,]*', cell.node.text() or ''): c = c.but(font='DGB')   # 굵게는 시각에만
             cell.lines = self.inl.lines(cell.node, c)
             cell.lines = [l for l in cell.lines] if any(cell.lines) else []
             cell.need = self.cell_need(T, cell, cell.lines)
@@ -1877,7 +1885,7 @@ class Book:
         pd_ = split(Td, True)          # 앞 쪽부터 가득
         pu_ = split(Tu, True)
         if not pd_ or not pu_: return None
-        return [{'T': Td, 'Tu': Tu, 'kind': 'stackN', 'sides': sides, 'd': (pd_, rd, hd), 'u': (pu_, ru, hu),
+        return [{'T': Td, 'Tu': Tu, 'kind': 'stackN', 'sides': sides, 'anyStart': True, 'd': (pd_, rd, hd), 'u': (pu_, ru, hu),
                  'h': hd + hu - fw, 'trs': pd_[0], 'rows': rd, 'notes': False, 'bw': bw}]
 
     def half_w(self):
@@ -1921,7 +1929,7 @@ class Book:
             for g in range(full):
                 trs = Tc[off + g * capS:off + (g + 1) * capS]
                 # 상행의 가운데 쪽(왼쪽 면) 다음 오른쪽 면이면 펼침면 하나로: 역명은 오른쪽에만
-                js.append({'T': T, 'kind': 'single', 'trs': trs, 'rows': rows, 'notes': False, 'sB': capS, 'side': 'B', 'contR': T is Tu,
+                js.append({'T': T, 'kind': 'single', 'trs': trs, 'rows': rows, 'notes': False, 'sB': capS, 'side': 'B', 'contR': True,
                            'narrow': False, 'nat': self.fixed_w(T, 'B') + len(trs) * self.P0, 'bw': bwf, 'h': h})
             fulls.append(js)
             rt = Tc[full * capS:] if T is Td else Tc[:r]
@@ -2134,12 +2142,22 @@ class Book:
                     pc_['fixw'] = half
                 ys[c] = y + h
                 return True
-            if job['kind'] == 'stackN':           # 여러 쪽에 걸쳐 위(하행)·아래(상행) (왼쪽 면에서 시작)
-                if c % 2 == 1: return False
+            if job['kind'] == 'stackN':           # 여러 쪽에 걸쳐 위(하행)·아래(상행) (오른쪽 면에서 시작하면 오·왼·오…)
                 N_ = len(job['sides'])
+                if c % 2 == 1 and not job.get('anyStart'): return False
+                if c % 2 == 1: job = dict(job, sides=['R' if i % 2 == 0 else 'L' for i in range(N_)])
                 y = max(top(c + i) for i in range(N_))
                 if y + h > PH + 0.01: return False
                 pd_, rd, hd = job['d']; pu_, ru, hu = job['u']
+                if c % 2 == 1:                        # 쪽마다 열차 수를 그 면의 자리에 맞춰 다시 나눈다
+                    def resplit(T_, parts_):
+                        all_ = [x for p_ in parts_ for x in p_]; out_, ti_ = [], 0
+                        for sd_ in job['sides']:
+                            k_ = min(self.cap(T_, sd_, True), len(all_) - ti_); out_.append(all_[ti_:ti_ + k_]); ti_ += k_
+                        return out_ if ti_ == len(all_) else None
+                    pd2, pu2 = resplit(T, pd_), resplit(job['Tu'], pu_)
+                    if not pd2 or not pu2: return False
+                    pd_, pu_ = pd2, pu2
                 for i, sd in enumerate(job['sides']):
                     n_ = max(len(pd_[i]), len(pu_[i]))
                     if pd_[i]: put(T, c + i, pd_[i], rd, y, False, hd, side=sd)['ncol'] = n_
@@ -2208,12 +2226,28 @@ class Book:
                         ys[c - 1] = max(q['y'] + q['h'] for q in prev['pieces'])
                         ys[c] = max(q['h'] for q in mv)
                         remeta(prev); remeta(page(c))
+                if c % 2 == 1 and ys[c] == 0 and not page(c)['pieces']: fill_blank(c)
                 cur['c'] = c + 1          # 오른쪽 면에서는 다른 작은 표로 채울 수 있게 한 쪽씩
             elif job['kind'] == 'pair' and c % 2 == 0:
                 # 왼쪽 면에 자리가 없고 오른쪽 면이 비었으면 오른쪽 면에서 시작해 넘겨 잇는다
                 cur['c'] = c + 1 if (ys[c + 1] == 0 and job['h'] <= PH + 0.01) else c + 2
             else:
                 cur['c'] = c + 1
+
+        def fill_blank(c):
+            """펼침면을 왼쪽 면에서 시작하느라 통째로 비게 되는 오른쪽 면: 뒤 묶음의 작은 표(한 번에 다 실리는 것)를 앞당겨 채운다"""
+            for bunch2 in bunches[cur.get('bi', 0) + 1:]:
+                for T2 in bunch2:
+                    if id(T2) in prefilled or placed[id(T2)]: continue
+                    js = self.jobs_of(T2)
+                    if len(js) != 1 or js[0]['kind'] not in ('side', 'single') or js[0]['h'] > PH + 0.01: continue
+                    if try_place(js[0], c):
+                        prefilled.add(id(T2))
+                        if js[0]['kind'] == 'side':
+                            for q in js[0]['parts']: prefilled.add(id(q[0]))
+                        return True
+            return False
+        prefilled = set()
 
         # 묶음
         bunches = []
@@ -2290,7 +2324,8 @@ class Book:
                         continue
                     for T, (f, b) in zip(ts, old): T.fold, T.band_left = f, b
             # stackPages: 지정한 표는 하행 위·상행 아래로 N 쪽에 걸쳐
-            sp = next((x for x in self.cfg.get('stackPages', []) if len(ts) == 2 and all(T.line == x['line'] and x.get('title', '') in T.title.text() for T in ts)), None)
+            sp = next((x for x in self.cfg.get('stackPages', []) if len(ts) == 2 and all(T.line == x['line'] and x.get('title', '') in T.title.text()
+                                                                                       and not (x.get('not') and x['not'] in T.title.text()) for T in ts)), None)
             if sp:
                 dn = [T for T in ts if '하행' in T.title.text()]
                 up = [T for T in ts if '상행' in T.title.text()]
@@ -2370,8 +2405,9 @@ class Book:
             else:
                 for T, (a, b, c_, d_, e_) in zip((Td, Tu, Sd, Su), old): T.custom_jobs, T.stacked, T.side_with, T.band_left, T.fold = a, b, c_, d_, e_
         rkey = lambda T: (T.line, self.is_ktx(T), route(T))
-        for bunch in bunches:
-            pend = [collections.deque(self.jobs_of(T)) for T in bunch]
+        for bi, bunch in enumerate(bunches):
+            cur['bi'] = bi
+            pend = [collections.deque([] if id(T) in prefilled else self.jobs_of(T)) for T in bunch]
             init = [len(q) for q in pend]
             whole = [n <= 1 for n in init]          # 한 번에 다 실리는 표만 당겨 올 수 있다 (짝에 묶여 일감이 없는 표 포함)
             while any(pend):

@@ -64,7 +64,7 @@ def merge_into(g, k, insert=True, via=None):
         ix = [i for i, x in enumerate(r['times']) if isinstance(x, int)]
         if not ix: continue
         if via:
-            lab = f'{via} 경유'
+            lab = via.replace('고속철도', '/고속철도')          # 「경부/고속철도」 두 줄 세로쓰기
             if clean_name(r['from']) != sn[ix[0]] and ix[0] >= 1: r['times'][ix[0] - 1] = lab
             if clean_name(r['to']) != sn[ix[-1]] and ix[-1] + 1 < len(sn): r['times'][ix[-1] + 1] = lab
         trs.append(r)
