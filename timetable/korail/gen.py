@@ -493,12 +493,12 @@ class Table:
             if len(slots) < 2: return None
             text = via.replace(' ', '')
             text = text.replace('경유', '/경유')             # 「태백선/경유」 두 줄 세로쓰기
-            need = math.ceil((max(len(x) for x in text.split('/')) + 1.2) / 1.26)   # 긴 줄 1em + 괄호 둘 0.6em씩, 행 1.26em
+            need = math.ceil((max(len(x) for x in text.split('/')) + 0.3) / 1.26)   # 긴 줄 1em씩(괄호 없이), 행 1.26em
             if need > len(slots): need = 0                   # 자리가 모자라면 주석 없이 ║ 만 (행이 굵어지지 않게)
             s0 = (len(slots) - need) // 2
             parts = collections.defaultdict(list)
             for j, (k, p) in enumerate(slots):
-                if need and j == s0: parts[k].append(q(f'^{need} va={va}; VP{{{esc_txt(text)}}}'))
+                if need and j == s0: parts[k].append(q(f'^{need} va={va}; VR{{{esc_txt(text)}}}'))   # 괄호 없이
                 elif need and s0 < j < s0 + need: parts[k].append('!')
                 else: parts[k].append('i')                   # 다른 선을 달림
             return {k: ','.join(v) if len(v) > 1 and v != ['i', 'i'] else v[0] for k, v in parts.items()}
