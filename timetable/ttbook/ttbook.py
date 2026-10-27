@@ -1733,12 +1733,12 @@ class Book:
                     if d: T._colno[c.c] = d
         return T._colno
 
-    def page_badge(self, n, size, color):
-        """쪽 번호 네모 표지 (무궁화 등급 표지처럼 속 빈 네모)"""
+    def page_badge(self, n, size, color, tsize=None):
+        """쪽 번호 네모 표지 (무궁화 등급 표지처럼 속 빈 네모). tsize: 곁의 글자 크기 (네모의 가운데를 그 글자의 가운데에)"""
         sm = size * 0.76
         inner = self.inl.run(str(n), Ctx('DG', sm, color))
         w = max(1.3, len(str(n)) * 0.55 + 0.4)
-        return r'\ttbadge{%.3f}{%.3f}{0}{1.000}{%.3f}{%s}' % (w * sm * self.fs, 1.3 * sm * self.fs, self.inl.c * size * self.fs, inner)
+        return r'\ttbadge{%.3f}{%.3f}{0}{1.000}{%.3f}{%s}' % (w * sm * self.fs, 1.3 * sm * self.fs, self.inl.c * (tsize or size) * self.fs, inner)
 
     def resolve_refs(self, body):
         """짠 뒤: 쪽마다 실린 열차로 찾아 \\TTREF{k} 를 쪽 번호 네모 표지로"""
@@ -1988,7 +1988,7 @@ class Book:
                     tex.append(self.put_box(x0 + 62, yy, W - 62, 12, self.inl.flat(ln_[0]) if ln_ else '', 'l', 'm'))
                     yy += 15
             # 표 속 기호 (DiaPro 글리프 그대로)
-            sy = [('‥', '그 역을 지나지 않음'), ('║', '다른 선을 달림'), ('↓', '통과'), ('▔', '여기서 끝남 (상하병기의 상행은 ▁)'), ('━', '굵은 세로줄 오른쪽은 수서 발착 등 덧붙인 열차')]
+            sy = [('‥', '그 역을 지나지 않음'), ('║', '다른 선을 달림'), ('↓', '통과'), ('▔', '여기서 끝남')]
             tex.append(self.put_box(x0, yy, 60, 12, self.inl.run('기호', Ctx('GB', 1.1)), 'l', 'm'))
             for i_, (g_, t_) in enumerate(sy):
                 if g_ == '━': continue
@@ -2108,7 +2108,7 @@ class Book:
                     pg_ = line_page(nm)
                     if pg_ is None: continue
                     out.append(self.inl.run(text[pos:m_.end()], Ctx('M', sz)))
-                    out.append(r'\kern%.3fbp ' % (0.2 * sz * fs) + self.page_badge(pg_, sz / 0.76 * 0.9, None))
+                    out.append(r'\kern%.3fbp ' % (0.2 * sz * fs) + self.page_badge(pg_, sz / 0.76 * 0.9, None, sz))
                     pos = m_.end()
                 out.append(self.inl.run(text[pos:], Ctx('M', sz)) if text[pos:] else '')
                 return ''.join(out)
@@ -2122,10 +2122,22 @@ class Book:
                 m = re.search(r'.*는 (.+?) 표에\s*$', re.sub(r'\s+', ' ', d.text()))
                 if not m: continue
                 ps = [p for p, X in getattr(self, '_tpages', []) if m.group(1) in X.title.text()]
-                if ps: parts[i_] += r'\kern%.3fbp ' % (0.3 * sz * fs) + self.page_badge(min(ps) + self.cfg.get('firstFolio', 2), sz / 0.76 * 0.9, None)
+                if ps: parts[i_] += r'\kern%.3fbp ' % (0.3 * sz * fs) + self.page_badge(min(ps) + self.cfg.get('firstFolio', 2), sz / 0.76 * 0.9, None, sz)
             fw_ = (self.inl.wc.get(fo, 2.0)) * fs
             gap = 3 * MM
             W = self.cw - fw_ - gap
+            # 세 줄까지: 넘치면 같은 구간·환승 안내를 뒤에서부터 뺀다
+            def est(d):
+                t = re.sub(r'\s+', ' ', d.text()).strip().lstrip('→')
+                return (len(t) * 1.0 + 2.0 * len(re.findall(r'[가-힣]+선', t)) + 1.2) * sz * fs
+            def nlines(ws):
+                n, cur_ = 1, 0.0
+                for w_ in ws:
+                    if cur_ and cur_ + w_ > W: n += 1; cur_ = 0.0
+                    cur_ += w_
+                return n
+            while len(legend) > 1 and nlines([est(d) for d in legend]) > 3 and re.sub(r'\s+', '', legend[-1].text()).startswith('→'):
+                legend = legend[:-1]; parts = parts[:-1]
             # 두 줄이 되면 두 줄로: 항목을 앞뒤 반으로 나눠 줄을 바꾼다
             if len(parts) >= 2:
                 h_ = -(-len(parts) // 2)
