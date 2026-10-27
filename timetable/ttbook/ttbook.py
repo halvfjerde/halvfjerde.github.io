@@ -1011,10 +1011,11 @@ class Book:
         for cell, ref, c in refs_:
             sm = c.size * 0.76
             n_ = len(ref['nums']) if ref['kind'] == 'train' else 1
-            w_ = n_ * 1.85 * sm + (n_ - 1) * 0.2 * sm
+            w_ = n_ * 1.5 * sm + (n_ - 1) * 0.2 * sm
             mk = r'\TTREF{%d}' % len(self.refs)
             self.refs[mk] = dict(ref, T=T, col=cell.c, size=c.size, color=c.color)
-            item = [('obj', mk, w_, 1.4 * sm, c.size)]
+            item = [('obj', mk, w_, 1.3 * sm, c.size)]
+            gap_ = [('obj', r'\rule{0pt}{%.3fbp}' % (0.25 * sm * fs), 0.0, 0.25 * sm, c.size, 'v')]      # 위 글과 살짝 띄운다
             host = None
             if cell.r < T.fStart:
                 for rr in (cell.r + cell.rs, cell.r - 1):
@@ -1029,14 +1030,14 @@ class Book:
                 cell.rs += 1
                 T.cells.remove(host)
                 for rr_ in range(cell.r, cell.r + cell.rs): T.occ[(rr_, cell.c)] = cell
-                cell.lines = cell.lines + [item]
+                cell.lines = cell.lines + [gap_, item]
                 cell.refin = True
                 cell.need = self.cell_need(T, cell, cell.lines)
             else:                     # 주 칸 끝에 한 줄 더: 세로쓰기의 띄어쓰기는 빼고(표지가 사이를 띄운다) 높이를 아낀다
                 def nospace(n):
                     n.kids = [k.replace(' ', '') if isinstance(k, str) else (nospace(k) or k) for k in n.kids]
                 nd = copy.deepcopy(cell.node); nospace(nd); cell.node = nd
-                cell.lines = [l for l in self.inl.lines(nd, c)] + [item]
+                cell.lines = [l for l in self.inl.lines(nd, c)] + [gap_, item]
                 cell.refin = True
                 cell.need = self.cell_need(T, cell, cell.lines)
         R = self.R / fs                     # em
@@ -1668,8 +1669,8 @@ class Book:
         """쪽 번호 네모 표지 (무궁화 등급 표지처럼 속 빈 네모)"""
         sm = size * 0.76
         inner = self.inl.run(str(n), Ctx('DG', sm, color))
-        w = max(1.6, len(str(n)) * 0.55 + 0.75)          # 숫자 둘레에 살짝 여백
-        return r'\ttbadge{%.3f}{%.3f}{0}{1.000}{%.3f}{%s}' % (w * sm * self.fs, 1.4 * sm * self.fs, self.inl.c * size * self.fs, inner)
+        w = max(1.3, len(str(n)) * 0.55 + 0.4)
+        return r'\ttbadge{%.3f}{%.3f}{0}{1.000}{%.3f}{%s}' % (w * sm * self.fs, 1.3 * sm * self.fs, self.inl.c * size * self.fs, inner)
 
     def resolve_refs(self, body):
         """짠 뒤: 쪽마다 실린 열차로 찾아 \\TTREF{k} 를 쪽 번호 네모 표지로"""
