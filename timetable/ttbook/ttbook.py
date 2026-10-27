@@ -933,20 +933,24 @@ class Book:
                 T.colW[stc[0]] -= take
 
     def arrow_rects(self, x, y0, y1, dr, shaft=None):
-        """진행 방향 화살표: 첫 역 행부터 끝 역 행까지 축, 끝에 칠한 촉, 뒤에 V 깃"""
+        """진행 방향 화살표 (그림대로): 꼬리는 위가 V 로 파이고 아래가 V 로 모이는 오각형 깃, 촉은 뒤가 파인 날개 촉.
+        축은 깃의 파인 곳부터 촉 끝까지 (깃·촉 속으로 지나간다). 깃·촉은 속 빈 가는 선"""
         em = self.fs
-        hw, hl = 0.24 * em, 0.9 * em          # 촉: 속 빈 세모
-        fw_, ft = 0.3 * em, 0.14 * em         # 깃: 속 빈 V (🔰 꼴 띠). 반폭·띠 굵기(가로), 위아래로 높게 (행 1.8개 남짓)
-        fd = 0.0
-        fv = max(0.5 * em, 1.8 * self.R - 0.2 * em)
+        W = 0.3 * em                              # 깃·촉 반폭 (좌우로 좁게)
+        Ht = max(1.2 * em, 1.8 * self.R - 0.15 * em)   # 깃 높이 (행 1.8개 남짓)
+        hl, hc = 1.25 * em, 0.55 * em             # 촉 길이, 촉 뒤 파인 깊이
         lw = self.rw[1]
-        yt, yb = y0 + 0.1 * em, y1 - 0.08 * em
-        if dr == 'u': yt, yb = y1 - 0.1 * em, y0 + 0.08 * em      # 위로: 꼬리가 아래
+        yt, yb = y0 + 0.08 * em, y1 - 0.06 * em
+        if dr == 'u': yt, yb = y1 - 0.08 * em, y0 + 0.06 * em      # 위로: 꼬리가 아래
         s = 1 if yb > yt else -1
-        out = [('line', [(x, yt + s * fv), (x, yb - s * hl * 1.02)], shaft or lw),      # 축: 착발 칸과 첫 열차 열 사이 괘선을 대신 (깃 밑에서부터)
-               ('closed', [(x - fw_, yt), (x, yt + s * fv), (x + fw_, yt), (x + fw_ - ft, yt), (x, yt + s * fv * (1 - ft / fw_)), (x - fw_ + ft, yt)], lw),
-               ('closed', [(x - hw, yb - s * hl), (x + hw, yb - s * hl), (x, yb)], lw)]
-        return out
+        notch = yt + s * 0.32 * Ht
+        side = yt + s * 0.72 * Ht
+        tail = [(x - W, yt), (x, notch), (x + W, yt), (x + W, side), (x, yt + s * Ht), (x - W, side)]
+        back = yb - s * hl
+        head = [(x - W, back), (x, back + s * hc), (x + W, back), (x, yb)]
+        return [('line', [(x, notch), (x, yb)], shaft or lw),
+                ('line', tail + [tail[0]], lw),
+                ('line', head + [head[0]], lw)]
 
     def aim_rects(self, x, y, w, h):
         """조준선: 칸 가운데 높이에 긴 점 셋"""
