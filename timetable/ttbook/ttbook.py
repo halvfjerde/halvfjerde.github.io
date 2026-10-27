@@ -3518,11 +3518,15 @@ class Book:
                 yy = Y + TH
                 rects.append(('h', xx, xx + colw, yy, 2))
                 rows = [it for it in pc['items'] if it[0] == 'r']
+                one = P.get('intl')                             # 국제선: 인천 쪽 시각 하나 (출발 | 도착)
                 if rows:
                     for side, (o, d) in enumerate(((P['a'], P['b']), (P['b'], P['a']))):
                         hx = xx + side * hw + pad
                         lab = Ctx('G', 0.8)
                         tex.append(self.put_box(hx, yy, cN, SH, self.inl.run('편명', lab), 'l', 'm'))
+                        if one:
+                            tex.append(self.put_box(hx + cN, yy, cT + cA, SH, self.inl.run('인천 %s' % ('발' if side == 0 else '착'), lab), 'r', 'm'))
+                            continue
                         tex.append(self.put_box(hx + cN, yy, cT, SH, self.inl.run(o, lab), 'r', 'm'))
                         tex.append(self.put_box(hx + cN + cT + cA, yy, cT, SH, self.inl.run(d, lab), 'r', 'm'))
                     yy += SH
@@ -3535,6 +3539,9 @@ class Book:
                             hx = xx + side * hw + pad
                             if lab_: tex.append(self.put_box(hx, yy, cM, R, self.inl.run('※', Ctx('M', 0.8)), 'l', 'm'))
                             tex.append(self.put_box(hx + cM, yy, cN - cM, R, self.inl.run(no, Ctx('M', 1.0).but(hscale=hsN)), 'l', 'm'))
+                            if one:
+                                tex.append(self.put_box(hx + cN, yy, cT + cA, R, self.inl.run(hmf(t), Ctx('DM', 1.0)), 'r', 'm'))
+                                continue
                             tex.append(self.put_box(hx + cN, yy, cT, R, self.inl.run(hmf(t), Ctx('DM', 1.0)), 'r', 'm'))
                             tex.append(self.put_box(hx + cN + cT, yy, cA, R, self.inl.run('→', Ctx('M', 0.8)), 'c', 'm'))
                             tex.append(self.put_box(hx + cN + cT + cA, yy, cT, R, self.inl.run(hmf(a), Ctx('DM', 1.0)), 'r', 'm'))
