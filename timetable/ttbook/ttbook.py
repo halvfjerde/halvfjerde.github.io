@@ -1137,13 +1137,16 @@ class Book:
         route = re.sub(r'\s+', ' ', parts[1].text()).strip().strip('（）()')
         two = colw >= 3.5 * fs                     # 넓은 칸: 두 줄 (오른쪽 줄이 먼저)
         cw = colw / 2 if two else colw
-        a, la = stack(sg0, cw)
+        # 두 줄일 때 줄 사이는 글자 크기만큼만 (칸 폭을 반씩 나누면 행간이 너무 벌어진다)
+        cwA = 1.3 * 1.2 * scale * fs if two else cw
+        cwB = 1.3 * 0.9 * scale * fs if two else cw
+        a, la = stack(sg0, cwA)
         if mdir:
             bt, bh = self.dir_badge(mdir.group(1), mdir.group(1) == '하행', mdir.group(1) == '하행', scale * 0.9, cw)
             a += r'\kern%.3fbp' % (0.4 * fs * scale) + bt; la += bh + 0.4 * fs * scale
         rc = Ctx('M', scale * (0.9 if two else 0.85), color)
-        b, lb = stack([('（%s）' % route, rc)], cw) if route else ('', 0.0)
-        if part: c, lc = stack([('(%s)' % part, Ctx('M', scale * 0.9, color))], cw)
+        b, lb = stack([('（%s）' % route, rc)], cwB) if route else ('', 0.0)
+        if part: c, lc = stack([('(%s)' % part, Ctx('M', scale * 0.9, color))], cwA)
         else: c, lc = '', 0.0
         if two:
             need = max(la + lc, lb) + fs * scale
@@ -1152,7 +1155,7 @@ class Book:
             # 왼쪽 줄은 노선·방향과 몇째를 한 덩어리로 가운데에
             right = r'\vbox to %.3fbp{\offinterlineskip\vfil %s\vfil}' % (H, b)
             left = r'\vbox to %.3fbp{\offinterlineskip\vfil %s%s%s\vfil}' % (H, a, (r'\kern%.3fbp' % (0.6 * fs * scale)) if c else '', c)
-            tex = r'\hbox to %.3fbp{%s%s}' % (colw, left, right)
+            tex = r'\hbox to %.3fbp{\hss %s\kern%.3fbp %s\hss}' % (colw, left, 0.15 * fs * scale, right)
         else:
             need = la + lb + lc + 2 * fs * scale
             if need > H and la + lc + fs <= H:      # 길이가 모자라면 구간은 뺀다
