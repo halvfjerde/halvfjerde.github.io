@@ -81,6 +81,8 @@ if not MERGE_SUSEO: SUSEO_TO = {}
 # 주인 노선 수서 표에는 짝 열차 번호만(병결열차 행), 손님 노선에는 갈림역 ─ 끝의 작은 별표(수서 발착 병결)
 COUPLE = {('ktx', '경부선'): ('ktx', '경전선', '동대구'), ('ktx', '호남선'): ('ktx', '전라선', '익산')}
 COUPLE_GUEST = {(c, s): host for host, (c, s, _) in COUPLE.items()}
+# 별표 대신 손님 노선 KTX 표 끝에 수서 열차를 직결 열차처럼 덧붙이는 노선 (수서·동탄·평택지제 행 없이, 굵은 세로줄 뒤에)
+MERGE_GUEST = {('ktx', '경전선')}
 GUEST_SUSEO = {}              # (cat, 손님 노선, 방향) → (별표, {손님 번호: [주인 번호]}). 주인 노선을 먼저 짤 때 채운다
 
 def week_days(note):
@@ -135,8 +137,8 @@ def day_range(s):
     if len(s) >= 3:
         k = WEEK.index(s[0])
         if all(WEEK[(k + i) % 7] == ch for i, ch in enumerate(s)): s = f'{s[0]}∼{s[-1]}'
-        else: s = '·'.join(s)
-    elif len(s) == 2: s = '·'.join(s)                     # 금·토 (「금토」는 한 낱말처럼 읽힌다)
+        else: s = '・'.join(s)
+    elif len(s) == 2: s = '・'.join(s)                     # 금・토 (일본식 가운뎃점. 「금토」는 한 낱말처럼 읽힌다)
     else: s += '요일'                                      # 월요일 (「월 운행」은 달로도 읽힌다)
     return s + '/운행'                                     # 요일 | 운행 두 줄
 
@@ -190,7 +192,11 @@ class Table:
         kept = KEEP_STATIONS.get((self.cat, self.line), set())
         keep = [i for i in range(len(st)) if st[i] in kept or any(isinstance(tr['times'][i], int) for tr in trains)]
         self.st = [st[i] for i in keep]
-        for tr in trains: tr['times'] = [tr['times'][i] for i in keep]
+        for tr in trains:
+            tr['times'] = [tr['times'][i] for i in keep]
+            if tr.get('pass_from') is not None:
+                pf = st[tr['pass_from']]
+                tr['pass_from'] = self.st.index(pf) if pf in self.st else None
         self.trains = trains
         self.infer()
         self.sort()
@@ -259,6 +265,16 @@ class Table:
                     for i in grp:
                         if T[i] in ('v', 'I'): T[i] = None
 
+        # 덧붙인 수서 직결 열차: 표에 없는 수서 쪽에서 들어와 첫 정차역 앞(천안아산부터)은 지나감
+        for tr in self.trains:
+            p_ = tr.get('pass_from')
+            if p_ is None: continue
+            T = tr['times']
+            idx = [i for i, x in enumerate(T) if isinstance(x, int)]
+            rng = range(p_, idx[0]) if self.dir == 'down' else range(idx[-1] + 1, p_ + 1)
+            for k in rng:
+                if T[k] is None: T[k] = 'v'
+
     # ── 기준 시각으로 줄 세우기 ──
     def sort(self):
         n = len(self.st)
@@ -276,7 +292,7 @@ class Table:
             T = tr['times']
             r = [T[k] - off[k] for k in range(n) if isinstance(T[k], int) and off[k] is not None]
             tr['ref'] = statistics.median(r) if r else 9999
-        self.trains.sort(key=lambda tr: (tr['ref'], tr['no']))
+        self.trains.sort(key=lambda tr: (tr.get('block', 0), tr['ref'], tr['no']))   # 덧붙인 덩어리(수서 직결)는 끝에
 
     # ── 원문 쓰기 ──
     def stops(self, i): return sum(isinstance(tr['times'][i], int) for tr in self.trains)
@@ -288,6 +304,8 @@ class Table:
         ends = collections.Counter()
         for tr in self.trains:
             idx = [i for i, x in enumerate(tr['times']) if isinstance(x, int)]
+            if tr.get('pass_from') is not None:       # 수서 직결: 표 밖에서 들어오고 나가니 표 안의 첫·끝 역은 시발·종착이 아니다
+                ends[idx[-1] if self.dir == 'down' else idx[0]] += 1; continue
             ends[idx[0]] += 1; ends[idx[-1]] += 1
         busy = [i for i in range(n) if self.stops(i) >= 0.75 * N]
         if len(busy) > 0.4 * n: busy = []
@@ -379,10 +397,11 @@ class Table:
             j = junction(c)
             if j is not None and j in self.split and j != c: self.split.discard(c); self.junc.add(self.st[c])
         if ktx:
+            nblk = sum(1 for tr in self.trains if tr.get('block'))      # 덧붙인 덩어리는 표의 크기로 치지 않는다
             for i, s in enumerate(self.st):
                 trav = sum(1 for tr in self.trains if isinstance(tr['times'][i], int) or tr['times'][i] == 'v')
                 stop = self.stops(i)
-                if N >= 20 and trav and stop == trav and stop >= 0.3 * N:      # 지나는 열차가 모두 서는 역만 (직관적 주요역 KTX_MAJOR 은 인쇄 쪽수 때문에 한 줄로)
+                if N - nblk >= 20 and trav and stop == trav and stop >= 0.3 * N:      # 지나는 열차가 모두 서는 역만 (직관적 주요역 KTX_MAJOR 은 인쇄 쪽수 때문에 한 줄로)
                     self.split.add(i)
         self.split -= {i for i, s in enumerate(self.st) if s in NOSPLIT_ALL}
         self.split |= {i for i, s in enumerate(self.st) if s in SPLIT_ALL and self.stops(i)}
@@ -418,7 +437,9 @@ class Table:
             L.append(f'{q(nm)} {ad}{r}')
         L.append('')
         L.append('[trains]')
+        prev_block = 0
         for tr in self.trains:
+            if tr.get('block', 0) != prev_block: L.append('---'); prev_block = tr.get('block', 0)   # 덧붙인 덩어리 앞에 굵은 세로줄
             k = KIND.get(tr['type'], tr['type'])
             hdr = [q(badge(k, tr['type'])), tr['no']]
             if has_fr:
@@ -469,6 +490,8 @@ class Table:
         cp = getattr(self, 'cpl', None)
         if cp:
             notes.append('병결열차는 연결해 달리는 열차')
+        elif (self.cat, self.line) in MERGE_GUEST:
+            notes.append('굵은 줄 오른쪽은 수서 발착')
         elif (self.cat, self.line) in COUPLE_GUEST and self.variant != '수서':
             notes.append(f'수서 발착 열차는 수서 발착 병결 표에')
         if any(c.startswith('_,') for tr in self.trains for c in self.cells(tr)):
@@ -491,10 +514,10 @@ class Table:
         return False
 
     def cpl_note(self, tr):
-        """병결 짝이 요일로 바뀌는 열차의 비고: 짝마다 번호와 요일 「668 월∼목/672 금∼일」"""
+        """병결 짝이 요일로 바뀌는 열차의 비고: 짝마다 요일과 번호 「월∼목 668/금∼일 672」"""
         gs = self.cpl_main(tr)
         if len(gs) < 2: return None
-        return '/'.join(f'{x} {day_range(self.cpl["days"][x]).split("/")[0]}' for x in gs)      # 「668 월∼목/672 금∼일」
+        return '/'.join(f'{day_range(self.cpl["days"][x]).split("/")[0]} {x}' for x in gs)      # 「월∼목 668/금∼일 672」
 
     def cpl_main(self, tr):
         """짝 열차들. 운행일이 많은 것부터"""
@@ -571,7 +594,11 @@ class Table:
                 out.append(tail[i])
             elif tail and i > b:
                 out.append('v')
+            elif x == 'v' and tr.get('pass_from') is not None and (i < a or i > b):   # 수서 직결: 표 밖에서 들어오고 나가는 길
+                out.append('v')
             elif i < a or i > b + 1 or (i == b + 1 and bar):
+                out.append('x')
+            elif i == b + 1 and tr.get('pass_from') is not None:   # 수서 직결: 표 밖(수서)으로 나가니 끝 표시 없이
                 out.append('x')
             elif i == b + 1:                              # 마지막 정차역 다음 칸: 끝 표시
                 out.append('-,x' if sp else '-')
@@ -694,7 +721,7 @@ def main():
         title = f'{PREFIX}/{line}'
         expanded = []
         for cat, sheet, sub in parts:
-            if (cat, sheet) in SPLIT_SUSEO or (cat, sheet) in COUPLE_GUEST:
+            if (cat, sheet) in SPLIT_SUSEO or ((cat, sheet) in COUPLE_GUEST and (cat, sheet) not in MERGE_GUEST):
                 expanded += [(cat, sheet, sub, None), (cat, sheet, sub, '수서')]
             else: expanded.append((cat, sheet, sub, None))
         for cat, sheet, sub, variant in expanded:
@@ -736,6 +763,19 @@ def main():
                            'days': {tr['no']: tr['note'] for tr in gt['trains']}}
                 elif variant == '수서' and (cat, sheet) in COUPLE_GUEST:
                     t, gmap = GUEST_SUSEO[(cat, sheet, d)]      # 별표는 직결 열차처럼 (시발·종착역이 수서). 병결열차 행 없이
+                elif (cat, sheet) in MERGE_GUEST:      # 수서 열차는 표 끝에 직결 열차처럼
+                    nm = [clean_name(x) for x in t['stations']]
+                    k = nm.index('수서')
+                    drop = [i for i, x in enumerate(nm) if x in ('수서', '동탄', '평택지제')]
+                    entry = nm.index('천안아산') if '천안아산' in nm else None
+                    trs = []
+                    for tr in t['trains']:
+                        if not isinstance(tr['times'][k], int): trs.append(tr); continue
+                        tt = list(tr['times'])
+                        ends = {'from': '수서', 'fromT': tt[k]} if d == 'down' else {'to': '수서', 'toT': tt[k]}
+                        for i in drop: tt[i] = None
+                        trs.append(dict(tr, times=tt, block=1, pass_from=entry, **ends))
+                    t = dict(t, trains=trs)
                 elif (cat, sheet) in COUPLE_GUEST:     # 수서 열차는 병결 별표로
                     k = next(i for i, x in enumerate(t['stations']) if clean_name(x) == '수서')
                     t = dict(t, trains=[tr for tr in t['trains'] if not isinstance(tr['times'][k], int)])

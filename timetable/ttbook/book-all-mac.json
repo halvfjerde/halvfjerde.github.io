@@ -67,16 +67,10 @@
  "dropEnds": false,
  "rightHangul": true,
  "rightStubSingle": false,
- "holdAfter": [
+ "tailWith": [
   {
    "line": "전라선",
-   "title": "수서",
-   "after": "호남선"
-  },
-  {
-   "line": "경전선",
-   "title": "수서",
-   "after": "호남선"
+   "title": "수서"
   }
  ]
 }

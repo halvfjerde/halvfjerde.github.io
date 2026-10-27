@@ -175,6 +175,9 @@ def build_table(wrap):
             k = ('R', role)
         if k and kind[cell.c] is None: kind[cell.c] = k
     T.kind = [k or ('T', None) for k in kind]
+    # 열차 사이 굵은 세로줄(원문 [trains] 의 ---): 그 왼쪽에서 표를 나눌 수 있다 (덧붙인 덩어리 등)
+    T.rules = sorted({cell.c for cell in T.cells if cell.cs == 1 and T.kind[cell.c][0] == 'T'
+                      and re.search(r'border-left:\s*2px', cell.node.attrs.get('style', ''))})
     T.hEnd = sum(1 for c in T.rowcls if 'jtt-hr' in c)
     f1 = next((i for i, c in enumerate(T.rowcls) if 'jtt-f1' in c), T.nrow)
     T.fStart = f1
@@ -612,6 +615,10 @@ class Inline:
                 if ch in VROT:
                     t, l = self.vform(ch, c, em)
                     rows.append(t); h += l; i += 1; continue
+                if ch.isdigit():                 # 숫자(열차번호 등): 세로로 한 자씩 세워 명조로
+                    rows.append(r'\hbox to %.3fbp{\hss\rule[%.3fbp]{0pt}{%.3fbp}%s\hss}' % (
+                        em, -0.1 * em, 0.78 * em, self.run(ch, c.but(font='M'), True)))
+                    h += 0.78; i += 1; continue
                 if is_latin(ch):
                     j = i
                     while j < len(txt) and is_latin(txt[j]): j += 1
@@ -902,17 +909,17 @@ class Book:
                         cl.node = nd
                         cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
                         continue
-                    pr = re.findall(r'(\d+)([월화수목금토일∼~·요]+)', t)
-                    if pr and ''.join(a + b for a, b in pr) == t:     # 「668 월∼목/672 금∼일」(병결 짝): 작은 가로 글씨로 번호·요일
-                        sm = Node('span', [('class', 'tt-small')])
+                    pr = re.findall(r'([월화수목금토일∼~·・요]+)(\d+)', t)
+                    if pr and ''.join(a + b for a, b in pr) == t:     # 「월∼목 668/금∼일 672」(병결 짝): 짝마다 한 줄, 보통 크기 세로쓰기
+                        vt = Node('span', [('class', 'jtt-v tt-rl')])
                         for k_, (a, b) in enumerate(pr):
-                            if k_: sm.kids.append(Node('br', []))
-                            sm.kids += [a, Node('br', []), b]
-                        nd = Node('td', []); nd.kids.append(sm)
+                            if k_: vt.kids.append(Node('br', []))
+                            vt.kids.append(a + ' ' + b)
+                        nd = Node('td', []); nd.kids.append(vt)
                         cl.node = nd
                         cl.style = dict(cl.style); cl.style['vertical-align'] = 'top'
                         continue
-                    m = re.match(r'[월화수목금토일∼~·요]+', t)
+                    m = re.match(r'[월화수목금토일∼~·・요]+', t)
                     if not m: continue
                     days, rest = m.group(0), t[m.end():]
                     if len(days) <= 3:               # 범위(금∼일)·두 자 이하: 보통 크기 세로쓰기로 「…운행」
@@ -1875,6 +1882,63 @@ class Book:
                 'rows': rems[0][2], 'notes': False, 'bw': bwh, 'nosplit': True}
         return fulls[0] + [side] + fulls[1]
 
+    def tail_with_jobs(self, Td, Tu, Sd, Su):
+        """tailSide 에 같은 노선의 작은 별표를 곁들여: 하 | 하 끝·하 별표 | 상 | 상 끝·상 별표 (끝 몇 편과 별표를 한 쪽에 좌우로)"""
+        if self.cfg.get('rightStubSingle', True): return None
+        for T in (Td, Tu, Sd, Su): T.band_left = False; T.fold = False
+        PH = self.ch
+        half = self.half_w()
+        bwf, bwh = self.band_w(self.cw), self.band_w(half)
+        jobs = []
+        for T, S in ((Td, Sd), (Tu, Su)):
+            _, Tc, _ = self.blocks(T)
+            capS = self.cap(T, 'B', True)
+            full, r = divmod(len(Tc), capS)
+            if full < 1 or r == 0: return None
+            rows = list(range(T.nrow))
+            h = self.piece_h(T, rows, False, bwf)
+            if h > PH + 0.01: return None
+            for g in range(full):
+                trs = Tc[g * capS:(g + 1) * capS]
+                jobs.append({'T': T, 'kind': 'single', 'trs': trs, 'rows': rows, 'notes': False, 'sB': capS, 'side': 'B',
+                             'narrow': False, 'nat': self.fixed_w(T, 'B') + len(trs) * self.P0, 'bw': bwf, 'h': h})
+            parts = []
+            for X, trs in ((T, Tc[full * capS:]), (S, self.blocks(S)[1])):
+                if self.fixed_w(X, 'B') + len(trs) * self.P0 * self.squeeze > half + 0.01: return None
+                rx = list(range(X.nrow))
+                parts.append((X, trs, rx, self.piece_h(X, rx, False, bwh)))
+            jobs.append({'T': T, 'Tu': S, 'kind': 'side', 'parts': parts, 'h': max(q[3] for q in parts), 'trs': parts[0][1],
+                         'rows': parts[0][2], 'notes': False, 'bw': bwh, 'nosplit': True})
+        return jobs
+
+    def rule_jobs(self, Td, Tu):
+        """굵은 세로줄에서 나누기: 하행·상행 본표는 각각 한 단(한 쪽에 위아래로 들 수 있게), 줄 뒤 덩어리는 둘을 한 쪽에 좌우로.
+        → (하행 일감, 상행 일감) 또는 None"""
+        PH = self.ch
+        half = self.half_w()
+        bwf, bwh = self.band_w(self.cw), self.band_w(half)
+        main, parts = {}, []
+        for T in (Td, Tu): T.band_left = T.head is not None     # 제목은 왼쪽 세로 띠로 (높이를 줄여 다른 표와 한 쪽을 나눠 쓴다)
+        for T in (Td, Tu):
+            _, Tc, _ = self.blocks(T)
+            rs = [Tc.index(c) for c in getattr(T, 'rules', []) if c in Tc]
+            if len(rs) != 1: return None
+            b = rs[0]
+            capS = self.cap(T, 'B', True)
+            if not 0 < b <= capS: return None
+            rows = list(range(T.nrow))
+            h = self.piece_h(T, rows, False, bwf)
+            if h > PH + 0.01: return None
+            trs = Tc[:b]
+            main[id(T)] = {'T': T, 'kind': 'single', 'trs': trs, 'rows': rows, 'notes': False, 'sB': capS, 'side': 'B',
+                           'narrow': False, 'nat': self.fixed_w(T, 'B') + len(trs) * self.P0, 'bw': bwf, 'h': h}
+            blk = Tc[b:]
+            if self.fixed_w(T, 'B') + len(blk) * self.P0 * self.squeeze > half + 0.01: return None
+            parts.append((T, blk, rows, self.piece_h(T, rows, False, bwh)))
+        side = {'T': Td, 'Tu': Tu, 'kind': 'side', 'parts': parts, 'h': max(q[3] for q in parts), 'trs': parts[0][1],
+                'rows': parts[0][2], 'notes': False, 'bw': bwh, 'nosplit': True}
+        return [main[id(Td)], side], [main[id(Tu)]]
+
     def jobs_of(self, T):
         """표 하나를 실을 일감들: [{kind single|pair, trs, rows, h, ...}] (역 구간 먼저, 그 안에서 열차 무리 차례)"""
         if getattr(T, 'custom_jobs', None): return T.custom_jobs
@@ -2127,7 +2191,7 @@ class Book:
             if mode == 'left': T.band_left = fits
             else: T.band_left = fits and len(jl) <= len(jt) and 2 * hl - fw <= PH + 0.01 < 2 * ht - fw
         for T in tables:
-            T.band_left = False; T.fold = False; T.stack_with = None; T.stacked = False; T.side_with = None; T.custom_jobs = None
+            T.band_left = False; T.fold = False; T.stack_with = None; T.stacked = False; T.side_with = None; T.custom_jobs = None; T.pull_first = False
             if self.fold != 'off':
                 jt = self.jobs_of(T)
                 T.band_left = T.head is not None; T.fold = True
@@ -2164,6 +2228,19 @@ class Book:
                         dn[0].side_with, up[0].stacked = up[0], True
                         continue
                     for T, (f, b) in zip(ts, old): T.fold, T.band_left = f, b
+            # 굵은 세로줄(덧붙인 덩어리)이 있으면 거기서 나눈다: 본표는 하행·상행 한 단씩, 덩어리는 따로 한 쪽에 좌우로
+            if len(ts) == 2 and all(getattr(T, 'rules', None) for T in ts):
+                dn = [T for T in ts if '하행' in T.title.text()]
+                up = [T for T in ts if '상행' in T.title.text()]
+                if len(dn) == 1 and len(up) == 1:
+                    old = [(T.fold, T.band_left) for T in ts]
+                    for T in ts: T.fold = False; T.band_left = False
+                    rj = self.rule_jobs(dn[0], up[0])
+                    if rj:
+                        dn[0].custom_jobs, up[0].custom_jobs = rj
+                        for T in ts: T.pull_first = True      # 본표만 먼저 당겨 올 수 있다 (덩어리는 제 차례에)
+                        continue
+                    for T, (f, b) in zip(ts, old): T.fold, T.band_left = f, b
             # 하행·상행 짝이 펼침면에 위아래로 들면 그렇게 (하행 위, 상행 아래, 가로로 이어 읽는다)
             if self.cfg.get('upDown', True) and len(ts) == 2:
                 dn = [T for T in ts if '하행' in T.title.text()]
@@ -2197,6 +2274,21 @@ class Book:
                     jl = self.jobs_of(T)
                     ok = ok and all(self.vband(T, '열넷째' if len(jl) > 1 else None, 100)[1] <= j['h'] - 2 * (fw + self.frame_pad) - 2 * self.vpad for j in jl)
                 for T in ts: T.band_left = ok
+        # tailWith: 노선의 KTX 하행·상행에 같은 노선의 작은 별표(수서 발착 병결 등)를 곁들여 한 흐름으로
+        for tw in self.cfg.get('tailWith', []):
+            ks = [T for T in tables if self.is_ktx(T) and T.line == tw['line']]
+            main = [T for T in ks if tw['title'] not in T.title.text()]
+            sub = [T for T in ks if tw['title'] in T.title.text()]
+            pick = lambda ts, d: [T for T in ts if d in T.title.text()]
+            if not (len(pick(main, '하행')) == len(pick(main, '상행')) == len(pick(sub, '하행')) == len(pick(sub, '상행')) == 1): continue
+            Td, Tu, Sd, Su = pick(main, '하행')[0], pick(main, '상행')[0], pick(sub, '하행')[0], pick(sub, '상행')[0]
+            old = [(T.custom_jobs, T.stacked, T.side_with, T.band_left, T.fold) for T in (Td, Tu, Sd, Su)]
+            for T in (Td, Tu, Sd, Su): T.custom_jobs = None; T.stacked = False; T.side_with = None; T.stack_with = None
+            tj = self.tail_with_jobs(Td, Tu, Sd, Su)
+            if tj:
+                Td.custom_jobs = tj; Tu.stacked = Sd.stacked = Su.stacked = True
+            else:
+                for T, (a, b, c_, d_, e_) in zip((Td, Tu, Sd, Su), old): T.custom_jobs, T.stacked, T.side_with, T.band_left, T.fold = a, b, c_, d_, e_
         rkey = lambda T: (T.line, self.is_ktx(T), route(T))
         for bunch in bunches:
             pend = [collections.deque(self.jobs_of(T)) for T in bunch]
@@ -2217,7 +2309,8 @@ class Book:
                         while unit[-1] + 1 < len(pend) and rkey(bunch[unit[-1] + 1]) == rkey(bunch[qi]): unit.append(unit[-1] + 1)
                         js = [pend[k][0] for k in unit if pend[k]]
                         held = any(getattr(bunch[k], 'hold_after', None) and any(pend[m] for m in range(len(bunch)) if bunch[m].line == bunch[k].hold_after) for k in unit)
-                        if js and not held and all(whole[k] and len(pend[k]) == init[k] for k in unit) and all(j['kind'] in ('single', 'side') for j in js) \
+                        if js and not held and all((whole[k] or getattr(bunch[k], 'pull_first', False)) and len(pend[k]) == init[k] for k in unit) \
+                                and all(j['kind'] in ('single', 'side') for j in js) \
                                 and top(c) + sum(j['h'] for j in js) - (len(js) - 1) * fw <= PH + 0.01:
                             for k in unit:
                                 if pend[k]: try_place(pend[k][0], c); pend[k].popleft()
