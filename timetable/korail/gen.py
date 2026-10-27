@@ -81,7 +81,7 @@ KEEP_STATIONS = {('gen', '목포보성선'): {'조성'}}
 SPLIT_SUSEO = {('ktx', '경부선'), ('ktx', '호남선')}
 # 순환 열차(시발역＝종착역: 홍성–천안–서화성–홍성 ITX-마음)는 따로 표로 (다른 표에서는 뺀다)
 SPLIT_LOOP = {('gen', '서해선')}
-LOOP_NAME = {('gen', '서해선'): '장항선·서해선 순환'}
+LOOP_NAME = {('gen', '서해선'): '평택선'}
 def is_loop(tr): return bool(tr.get('from')) and clean_name(tr.get('from')) == clean_name(tr.get('to') or '')
 # 노선 띠에 적을 역(하행 차례. 상행은 뒤집는다). 없으면 자동
 HEADS = {
@@ -106,7 +106,7 @@ HEADS = {
 # 갈래(서로 다른 길로 가는 구간). 묶음마다 [기본 갈래, 다른 갈래, …]. 빈 기본 갈래는 막다른 지선
 HS_SPLIT = [['광명'], ['영등포', '수원'], ['수서', '동탄', '평택지제']]
 BRANCH = {
-    ('ktx', '경부선'): [HS_SPLIT, [['경주', '울산'], ['경산', '밀양', '물금', '구포']]],
+    ('ktx', '경부선'): [HS_SPLIT, [['경주', '울산'], ['경산', '밀양', '물금', '구포']], [[], ['포항']]],
     ('ktx', '경전선'): [HS_SPLIT],
     ('ktx', '동해선(서울~포항)'): [HS_SPLIT],
     ('ktx', '호남선'): [HS_SPLIT, [['공주'], ['서대전', '계룡', '논산']]],
@@ -308,18 +308,20 @@ class Table:
         alts = [[[self.st.index(s) for s in grp if s in self.st] for grp in alt] for alt in BRANCH.get((self.cat, self.line), [])]
         for tr, S in zip(self.trains, stopsets):
             T = tr['times']
-            off = set()
+            off, dead = set(), set()
             for alt in alts:
                 used = [k for k, grp in enumerate(alt) if any(i in S for i in grp)] or [0]
                 for k, grp in enumerate(alt):
                     if k not in used: off |= set(grp)
+                if alt and not alt[0] and used == [0]:          # 막다른 지선(포항 등)에 가지 않는 열차: 지선 역은 ‥
+                    for grp in alt[1:]: dead |= set(grp)
             idx = sorted(S)
             for u, v in zip(idx, idx[1:]):
                 if v == u + 1 or any(T[k] == 'I' for k in range(u + 1, v)):
                     for k in range(u + 1, v):
                         if T[k] is None: T[k] = 'I'
                     continue
-                for k in range(u + 1, v): T[k] = 'I' if k in off else 'v'   # 다른 갈래를 달리는 동안은 ║
+                for k in range(u + 1, v): T[k] = None if k in dead else 'I' if k in off else 'v'   # 다른 갈래를 달리는 동안은 ║
             # 끝에서 갈라지는 갈래: 열차가 서는 갈래가 아닌 쪽은 지나지 않는다 (‥)
             for alt in ([DIVERGE.get((self.cat, self.line), [])] if self.merged else []):
                 gi = [[self.st.index(s) for s in grp if s in self.st] for grp in alt]
@@ -750,6 +752,7 @@ def share(ts):
 # 고속철도 표 이름 (KTX 경부선 → 경부고속철도)
 HSR_NAME = {('ktx', '경부선'): '경부고속철도', ('ktx', '호남선'): '호남고속철도'}
 # 고속선에서 갈라지는 KTX: 고속철도 표에 「…선 경유」로 빠지는 열차로 넣고, 그 노선 표는 갈림역부터만
+HSR_SPUR = {('ktx', '경부선'): [('경주', '포항')]}      # 고속철도 표에 넣는 막다른 지선 역: (갈림역, 지선 끝 역). 서울–포항 KTX 를 끝까지
 HSR_GUESTS = {('ktx', '경부선'): [('ktx', '경전선'), ('ktx', '동해선(서울~포항)')], ('ktx', '호남선'): [('ktx', '전라선')]}
 BRANCH_AT = {('ktx', '경전선'): '동대구', ('ktx', '전라선'): '익산', ('ktx', '동해선(서울~포항)'): '동대구'}
 
@@ -922,6 +925,12 @@ def main():
                 elif (cat, sheet) in COUPLE_GUEST:     # 수서 열차는 병결 별표로
                     k = next(i for i, x in enumerate(t['stations']) if clean_name(x) == '수서')
                     t = dict(t, trains=[tr for tr in t['trains'] if not isinstance(tr['times'][k], int)])
+                for at_, sp_ in HSR_SPUR.get((cat, sheet), []):     # 고속철도 표에 막다른 지선 역(포항)을 갈림역 옆에
+                    nm_ = [clean_name(x) for x in t['stations']]
+                    if at_ not in nm_ or sp_ in nm_: continue
+                    k_ = nm_.index(at_) + (1 if d == 'down' else 0)
+                    t = dict(t, stations=t['stations'][:k_] + [sp_] + t['stations'][k_:],
+                             trains=[dict(tr, times=tr['times'][:k_] + [None] + tr['times'][k_:]) for tr in t['trains']])
                 if (cat, sheet) in HSR_GUESTS:          # 고속선에서 갈라지는 다른 노선 KTX 를 「…선 경유」로
                     for gk in HSR_GUESTS[(cat, sheet)]:
                         g = tabs.get(gk + (d,))
