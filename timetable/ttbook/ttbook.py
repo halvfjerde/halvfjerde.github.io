@@ -3432,7 +3432,89 @@ class Book:
                     q['vrun'] = (k, sum(r['h'] for r in run) - (len(run) - 1) * fw, len(run))
                     q['vrun_part'] = '・'.join(dict.fromkeys(r['part'] for r in run if r.get('part')))    # 한 칸에 걸친 몇째들: (첫째·둘째)
         self.pages = pages
+        self.plan_air()
         self.plan_back()
+
+    # ── 항공: 편이 행인 목록 (공항 쌍마다 가는 편·오는 편), 세 단으로 흘려 짠다 ──
+    def plan_air(self):
+        self.air = []
+        f = self.cfg.get('air')
+        if not f: return
+        data = json.load(open(os.path.join(self.base, f), encoding='utf-8'))
+        R = self.R; fs = self.fs
+        NC = 3; gut = 2 * fs
+        colw = (self.cw - (NC - 1) * gut) / NC
+        th, rh = 2 * R, R                      # 쌍 머리 행, 편 행
+        cap = self.ch
+        pages, cols, col, y = [], [], [], 0.0
+        def newcol():
+            nonlocal col, y, cols
+            cols.append(col); col, y = [], 0.0
+            if len(cols) == NC: pages.append(cols); cols = []
+        cN, cT = 4.6 * fs, 2.6 * fs                      # 편명 칸, 시각 칸 폭
+        avail = colw - cN - 2 * cT - 0.8 * fs              # 운항일 칸 폭
+        wd = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.9)), len(t)) * fs
+        def wrap(lab):                                     # 운항일이 길면 「・」·띄어쓰기에서 줄을 바꾼다
+            if not lab: return ['']
+            toks = re.findall(r'[^・ ]+[・ ]?', lab)
+            out, cur = [], ''
+            for t_ in toks:
+                if cur and wd((cur + t_).rstrip()) > avail: out.append(cur.rstrip()); cur = t_
+                else: cur += t_
+            out.append(cur.rstrip())
+            return out
+        for bl in data['blocks']:
+            rows = [(r[0], r[1], r[2], wrap(r[3])) for r in bl['rows']]
+            i = 0
+            while i < len(rows):
+                gap = R if col else 0.0
+                avail_h = cap - y - gap - th
+                n, h = 0, 0.0
+                while i + n < len(rows) and h + len(rows[i + n][3]) * rh <= avail_h + 1e-6:
+                    h += len(rows[i + n][3]) * rh; n += 1
+                left = len(rows) - i
+                if n < min(3, left): newcol(); continue
+                if left - n in (1, 2) and n > 3: n = left - 3       # 끝에 한두 편만 넘어가지 않게
+                col.append(('t', bl['title'], y + gap)); y += gap + th
+                for r in rows[i:i + n]:
+                    col.append(('r', r, y)); y += len(r[3]) * rh
+                i += n
+                if i < len(rows): newcol()
+        if col: newcol()
+        if cols: pages.append(cols)
+        self._air = (colw, gut, th, rh, NC)
+        for i, p in enumerate(pages):
+            self.air.append(p); self.pages.append({'pieces': [], 'lines': [], 'air': i})
+
+    def air_page(self, k, x0, recto):
+        fs, H = self.fs, self.H
+        colw, gut, th, rh, NC = self._air
+        tex, rects = [], []
+        y0 = self.mt
+        wd = lambda t: self.inl.wc.get(t, 1.0) * fs
+        cN, cT = 4.6 * fs, 2.6 * fs                      # 편명 칸, 시각 칸 폭
+        hmf = lambda t: str(int(t[:2])) + t[2:]
+        for ci, col in enumerate(self.air[k]):
+            xx = x0 + ci * (colw + gut)
+            n_ = 0
+            for it in col:
+                if it[0] == 't':
+                    _, title, yy = it
+                    tex.append(self.put_box(xx, y0 + yy, colw, th, self.inl.run(title, Ctx('GB', 1.1)), 'l', 'm'))
+                    rects.append(('h', xx, xx + colw, y0 + yy + th, 2))
+                    n_ = 0
+                    continue
+                _, (no, t, a, labs), yy = it
+                Y = y0 + yy
+                tex.append(self.put_box(xx, Y, cN, rh, self.inl.run(no, Ctx('M', 1.0)), 'l', 'm'))      # 편명은 본문 글꼴 (DiaPro 는 로마자 둘을 한 글자로 묶는다)
+                tex.append(self.put_box(xx + cN, Y, cT, rh, self.inl.run(hmf(t), Ctx('DM', 1.0)), 'r', 'm'))
+                tex.append(self.put_box(xx + cN + cT, Y, cT, rh, self.inl.run(hmf(a), Ctx('DM', 1.0)), 'r', 'm'))
+                for li, lab in enumerate(labs):
+                    if lab: tex.append(self.put_box(xx + cN + 2 * cT + 0.8 * fs, Y + li * rh, colw - cN - 2 * cT - 0.8 * fs, rh, self.inl.run(lab, Ctx('M', 0.9)), 'l', 'm'))
+                n_ += 1
+                if n_ % 5 == 0: rects.append(('h', xx, xx + colw, Y + len(labs) * rh, 1))
+        tex += self.page_side_title(recto, [('', '항공')])
+        return tex, self.pdf_ops(rects) if rects else ''
 
     # ── 책 뒤: 역명 색인과 판권 ──
     def station_pages(self, first):
@@ -3440,6 +3522,7 @@ class Book:
         for pi, pg in enumerate(self.pages):
             for pc in pg.get('pieces', []):
                 T = pc['T']; rs = set(pc['rows'])
+                if T.line in self.cfg.get('otherModes', ['고속버스']): continue      # 버스 터미널은 역명 색인에 넣지 않는다
                 for cl in T.cells:
                     if 'jtt-st' in cl.cls and 'jtt-th' not in cl.cls and cl.r in rs and T.kind[cl.c][0] == 'L':
                         nm = re.sub(r'[\(（].*?[\)）]|\s', '', cl.node.text())
@@ -3538,8 +3621,13 @@ class Book:
         # 목차: 큰 갈래(철도 · 역명 색인, 뒤에 항공 · 버스가 붙을 자리) 밑에 노선. 들여쓰기·밑줄 없이 글자 굵기로만 가른다
         lp = self.line_pages(first)
         bk_ = [i for i, pg in enumerate(self.pages) if 'back' in pg and self.back[pg['back']]['cols']]
-        rail = [(nm, a, b, T) for nm, (a, b, T) in lp.items()]
+        OTHER = self.cfg.get('otherModes', ['고속버스'])     # 철도 밖의 큰 갈래 (노선 이름 = 갈래 이름)
+        rail = [(nm, a, b, T) for nm, (a, b, T) in lp.items() if nm not in OTHER]
         seq = [('h', '철도', min(x[1] for x in rail), max(x[2] for x in rail), None)] + [('i',) + x for x in rail]
+        for om in OTHER:
+            if om in lp: seq += [('g',), ('h', om, lp[om][0], lp[om][1], None)]
+        ai_ = [i for i, pg in enumerate(self.pages) if 'air' in pg]
+        if ai_: seq += [('g',), ('h', '항공', ai_[0] + first, ai_[-1] + first, None)]
         if bk_: seq += [('g',), ('h', '역명 색인', bk_[0] + first, bk_[-1] + first, None)]
         # 범례: 세 단 (등급 · KTX · 관광열차)
         lg = self.cfg.get('legend', [])
@@ -3651,8 +3739,8 @@ class Book:
             recto = folio % 2 == 1
             x0 = self.mi if recto else self.mo
             tex, rects = [], []
-            if 'front' in pg or 'back' in pg:     # 노선도·색인·범례 / 역명 색인·판권
-                t_, lit_ = self.front_page(pg['front'], x0, first) if 'front' in pg else self.back_page(pg['back'], x0, recto)
+            if 'front' in pg or 'back' in pg or 'air' in pg:     # 노선도·색인·범례 / 항공 / 역명 색인·판권
+                t_, lit_ = self.front_page(pg['front'], x0, first) if 'front' in pg else self.air_page(pg['air'], x0, recto) if 'air' in pg else self.back_page(pg['back'], x0, recto)
                 tex += t_
                 tex += self.page_furniture(folio, recto, '', '', None)
                 body.append(r'\begin{picture}(%.3f,%.3f)' % (self.W, self.H))
