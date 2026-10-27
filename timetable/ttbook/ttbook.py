@@ -1799,7 +1799,7 @@ class Book:
         if T.kind[cell.c][0] != 'T' or cell.r < T.hEnd: return None
         t = re.sub(r'\s', '', cell.node.text())
         m = re.fullmatch(r'[↑↱]?(.+?선)(?:경유|[가-힣]+(?:분리|연결))(?:.+선경유)?⬏?', t)
-        if m: return {'kind': 'via', 'name': m.group(1)}
+        if m: return {'kind': 'via', 'name': m.group(1), 'out': t.endswith('⬏')}     # ⬏: 앞 열차들이 나가는 주 (열차 뒤에 붙는다)
         if re.search(r'연결|분리', t) or re.fullmatch(r'\D+(발|착)\d+', t):
             nos = []
             def walk(n):
@@ -1850,7 +1850,8 @@ class Book:
             T = r['T']
             if r['kind'] == 'via':
                 cn_ = self.colno(T)
-                no = cn_.get(r['col']) or next((cn_[j] for j in sorted(cn_) if j > r['col']), None)   # 주석 열: 바로 오른쪽 열차
+                if r.get('out'): no = cn_.get(r['col']) or next((cn_[j] for j in sorted(cn_, reverse=True) if j < r['col']), None)   # 나가는 주: 바로 왼쪽 열차
+                else: no = cn_.get(r['col']) or next((cn_[j] for j in sorted(cn_) if j > r['col']), None)   # 들어오는 주: 바로 오른쪽 열차
                 nm = r['name']
                 ok = (lambda X: self.is_ktx(X) and nm.replace('고속선', '고속철도') in X.title.text()) if nm.endswith('고속선') else (lambda X: X.line == nm)
                 ps = sorted(p for p, X in where.get(no, []) if ok(X) and X is not T)
@@ -2087,63 +2088,7 @@ class Book:
                     tex.append(self.put_box(x0, yy, 60, 12, self.inl.run(head_, Ctx('GB', 1.1)), 'l', 'm'))
                     tex.append(self.put_box(x0 + 62, yy, W - 62, 12, self.inl.flat(ln_[0]) if ln_ else '', 'l', 'm'))
                     yy += 15
-            if not fm: self.how_to_read(tex, ops, x0, yy + 14, W)
         return tex, ' '.join(ops)
-
-    def how_to_read(self, tex, ops, x0, yy, W):
-        """범례 쪽 아래: 표 안의 기호와 표 읽는 법 (표에 쓰는 글꼴·그림 그대로)"""
-        fs = self.fs
-        M_ = lambda t: self.inl.run(t, Ctx('M', 1.1))
-        def head(t):
-            nonlocal yy
-            tex.append(self.put_box(x0, yy, W, 14, self.inl.run(t, Ctx('GB', 14 / fs)), 'l', 't'))
-            yy += 24
-        def row(sym, text, h=12, sw=60):
-            nonlocal yy
-            if sym: tex.append(self.put_box(x0, yy, sw, h, sym, 'l', 'm'))
-            tex.append(self.put_box(x0 + sw + 2, yy, W - sw - 2, h, text, 'l', 'm'))
-            yy += h + 3
-        D = lambda t: self.inl.run(t, Ctx('DM', 1.3))
-        sp = r'\kern%.3fbp ' % (0.8 * fs)
-        head('기호')
-        row(D('\u21c2'), M_('서지 않고 지나감'))
-        row(D('\u2551'), M_('다른 선을 거쳐 감'))
-        row(D('\u2025'), M_('이 역・구간을 지나지 않음'))
-        def cells(a_, b_, text):           # 표 칸 두 개(위·아래)에 넣어 보인다: 종착 표지가 칸 위·아래에 붙는 모양 그대로
-            nonlocal yy
-            R_ = self.R; c_ = Ctx('DM', 1.0)
-            for i_, t_ in enumerate((a_, b_)):
-                tex.append(self.put_box(x0, yy + i_ * R_, self.P0, R_, self.inl.run(t_, c_), 'c', 'm'))
-            box_rects.append(('box', x0, yy, x0 + self.P0, yy + 2 * R_, self.rw[1]))
-            box_rects.append(('h', x0, x0 + self.P0, yy + R_, 1))
-            tex.append(self.put_box(x0 + 62, yy, W - 62, 2 * R_, text, 'l', 'm'))
-            yy += 2 * R_ + 3
-        box_rects = []
-        cells('1722', '\u2594', M_('이 역에서 끝남 (종착)'))
-        cells('\u2581', '1927', M_('상하병기 표의 상행 종착 (아래에서 위로 읽음)'))
-        row(M_('着') + sp + M_('發') + sp + M_('〃'), M_('도착　출발　출발 (착발을 나누지 않은 역)'))
-        row(self.page_badge(28, 1.1, None, 1.1), M_('이어지는 표가 실린 쪽'))
-        row(D('\u2b0f'), M_('표 끝 역에서 다른 선으로 넘어감 (세로 글씨는 그 노선)'))
-        yy += 10
-        head('표 읽는 법')
-        rects = box_rects
-        # 진행 방향 화살표: 착발 칸과 첫 열차 사이의 선을 대신한다
-        h = 3 * self.R
-        rects += self.arrow_rects(x0 + 8, yy, yy + h, 'd', self.rw[2])
-        tex.append(self.put_box(x0 + 94, yy, W - 94, h / 2, M_('열차가 달리는 방향. 위에서 아래로 읽는다'), 'l', 'm'))
-        tex.append(self.put_box(x0 + 94, yy + h / 2, W - 94, h / 2, M_('상하병기 표는 가운데 역명의 왼쪽이 하행, 오른쪽이 상행'), 'l', 'm'))
-        rects += self.arrow_rects(x0 + 20, yy, yy + h, 'u', self.rw[2])
-        yy += h + 6
-        rects += self.aim_rects(x0, yy, self.P0, self.R)
-        rects += self.aim_rects(x0 + self.P0, yy, self.P0, self.R)
-        row('', M_('조준선: 출발 시각만 적는 굵은 역(주요역)의 빈 칸에 긋는 점선'), sw=92)
-        G_ = lambda t: self.inl.run(t, Ctx('GB', 1.0))
-        m_ = lambda t: self.inl.run(t, Ctx('M', 1.0))
-        bd = lambda n: r'\kern%.3fbp ' % (0.25 * fs) + self.page_badge(n, 1.0, None, 1.0)
-        row(G_('대전∼조치원') + m_(': 경부선') + bd(4), M_('쪽 머리: 같은 구간을 함께 다니는 노선의 표'), sw=92)
-        row(G_('김천') + m_(': 경북선') + bd(23), M_('쪽 머리: 그 역에서 갈아탈 수 있는 노선의 표'), sw=92)
-        row(G_('경부선') + m_('(1)'), M_('바깥 여백의 노선 이름: 여러 펼침에 걸친 노선의 차례'), sw=92)
-        ops.append(self.pdf_ops(rects))
 
     def page_side_title(self, recto, lines, dirs=None, nos=None):
         """쪽의 노선 이름: 바깥 여백에 세로로 크게 (쪽마다 하나)"""
@@ -3523,8 +3468,7 @@ class Book:
         colw, gap, lh, top = self._ix
         bp = self.back[k]
         if bp['cols']:
-            tex.append(self.put_box(x0, y0, self.cw, 14, self.inl.run('역명 색인' + (' (이어서)' if k else ''), Ctx('GB', 14 / fs)), 'l', 't'))
-            if not k: tex.append(self.put_box(x0, y0 + 2, self.cw, 12, self.inl.run('역명과 그 역이 실린 쪽', Ctx('M', 0.85)), 'r', 'b'))
+            tex.append(self.put_box(x0, y0, self.cw, 14, self.inl.run('역명 색인', Ctx('GB', 14 / fs)), 'l', 't'))
         for ci, col in enumerate(bp['cols']):
             xx = x0 + ci * (colw + gap)
             for li, (kind, nm, ps) in enumerate(col):
