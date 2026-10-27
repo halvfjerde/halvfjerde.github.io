@@ -3468,7 +3468,7 @@ class Book:
                 items += [('n', ln) for ln in wrap('※%s %s' % ('・'.join(nos), lab))]
             i = 0
             while i < len(items):
-                gap = R if col else 0.0
+                gap = 0.0                                   # 덩이끼리는 띄우지 않고 맞붙인다 (표처럼)
                 head = TH + (SH if items[i][0] == 'r' else 0)
                 room = int((self.ch - y - gap - head - pad) / R + 1e-6)
                 left = len(items) - i
@@ -3542,7 +3542,6 @@ class Book:
                     rects.append(('v', xx + hw, r0 - SH, yy, 1))
                 notes = [it for it in pc['items'] if it[0] == 'n']
                 if notes:
-                    if rows: rects.append(('h', xx, xx + colw, yy, 1))
                     for _, ln in notes:
                         tex.append(self.put_box(xx + pad, yy, colw - 2 * pad, R, seg(ln, 0.85), 'l', 'm'))
                         yy += R
