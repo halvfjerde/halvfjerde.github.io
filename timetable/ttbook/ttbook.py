@@ -1011,10 +1011,10 @@ class Book:
         for cell, ref, c in refs_:
             sm = c.size * 0.76
             n_ = len(ref['nums']) if ref['kind'] == 'train' else 1
-            w_ = n_ * 1.5 * sm + (n_ - 1) * 0.2 * sm
+            w_ = n_ * 1.85 * sm + (n_ - 1) * 0.2 * sm
             mk = r'\TTREF{%d}' % len(self.refs)
             self.refs[mk] = dict(ref, T=T, col=cell.c, size=c.size, color=c.color)
-            item = [('obj', mk, w_, 1.3 * sm, c.size)]
+            item = [('obj', mk, w_, 1.4 * sm, c.size)]
             host = None
             if cell.r < T.fStart:
                 for rr in (cell.r + cell.rs, cell.r - 1):
@@ -1668,8 +1668,8 @@ class Book:
         """쪽 번호 네모 표지 (무궁화 등급 표지처럼 속 빈 네모)"""
         sm = size * 0.76
         inner = self.inl.run(str(n), Ctx('DG', sm, color))
-        w = max(1.3, len(str(n)) * 0.55 + 0.4)
-        return r'\ttbadge{%.3f}{%.3f}{0}{1.000}{%.3f}{%s}' % (w * sm * self.fs, 1.3 * sm * self.fs, self.inl.c * size * self.fs, inner)
+        w = max(1.6, len(str(n)) * 0.55 + 0.75)          # 숫자 둘레에 살짝 여백
+        return r'\ttbadge{%.3f}{%.3f}{0}{1.000}{%.3f}{%s}' % (w * sm * self.fs, 1.4 * sm * self.fs, self.inl.c * size * self.fs, inner)
 
     def resolve_refs(self, body):
         """짠 뒤: 쪽마다 실린 열차로 찾아 \\TTREF{k} 를 쪽 번호 네모 표지로"""
