@@ -138,7 +138,7 @@ for seq in FORCE:
     for i, A in enumerate(seq):
         for B in seq[i + 1:]:
             for D in seq[seq.index(B) + 1:]:                 # 타는 곳: A 다음 B, 둘 다 D 로
-                if (A, D) in P and (B, D) in P and (D, A, B) not in have:
+                if (A, D) in P and (B, D) in P and (D, A, B) not in have and len(P[(B, D)]['t']) <= 20:      # B→D 가 촘촘하면(전주→광주 따위) 어느 편에 이어지는지 시각으로 알 수 없다
                     ta, tb = P[(A, D)]['t'], P[(B, D)]['t']
                     cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb) for d in range(0, 421)}
                     dd_ = P[(A, D)]['dur'] - P[(B, D)]['dur']
