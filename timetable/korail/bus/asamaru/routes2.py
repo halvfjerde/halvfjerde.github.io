@@ -355,9 +355,29 @@ tables = [T for p in both for T in p if T]
 title_of = {id(X_): T.get('title') or '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1])) for T, U in both for X_ in (T, U) if X_}      # 상하 병기면 상행도 하행 표 이름으로
 for k_, M_ in title_merge.items(): title_of[k_] = title_of[id(M_)]
 open(sys.argv[2], 'w').write('\n'.join(out))
+# 일부 편만 들르는 정류장 (사람이 확인한 것, partial-stops.json: [A, B, D] = A 발 D 행의 몇 편이 B 에도 선다): 목록의 A→D 에 ◇ 표지와 안내 줄
+PART = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'partial-stops.json')))
+pmark = {}
+for A, B_, D in PART:
+    if (A, D) in P and (B_, D) in P:                     # 오는 길: A 발 + δ 에 B 발
+        ta, tb = P[(A, D)]['t'], P[(B_, D)]['t']
+        d = max(range(1, 121), key=lambda d: sum(1 for t in ta if (t + d) % 1440 in tb))
+        pmark[(A, D)] = ({t for t in ta if (t + d) % 1440 in tb}, '◇ %s 경유 (%s 발 %d분 뒤)' % (nm(B_), nm(A), d))
+    if (D, A) in P and (D, B_) in P:                     # 가는 길: D 발이 같은 시각이면 B 에 먼저 선다
+        ta, tb = P[(D, A)]['t'], P[(D, B_)]['t']
+        d = P[(D, A)]['dur'] - P[(D, B_)]['dur']
+        pmark[(D, A)] = ({t for t in ta if t in tb}, '◇ %s 경유 (%s 착 %d분 전)' % (nm(B_), nm(A), d))
 own = {p for T in tables for p in T['pairs']}
 for O in b['origins']: O['dests'] = [X for X in O['dests'] if (O['from'], X['to']) not in own]
 b['origins'] = [O for O in b['origins'] if O['dests']]
+for O in b['origins']:
+    for X in O['dests']:
+        k = (O['from'], X['to'])
+        if k in pmark:
+            ts, note = pmark[k]
+            X['vnote'] = note
+            for t in X['times']:
+                if m_(t[0]) in ts: t.append('◇')
 b['routeOwned'] = sorted('%s→%s' % p for p in own)
 b['names'] = SHORT
 b['tableRefs'] = sorted([A, D, title_of[id(T)], P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄

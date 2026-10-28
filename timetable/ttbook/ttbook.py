@@ -3766,6 +3766,7 @@ class Book:
                     if wsm(cur + sep + t_) > ww_: out.append(cur + sep.strip()); cur = '　　' + t_
                     else: cur += sep + t_
                 out.append(cur)
+            if X.get('vnote'): out.append(X['vnote'])       # 일부 편만 서는 곳: 「◇ 원주문막 경유 (원주 발 15분 뒤)」
             if X.get('gnote'):                              # 돌아가는 등급: 「※ 가운데 날마다 1∼2편 프리미엄, 나머지 우등」
                 cur = ''
                 for k_, t_ in enumerate(X['gnote'].split(', ')):
@@ -3909,7 +3910,9 @@ class Book:
                     st = y
                 else:
                     dep, arr, w = it[2][:3]
-                    if len(it[2]) > 3: tex.append(self.put_box(xM, y, 0.55 * fs, R, self.inl.run('†', Ctx('M', 0.75)), 'c', 'm'))      # 시외버스로 파는 편
+                    fl_ = it[2][3:]                       # 표지: 시외버스로 파는 편 †, 일부 편만 서는 곳을 거치는 편 ◇
+                    mk_ = ('†' if '시' in fl_ else '') + ('◇' if '◇' in fl_ else '')
+                    if mk_: tex.append(self.put_box(xM - (0.2 * fs if len(mk_) > 1 else 0), y, 0.55 * fs + (0.2 * fs if len(mk_) > 1 else 0), R, self.inl.run(mk_, Ctx('M', 0.75 if len(mk_) == 1 else 0.55)), 'c', 'm'))
                     tex.append(self.put_box(xA, y, TS - 0.25 * fs, R, self.inl.run(dep, Ctx('DM', 1.0)), 'r', 'm'))
                     tex.append(self.put_box(xB, y, TS - 0.25 * fs, R, self.inl.run(arr, Ctx('DM', 1.0)), 'r', 'm'))
                     gs = {g for g in w if g}
