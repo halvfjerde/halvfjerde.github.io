@@ -3600,6 +3600,7 @@ class Book:
                     if q_: out_.append(self.inl.run(q_, Ctx('M', size).but(hscale=HS) if re.fullmatch(r'[A-Z0-9]+', q_) else Ctx('M', size)))
             return ''.join(out_)
         yB = y0 + self.ch
+        ends = []
         for ci in range(sec['NC']):
             col = cols_[ci] if ci < len(cols_) else []
             xx = x0 + ci * (colw + gut)
@@ -3673,9 +3674,37 @@ class Book:
                 yy += pad
                 rects.append(('box', xx, Y, xx + colw, yy, self.rw[1]))
                 yEnd = yy
-            if 0 < yB - yEnd < R and rects and rects[-1][0] == 'box':      # 한 줄도 안 남으면 마지막 덩이를 쪽 끝까지
-                rects[-1] = rects[-1][:4] + (yB,) + rects[-1][5:]
-            elif yB - yEnd >= R: rects.append(('box', xx, yEnd, xx + colw, yB, self.rw[1]))     # 남는 자리: 빈 상자
+            ends.append((xx, yEnd, len(rects) - 1 if rects and rects[-1][0] == 'box' else None))
+        # 항공의 마지막 쪽: 남는 자리에 항공사 표 (이름 ··· 두 자·세 자 부호), 쪽 폭으로
+        al = self.cfg.get('airlines', {})
+        yAL = None
+        if al and k == len(self.air) - 1:
+            cf_ = self.cfg.get('airCodes')
+            codes = json.load(open(os.path.join(self.base, cf_), encoding='utf-8')) if cf_ else {}
+            ent = sorted(al.items(), key=lambda kv: kv[1])
+            NA = 3; nr = -(-len(ent) // NA)
+            hA = TH + nr * R + pad
+            top = max(e[1] for e in ends)
+            if top + hA <= yB + 0.01:
+                yAL = yB - hA                                # 쪽 아래에 붙여
+                Wf = colw * sec['NC']
+                tex.append(self.put_box(x0 + pad, yAL, Wf, TH, self.inl.run('항공사', Ctx('GB', 1.15)), 'l', 'm'))
+                rects.append(('h', x0, x0 + Wf, yAL + TH, 2))
+                cw3 = Wf / NA
+                for i_, (iata, nm) in enumerate(ent):
+                    cx, ry = x0 + (i_ // nr) * cw3 + pad, yAL + TH + (i_ % nr) * R
+                    nt = self.inl.run(nm, Ctx('M', 0.9)); ct = self.inl.run('%s　%s' % (iata, codes.get(iata, '')), Ctx('M', 0.9).but(hscale=HS))
+                    tex.append(self.put_box(cx, ry, cw3 - 2 * pad, R, nt, 'l', 'm'))
+                    tex.append(self.put_box(cx, ry, cw3 - 2 * pad, R, ct, 'r', 'm'))
+                    a_, b_ = cx + self.inl.wc.get(nt, 1) * fs + 0.5 * fs, cx + cw3 - 2 * pad - self.inl.wc.get(ct, 1) * fs - 0.5 * fs
+                    if b_ - a_ > fs: ops.append(self.dots(a_, b_, ry + R / 2))
+                for j_ in range(1, NA): rects.append(('v', x0 + j_ * cw3, yAL + TH, yAL + hA, 1))
+                rects.append(('box', x0, yAL, x0 + Wf, yB, self.rw[1]))
+        yb_ = yAL if yAL is not None else yB
+        for xx, yEnd, bi in ends:
+            if 0 < yb_ - yEnd < R and bi is not None:      # 한 줄도 안 남으면 마지막 덩이를 아래 끝까지
+                rects[bi] = rects[bi][:4] + (yb_,) + rects[bi][5:]
+            elif yb_ - yEnd >= R: rects.append(('box', xx, yEnd, xx + colw, yb_, self.rw[1]))     # 남는 자리: 빈 상자
         tex += self.page_side_title(recto, [('', sec['title'])])
         return tex, ' '.join(ops) + ' ' + (self.pdf_ops(rects) if rects else '')
 
@@ -3954,7 +3983,7 @@ class Book:
             if c0 != cur:
                 cur = c0; units.append([('b', '', ''), ('h', c0, '')] + ent)      # 자음 머리 위는 한 줄 비운다 (단 맨 위면 안 비움)
             else: units.append(ent)
-        al = self.cfg.get('airlines', {})                 # 항공사 색인: 이름 ··· 두 자(IATA)·세 자(ICAO) 부호
+        al = {}                                          # 항공사 표는 항공 마지막 쪽의 남는 자리에 (air_page)
         if al:
             cf_ = self.cfg.get('airCodes')
             codes = json.load(open(os.path.join(self.base, cf_), encoding='utf-8')) if cf_ else {}
