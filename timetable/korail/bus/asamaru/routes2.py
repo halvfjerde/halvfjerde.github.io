@@ -960,6 +960,7 @@ def merge_board(D, os_, strict=False):
         _, k, e, A, tA = best; Y = blk[A]
         arrB = {t: (t + P[(A, o)]['dur']) for t in tA if (A, o) in P and t in P[(A, o)]['t']}
         if strict and k < min(len(tA), len(X['times'])): continue      # 사람이 보지 않은 묶음: 한쪽 편이 모두 맞을 때만
+        if k < len(tA) and k < 3 and len(X['times']) > 5: continue      # 몇 편만(◇), 그것도 한두 편이 촘촘한 B 발과 맞으면 우연 (주문진 1405 → 강릉 1440 고속)
         got = {(t + e) % 1440 for t in tA if (t + e) % 1440 in {m_(t[0]) for t in X['times']} and (t not in arrB or t + e >= arrB[t] - 10)}
         if not e: e_ = BOFF.get('%s|%s' % (A, o), 0)
         else: e_ = e
