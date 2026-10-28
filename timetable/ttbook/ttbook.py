@@ -3852,13 +3852,14 @@ class Book:
             for t, mt, lab in rows:
                 if lab.startswith('→'):
                     n_, _, a_ = lab[1:].partition(' ')
-                    if a_ and t[1]: cont[n_][(mm_(a_) - mm_(t[1])) % 1440] += 1
+                    cont[n_][((mm_(a_) - mm_(t[1])) % 1440) if (a_ and t[1]) else None] += 1
                 elif lab.endswith('발'):
                     n_, _, d_ = lab[:-1].partition(' ')
                     if d_: fromu[n_][(mm_(t[0]) - mm_(d_)) % 1440] += 1
             CM = {}
             for j_, (n_, c_) in enumerate(sorted(cont.items())):
-                CM['→' + n_] = '→⇒'[min(j_, 1)]; leg.append('%s %s까지 (%s 더)' % (CM['→' + n_], n_, hmc(c_.most_common(1)[0][0])))
+                CM['→' + n_] = '→⇒'[min(j_, 1)]; o_ = c_.most_common(1)[0][0]
+                leg.append('%s %s까지%s' % (CM['→' + n_], n_, (' (%s 더)' % hmc(o_)) if o_ is not None else ''))
             for j_, (n_, c_) in enumerate(sorted(fromu.items())):
                 CM[n_] = '←⇐'[min(j_, 1)]; leg.append('%s %s 발 (%s 앞)' % (CM[n_], n_, hmc(c_.most_common(1)[0][0])))
             if dlet: leg.append('　'.join('%s %s' % (l_, hmc(d_)) for d_, l_ in sorted(dlet.items(), key=lambda kv: kv[1])) + ' 걸림')
@@ -3878,6 +3879,7 @@ class Book:
                 gk = tuple(1 if g else 0 for g in w)            # 요일로만 묶고 등급은 시각마다 (날에 따라 바뀌는 차는 ◆)
                 gr_ = next(iter(gs_)) if len(gs_) == 1 else '◆'
                 mk = ''.join(pmk[k] for k in sorted(pmk) if len(mt) > k and mt[k])
+                if '◇' in t[3:] and '◇' not in mk: mk += '◇'      # 시각표로 아는 몇 편만 서는 곳 (머리의 「◇ 경주 경유」)
                 if lab.startswith('→'): mk += CM.get('→' + lab[1:].partition(' ')[0], '→')
                 elif lab.endswith('발'): mk += CM.get(lab[:-1].partition(' ')[0], '←')
                 if t[1]:

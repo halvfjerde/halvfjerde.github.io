@@ -217,6 +217,9 @@ for A, D1, D2, n, pv in LD:
     for t in P[(A, D1)]['t']:
         if (A, D1, D2) not in FLD and ((A, t, D1) in FN or (A, t, D2) in FN): continue
         if t in t2: u((A, t, D1), (A, t, D2)); EDG.append(((A, t, D1), (A, t, D2), 0))
+for la_, lb_ in (json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'manual-links.json'))) if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'manual-links.json')) else []):
+    x_, y_ = (la_[0], m_(la_[1]), la_[2]), (lb_[0], m_(lb_[1]), lb_[2])     # 사람이 확인한 같은 차 (진도 1330 = 무안 1440)
+    if x_[1] in P.get((x_[0], x_[2]), {}).get('t', {}) and y_[1] in P.get((y_[0], y_[2]), {}).get('t', {}): u(x_, y_); EDG.append((x_, y_, 0))
 comp = collections.defaultdict(list)
 for x in list(par): comp[f(x)].append(x)
 # 한 차에 같은 곳 발이 둘(엇갈림): 버리지 않고, 착이 잘 맞는 단서부터 다시 이어 엇갈리는 단서(착이 10분 넘게 어긋나는 것)는 뺀다
@@ -1140,9 +1143,10 @@ for O in b['origins']:
             A_, prs_ = v3_; YA = _OD.get((A_, X['to']))
             if YA and YA.get('times'):
                 for tb_, ta_ in prs_:
-                    for t in YA['times']:
-                        if m_(t[0]) == ta_:
-                            add_.append(([_hm4(tb_), t[1], t[2]] + [f_ for f_ in t[3:] if f_ not in ('◇', '△')], '%s %s발' % (nm(A_), t[0])))
+                    cs_ = [t for t in YA['times'] if m_(t[0]) == ta_]
+                    cs_ = [t for t in cs_ if '◇' in t[3:] or '△' in t[3:]] or cs_      # 같은 시각의 다른 차(고속 1640・시외 1640)는 그 승차 표지가 붙은 것 하나만
+                    for t in cs_[:1]:
+                        add_.append(([_hm4(tb_), t[1], t[2]] + [f_ for f_ in t[3:] if f_ not in ('◇', '△')], '%s %s발' % (nm(A_), t[0])))
                 X.pop('vnote3', None)
         if add_:
             rows_ = list(zip(X['times'], X['lab'])) + add_
@@ -1212,9 +1216,17 @@ for O in b['origins']:
 for M_ in json.load(open(os.path.join(HERE2_, 'manual-trips.json'))):     # 시각 모르는 경유지(시각표에 이름만): 「경유 꽃동산・장수」
     for O in b['origins']:
         for X in O['dests']:
-            if O['from'] == M_['from'] and X['to'] == M_['to'] and 'times' in X and M_.get('via_names'):
+            if not (O['from'] == M_['from'] and X['to'] == M_['to'] and 'times' in X): continue
+            if M_.get('via_names'):
                 vv_ = {v[0] for v in X.get('via', [])}
                 X['via'] = X.get('via', []) + [[n_, None, None] for n_ in M_['via_names'] if n_ not in vv_]
+            if M_.get('note') and M_['note'] not in X.get('vnote', ''):      # 시각표로 아는 몇 편만 서는 곳: 「◇ 경주 경유」
+                X['vnote'] = (X['vnote'] + '\n' if X.get('vnote') else '') + M_['note']
+            if M_.get('labels'):                         # 더 가는 편: 「→유성복합」
+                lb_ = X.get('lab') or [''] * len(X['times'])
+                for k_, t in enumerate(X['times']):
+                    if t[0] in M_['labels'] and '시' in t[3:]: lb_[k_] = M_['labels'][t[0]]
+                X['lab'] = lb_
 for O in b['origins']:
     for X in O['dests']: X.pop('_mk1', None); X.pop('_mk2', None)
 json.dump(b, open(sys.argv[3], 'w'), ensure_ascii=False, indent=0)
