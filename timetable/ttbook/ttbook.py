@@ -3865,6 +3865,7 @@ class Book:
             if dlet: leg.append('　'.join('%s %s' % (l_, hmc(d_)) for d_, l_ in sorted(dlet.items(), key=lambda kv: kv[1])) + ' 걸림')
             sub += leg
             if X.get('vnote'): sub.extend(X['vnote'].split('\n'))
+            if X.get('inote'): sub.append(X['inote'])          # 다섯 주에 반도 안 다닌 차: 「임시편 일 9편・금토 수시」
             for tt_ in X.get('tabRefs', []): sub.append('이 밖에 노선표 {#%s}' % tt_)
             if X.get('gnote'):
                 cur = ''

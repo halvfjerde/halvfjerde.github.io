@@ -110,6 +110,9 @@ for d in days:
     for r in sub_records(d):
         o, x = r['depPlaceNm'], r['arrPlaceNm']
         if o != x: PD[(o, x, mins(r['depPlandTime']))].setdefault(d, r.get('gradeNm', ''))
+_RG = os.path.join(HERE_, 'regular-days.json')
+_rg = json.load(open(_RG)) if os.path.exists(_RG) else {}
+REG_T, REG_NOTE, REG_N = _rg.get('trips', {}), _rg.get('notes', {}), collections.Counter()
 origins = []
 nvar = 0
 FILLED = []
@@ -149,6 +152,13 @@ for o in sorted(T):
             for w_, gs in byw.items():
                 w[w_] = '◆' if gvar else (G.get(next(iter(gs)), '') or '우')
             hm = lambda m: '%d%02d' % (m // 60 % 24, m % 60)
+            rk_ = '%s|%s|%02d%02d' % (o, x, t // 60, t % 60)   # 다섯 주로 다시 정한 요일 (regular-days.json): 반 넘게 다닌 요일만, 임시편은 빼고 머리에
+            if rk_ in REG_T and (o, x, t) not in DEC_DAILY | DEC_KEEP:
+                if REG_T[rk_].get('sporadic'): REG_N['임시편 뺌'] += 1; continue
+                rd_ = REG_T[rk_]['days']
+                w2_ = [(('◆' if gvar else rd_[d_]) if rd_[d_] else 0) for d_ in range(7)]
+                if w2_ != w: REG_N['요일・등급 고침'] += 1
+                w = w2_
             times.append([hm(t), hm(t + dur), w] + (['시'] if (o, x, t) in SUBT else []))      # 넷째 칸 「시」: 시외버스로 팔리는 편
             if gvar: var_t.append(t)
         # 1분 차이로 붙은 두 편(17:00·17:01 따위)은 한 편으로: 뒤의 것은 TAGO 의 겹친 편(증차·자료 잘못)으로 보고 요일을 앞 편에 합친다.
@@ -166,6 +176,7 @@ for o in sorted(T):
                 continue
             k_ += 1
         X = {'to': x, 'dur': dur, 'fare': [min(fs), max(fs)] if fs else None, 'times': times}
+        if REG_NOTE.get('%s|%s' % (o, x)): X['inote'] = REG_NOTE['%s|%s' % (o, x)]      # 「임시편 일 9편・금토 수시」
         if var_t:                                           # 돌아가는 등급: 날마다 몇 편이 무슨 등급인지
             nvar += len(var_t)
             cnt = collections.defaultdict(collections.Counter)
@@ -209,5 +220,6 @@ FILLED = [e for e in FILLED if tuple(e[:3]) not in _gone]; FIRSTONLY = [e for e 
 json.dump({'filled': FILLED, 'firstonly': FIRSTONLY, 'merged1': MERGED1}, open(os.path.join(HERE_, 'bus-review-data.json'), 'w'), ensure_ascii=False)
 json.dump(sorted([o, t, x] for o, x, t in SUBJ & SUBT), open(os.path.join(HERE_, 'sub-jh.json'), 'w'), ensure_ascii=False)
 json.dump({'days': days, 'origins': origins}, sys.stdout, ensure_ascii=False, indent=0)
+print('regular-days', dict(REG_N), file=sys.stderr)
 print('origins', len(origins), 'dests', sum(len(o['dests']) for o in origins), 'times', sum(len(x['times']) for o in origins for x in o['dests']),
       'daily', sum(1 for o in origins for x in o['dests'] for t in x['times'] if all(t[2])), 'missing files', dict(miss), file=sys.stderr)
