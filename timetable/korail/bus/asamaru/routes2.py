@@ -124,6 +124,11 @@ for x in LD:
     if not (pv < 1e-12 or rev_board(A, D1, D2) or near(D1, D2, dd) or (n == len(P[(A, D1)]['t']) == len(P[(A, D2)]['t']) and n >= 3)):
         unconf.append(((A, D1, D2), '%s 발 %s 행이 %s 에 들름, 같은 시각 %d번' % (A, D2, D1, n)))
 LB, LD = LB2, LD2
+# 일부 편만 서는 정류장(partial-stops.json: [A, B, D])은 표로 잇지 않는다: A 의 편이 아주 많아 우연히도 맞물리고, B 는 다른 노선(노선표)의 정류장이기도 해서
+PART = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'partial-stops.json')))
+SHARED = {p for A, B_, D in PART for p in ((B_, D), (D, B_))}         # 노선표가 이 구간을 갖지 않고 목록에 다 둔다
+LB = [x for x in LB if not any((x[0], x[1], x[2]) == (D, A, B_) for A, B_, D in PART)]
+LD = [x for x in LD if not any((x[0], x[1], x[2]) == (D, B_, A) for A, B_, D in PART)]
 # 사람이 확인한 같은 차(force-links.json: 정류장 차례): 맞물린 편이 하나뿐이어도 잇는다 (시각이 맞는 δ 로)
 FORCE = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'force-links.json')))
 have = {(D, A, B) for D, A, B, *_ in LB}
@@ -188,7 +193,18 @@ def g(i):
     while tp[i] != i: tp[i] = tp[tp[i]]; i = tp[i]
     return i
 seen = {}
+def fkey(tr):
+    """사람이 확인한 노선(force-links)의 정류장만 지나는 차: 그 노선(방향)으로 한 표에 (끝 정류장이 달라도)"""
+    st = set(tr['board']) | set(tr['drop'])
+    first = min(tr['board'], key=lambda A: (tr['board'][A] - min(tr['board'].values())) % 1440)
+    ks = [i for i, seq in enumerate(FORCE) if st <= set(seq)]
+    return min(ks, key=lambda i: FORCE[i].index(first)) if ks else None
 for i, tr in enumerate(trips):
+    fk = fkey(tr)
+    if fk is not None:
+        k = ('F', fk)
+        if k in seen: tp[g(i)] = g(seen[k])
+        else: seen[k] = i
     L = last(tr)
     for A in tr['board']:
         k = (L, A)
@@ -199,7 +215,7 @@ for i in range(len(trips)): groups[g(i)].append(trips[i])
 
 tables, owned = [], set()
 for grp in groups.values():
-    L = last(grp[0])
+    L = collections.Counter(last(tr) for tr in grp).most_common(1)[0][0]          # 끝 행선지가 여럿이면(확인한 노선) 가장 많은 것
     # 정류장 차례: 끝 행선지 착까지 남은 시간이 긴 차례 (타는 곳), 그다음 내리는 곳은 착이 이른 차례
     rem = collections.defaultdict(list)
     for tr in grp:
@@ -220,7 +236,7 @@ for grp in groups.values():
     bset = {A for tr in grp for A in tr['board']}
     dset = {D for tr in grp for D in tr['drop']} - bset
     pairs = {(A, D) for tr in grp for A, t, D in tr['nodes']}
-    pairs = {p for p in pairs if p not in owned}
+    pairs = {p for p in pairs if p not in owned and p not in SHARED}
     owned |= pairs
     cols = []
     for tr in grp:
@@ -355,16 +371,17 @@ tables = [T for p in both for T in p if T]
 title_of = {id(X_): T.get('title') or '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1])) for T, U in both for X_ in (T, U) if X_}      # 상하 병기면 상행도 하행 표 이름으로
 for k_, M_ in title_merge.items(): title_of[k_] = title_of[id(M_)]
 open(sys.argv[2], 'w').write('\n'.join(out))
-# 일부 편만 들르는 정류장 (사람이 확인한 것, partial-stops.json: [A, B, D] = A 발 D 행의 몇 편이 B 에도 선다): 목록의 A→D 에 ◇ 표지와 안내 줄
-PART = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'partial-stops.json')))
+# 일부 편만 들르는 정류장 (사람이 확인한 것, partial-stops.json: [A, B, D] = A 발 D 행의 몇 편이 B 에도 선다): 목록의 A→D 에 ◇ 표지와 안내 줄.
+# B 의 편 가운데 노선표에 실린 다른 노선의 차는 빼고 맞춘다
 pmark = {}
+intab = lambda X, Y: {c[X][1] for T in tables for c in T['cols'] if X in c and Y in c and c[X][0] == 'd'}
 for A, B_, D in PART:
     if (A, D) in P and (B_, D) in P:                     # 오는 길: A 발 + δ 에 B 발
-        ta, tb = P[(A, D)]['t'], P[(B_, D)]['t']
+        ta, tb = P[(A, D)]['t'], set(P[(B_, D)]['t']) - intab(B_, D)
         d = max(range(1, 121), key=lambda d: sum(1 for t in ta if (t + d) % 1440 in tb))
         pmark[(A, D)] = ({t for t in ta if (t + d) % 1440 in tb}, '◇ %s 경유 (%s 발 %d분 뒤)' % (nm(B_), nm(A), d))
     if (D, A) in P and (D, B_) in P:                     # 가는 길: D 발이 같은 시각이면 B 에 먼저 선다
-        ta, tb = P[(D, A)]['t'], P[(D, B_)]['t']
+        ta, tb = P[(D, A)]['t'], set(P[(D, B_)]['t']) - intab(D, B_)
         d = P[(D, A)]['dur'] - P[(D, B_)]['dur']
         pmark[(D, A)] = ({t for t in ta if t in tb}, '◇ %s 경유 (%s 착 %d분 전)' % (nm(B_), nm(A), d))
 own = {p for T in tables for p in T['pairs']}
