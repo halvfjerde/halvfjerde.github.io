@@ -395,12 +395,12 @@ for A, B_, D in PART:
     if (A, D) in P and (B_, D) in P:                     # 오는 길: A 발 + δ 에 B 발
         ta, tb = P[(A, D)]['t'], set(P[(B_, D)]['t']) - intab(B_, D)
         d = max(range(1, 121), key=lambda d: sum(1 for t in ta if (t + d) % 1440 in tb))
-        pmark[(A, D)] = ({t for t in ta if (t + d) % 1440 in tb}, '◇ %s 경유 (%s 발 %d분 뒤)' % (nm(B_), nm(A), d))
+        pmark[(A, D)] = ({t for t in ta if (t + d) % 1440 in tb}, '◇ 승차 %s +%s' % (nm(B_), hmd(d)))
         pfold[(B_, D)] = ('seeFrom', A, {(t + d) % 1440 for t in pmark[(A, D)][0]})
     if (D, A) in P and (D, B_) in P:                     # 가는 길: D 발이 같은 시각이면 B 에 먼저 선다
         ta, tb = P[(D, A)]['t'], set(P[(D, B_)]['t']) - intab(D, B_)
         d = P[(D, A)]['dur'] - P[(D, B_)]['dur']
-        pmark[(D, A)] = ({t for t in ta if t in tb}, '◇ %s 경유 (%s 착 %d분 전)' % (nm(B_), nm(A), d))
+        pmark[(D, A)] = ({t for t in ta if t in tb}, '◇ 경유 %s %s' % (nm(B_), hmd(P[(D, B_)]['dur'])))
         pfold[(D, B_)] = ('see', A, pmark[(D, A)][0])
 own = {p for T in tables for p in T['pairs']}
 for O in b['origins']: O['dests'] = [X for X in O['dests'] if (O['from'], X['to']) not in own]
@@ -441,7 +441,7 @@ for A, B_, *only in SAME['board']:                      # 셋째 칸이 있으�
         tA, tB = {m_(t) for t in ts_(Y)}, {m_(t) for t in ts_(X)}
         d = next((d for d in range(0, 61) if {(t - d) % 1440 for t in tB} <= tA), None)     # B 발 = A 발 + δ (TAGO 가 같은 시각을 붙이면 δ=0)
         if d is not None:
-            Y.setdefault('board', []).append(B_ + (' %s 뒤' % hmd(d) if d else ''))
+            Y.setdefault('board', []).append(B_ + (' +%s' % hmd(d) if d else ''))      # 「승차 호남제일 +10분」: 이 덩이의 발 시각 + δ 에 B 발
             to_ = X['to']; X.clear(); X.update({'to': to_, 'seeFrom': A})
 # 겹치는 행선지 묶음: 차마다 가장 먼 행선지 덩이에 싣고, 그 앞에 서는 곳은 「경유」(모든 편) 또는 ◇(몇 편만, 하나까지).
 # 앞 행선지 덩이에는 남은 편과 「이 밖에 … 행 n편도 섬」, 남은 편이 없으면 참조 줄
@@ -484,7 +484,7 @@ def merge_drop(d, xs):
     return True
 def merge_board(D, os_):
     """D 로 가는 덩이들, os_: 먼저 타는 곳부터. 뒤 출발지 B 마다 앞 출발지 A 의 편이 B 에서도 타면(B 발 = A 발 + δ):
-    A 의 편이 모두 그러면 A 덩이에 「승차 B δ 뒤」, 몇 편만이면 그 편에 ◇ 와 「◇ B 에서도 탐 (δ 뒤)」.
+    A 의 편이 모두 그러면 A 덩이에 「승차 B +δ」, 몇 편만이면 그 편에 ◇ 와 「◇ 승차 B +δ」.
     B 덩이에서는 그 편을 빼고 「이 밖에 A 발 n편도 탐」(남은 편이 없으면 참조 줄)"""
     blk = {o: next((X for X in OR[o]['dests'] if X['to'] == D and 'times' in X), None) for o in os_ if o in OR}
     n = 0
@@ -505,12 +505,12 @@ def merge_board(D, os_):
         if not best: continue
         _, k, e, A, tA = best; Y = blk[A]
         got = {(t + e) % 1440 for t in tA if (t + e) % 1440 in {m_(t[0]) for t in X['times']}}
-        es = (hmd(e) + ' 뒤') if e else ''
+        es = ('+' + hmd(e)) if e else ''
         if k == len(tA): Y.setdefault('board', []).append(o + (' ' + es if es else ''))
         elif 'vnote' not in Y:
             for t in Y['times']:
                 if (m_(t[0]) + e) % 1440 in got: t.append('◇')
-            Y['vnote'] = '◇ %s에서도 탐%s' % (nm(o), ' (%s)' % es if es else '')
+            Y['vnote'] = '◇ 승차 %s%s' % (nm(o), ' ' + es if es else '')
         else: continue
         rest_ = [t for t in X['times'] if m_(t[0]) not in got]
         if rest_: X['times'] = rest_; X['vnote3'] = '이 밖에 %s 발 %d편도 탐' % (nm(A), len(got))
