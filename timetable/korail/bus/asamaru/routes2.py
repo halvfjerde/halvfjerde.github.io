@@ -459,6 +459,28 @@ for k_, (T, U) in enumerate(both):                     # 서울이 있으면 서
         T2 = dict(U, stops=rv_); T2.pop('title', None)
         U2 = dict(T); U2['stops'] = st
         both[k_] = (T2, U2)
+# TAGO 에 없는 끝 정류장(extra-stops.json): after 가 끝인 노선표에 stop 을 이어 붙인다 (착은 +min, 반대 방향 발은 −min)
+EXTRA = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'extra-stops.json'))) if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'extra-stops.json')) else []
+EXREF = []
+for E_ in EXTRA:
+    af_, sp_, mn_ = E_['after'], E_['stop'], E_['min']
+    for T_, U_ in both:
+        st_ = T_['stops']
+        if af_ not in (st_[0], st_[-1]) or sp_ in st_: continue
+        if st_[-1] == af_: st_.append(sp_)
+        else: st_.insert(0, sp_)
+        if U_ and U_['stops'] is not st_: U_['stops'] = [sp_] + U_['stops'] if U_['stops'][0] == af_ else U_['stops'] + [sp_]
+        for X_ in (T_, U_):
+            if not X_: continue
+            for c in X_['cols']:
+                if af_ not in c: continue
+                k_, t_ = c[af_]
+                if k_ == 'a': c[sp_] = ('a', (t_ + mn_) % 1440)
+                elif all((c[s_][1] - t_) % 1440 < 720 for s_ in c if not s_.startswith('_')):       # 그 차가 after 에서 떠난다 → stop 에서 mn 분 앞에
+                    c[sp_] = ('d', (t_ - mn_) % 1440); X_['board'] = set(X_['board']) | {sp_}
+            for A, D in list(X_['pairs']):
+                if D == af_: EXREF.append((A, sp_, id(X_), P[(A, D)]['dur'] + mn_))
+                if A == af_: EXREF.append((sp_, D, id(X_), P[(A, D)]['dur'] + mn_))
 BOFF_ = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'board-offsets.json')))
 for T_, U_ in both:                                    # 노선표: TAGO 가 같은 시각을 붙인 타는 곳은 아는 분수만큼 뒤로
     for X_ in (T_, U_):
@@ -785,6 +807,7 @@ b['reviewChains'] = [[o] + xs for o, xs in REVIEW]
 b['routeOwned'] = sorted('%s→%s' % p for p in own)
 b['names'] = SHORT
 b['tableRefs'] = sorted([A, D, title_of[id(T)], P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
+b['tableRefs'] += sorted([A, D, title_of[i_], du_, None] for A, D, i_, du_ in set(EXREF) if i_ in title_of)                  # TAGO 에 없는 끝 정류장 (요금 모름)
 json.dump(b, open(sys.argv[3], 'w'), ensure_ascii=False, indent=0)
 # 사람이 확인할 목록 (마크다운)
 rep = ['# 고속버스 노선표: 확인할 것', '', '정류장 차례·경유 여부는 TAGO 구간별 시각을 맞물려 짐작한 것. 아래는 근거가 약하거나 따로 확인되지 않은 것.', '']
