@@ -3427,6 +3427,9 @@ class Book:
                                    and any(xover(q2, r2) for r2 in chain if r2 is not r)] for r in chain}     # 좌우로 한 줄인 짝
                     for v in sib.values():
                         for q2 in v: done.add(id(q2))
+                    for r in chain:                       # 좌우로 한 줄인 짝이 더 높으면 그 높이로 (짧은 쪽을 늘린다, 높은 쪽을 자르지 않게)
+                        hx = max([r['h']] + [q2['h'] for q2 in sib[id(r)]])
+                        if hx > r['h'] + 0.01: r['pre'] = hx - r['h']; r['h'] = hx
                     y_ = chain[0]['y']
                     tot = sum(r['h'] for r in chain) - (len(chain) - 1) * fw
                     slack = PH - (y_ + tot)
@@ -3434,7 +3437,7 @@ class Book:
                     hsum = sum(r['h'] for r in cs_)
                     for r in chain:
                         e = slack * r['h'] / hsum if (r in cs_ and hsum > 0 and slack > 0) else 0.0
-                        r['y'] = y_; r['h'] += e; r['stretch'] = e
+                        r['y'] = y_; r['h'] += e; r['stretch'] = e + r.pop('pre', 0.0)
                         for q2 in sib[id(r)]: q2['y'] = y_; q2['stretch'] = r['h'] - q2['h']; q2['h'] = r['h']
                         y_ += r['h'] - fw
         # 붙은 조각 사이의 괘선: 위 조각과 같은 표면 띠 사이 괘선, 다른 표면 표 사이 괘선. 아래에 붙은 조각이 있으면 아래 변은 그 조각이 긋는다

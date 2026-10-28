@@ -270,6 +270,7 @@ def wdl(ws):
     ws = sorted(ws)
     if len(ws) == 7: return '_'
     if ws == [0, 1, 2, 3, 4]: return '월∼금'
+    if len(ws) == 6 and ws != [0, 1, 2, 3, 4, 5]: return WD[(set(range(7)) - set(ws)).pop()] + '\xa0' + '제외'      # 하루만 쉬면 「수 제외」 (월∼토는 그대로)
     if len(ws) >= 3 and len(ws) < 7:                     # 이어진 요일은 「금∼월」처럼 (주를 넘어 이어져도)
         for s0 in ws:
             if sorted((s0 + k) % 7 for k in range(len(ws))) == ws: return WD[s0] + '∼' + WD[(s0 + len(ws) - 1) % 7]
@@ -404,6 +405,18 @@ for k_, (T, U) in enumerate(both):                     # 서울이 있으면 서
         T2 = dict(U, stops=rv_); T2.pop('title', None)
         U2 = dict(T); U2['stops'] = st
         both[k_] = (T2, U2)
+BOFF_ = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'board-offsets.json')))
+for T_, U_ in both:                                    # 노선표: TAGO 가 같은 시각을 붙인 타는 곳은 아는 분수만큼 뒤로
+    for X_ in (T_, U_):
+        if not X_: continue
+        for c in X_['cols']:
+            for k_, dv in BOFF_.items():
+                a_, b_ = k_.split('|')
+                if a_ in c and b_ in c and c[a_][0] == 'd' and c[b_][0] == 'd' and c[a_][1] == c[b_][1]:
+                    c[b_] = ('d', (c[b_][1] + dv) % 1440)
+            # 고창 ― 인천공항 시외 편: TAGO 에 고창 발만 있어 정읍·김제 칸이 비는 것을 나무위키 시각(정읍 +40, 김제 +80)으로
+            if '고창' in c and c['고창'][0] == 'd' and c.get('_sub') and any(s_.startswith('인천공항') for s_ in c) and '정읍' not in c and '김제' not in c and '정읍' in X_['stops']:
+                c['정읍'] = ('d', (c['고창'][1] + 40) % 1440); c['김제'] = ('d', (c['고창'][1] + 80) % 1440)
 def ends_of(T, U):
     """표의 하행 차례로: 차가 떠나는 곳(왼쪽)·끝나는 곳(오른쪽) — 중간에서 시발·종착하는 주요 정류장"""
     st = T['stops']; L_, R_ = set(), set()
@@ -557,6 +570,7 @@ for O in b['origins']:
 # 같은 차 (사람이 확인, same-bus.json): drop [B, D] = B 에 내리는 차는 다 D 까지 간다 → D 덩이에 「경유 B」, B 자리에는 참조 줄.
 # board [A, B] = B 에서 타는 차는 다 A 에서 온다 (TAGO 는 B 에도 A 의 발차 시각을 붙인다) → A 덩이에 「승차 B」, B 발 목록에는 참조 줄
 SAME = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'same-bus.json')))
+BOFF = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'board-offsets.json')))     # TAGO 가 첫 터미널 시각을 그대로 붙인 타는 곳: 몇 분 뒤인지 (반대 방향 소요 차로 안 것)
 ts_ = lambda X: {t[0] for t in X.get('times', [])}
 for B_, D, *only in SAME['drop']:                      # 셋째 칸이 있으면 그 출발지들에만
     for O in b['origins']:
@@ -576,6 +590,7 @@ for A, B_, *only in SAME['board']:                      # 셋째 칸이 있으�
         tA, tB = {m_(t) for t in ts_(Y)}, {m_(t) for t in ts_(X)}
         d = next((d for d in range(0, 61) if {(t - d) % 1440 for t in tB} <= tA), None)     # B 발 = A 발 + δ (TAGO 가 같은 시각을 붙이면 δ=0)
         if d is not None:
+            if not d: d = BOFF.get('%s|%s' % (A, B_), 0)       # TAGO 가 같은 시각을 붙인 곳: 아는 분수(반대 방향 소요 차)로
             Y.setdefault('board', []).append(B_ + (' +%s' % hmd(d) if d else ''))      # 「승차 호남제일 +10분」: 이 덩이의 발 시각 + δ 에 B 발
             to_ = X['to']; X.clear(); X.update({'to': to_, 'seeFrom': A})
 # 겹치는 행선지 묶음: 차마다 가장 먼 행선지 덩이에 싣고, 그 앞에 서는 곳은 「경유」(모든 편) 또는 ◇(몇 편만, 하나까지).
@@ -640,7 +655,9 @@ def merge_board(D, os_):
         if not best: continue
         _, k, e, A, tA = best; Y = blk[A]
         got = {(t + e) % 1440 for t in tA if (t + e) % 1440 in {m_(t[0]) for t in X['times']}}
-        es = ('+' + hmd(e)) if e else ''
+        if not e: e_ = BOFF.get('%s|%s' % (A, o), 0)
+        else: e_ = e
+        es = ('+' + hmd(e_)) if e_ else ''
         if k == len(tA): Y.setdefault('board', []).append(o + (' ' + es if es else ''))
         elif 'vnote' not in Y:
             for t in Y['times']:

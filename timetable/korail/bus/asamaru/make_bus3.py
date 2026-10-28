@@ -25,11 +25,31 @@ SUBNM = {'서울고속버스터미널(경부)': '서울경부', '인천공항2�
          '고한사북공영': '고한사북', '울산(태화)': '울산', '수락산역(직통)': '수락산역', '김해공항국제(세인공항리무진)': '김해공항', '김해공항(태화)국제': '김해공항'}
 SG = {'심야프리': '심야프리미엄', '일반': '고속', '심야일반': '심야고속'}
 SUBT = set()                                              # 시외로 받은 편 (출발, 도착, 분)
+# 시외는 전환시외(나무위키 목록) 노선과 사람이 확인한 노선(force-links·list-chains 등)의 터미널 짝만 — 보통 시외는 싣지 않는다
+SUBD = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'suburb')
+HERE_ = os.path.dirname(os.path.abspath(__file__))
+ALLOWED = {tuple(p) for p in json.load(open(os.path.join(SUBD, 'jeonhwan-jobs.json')))}
+if os.path.exists(os.path.join(SUBD, 'extra-jobs.json')): ALLOWED |= {tuple(p) for p in json.load(open(os.path.join(SUBD, 'extra-jobs.json')))}
+_map = json.load(open(os.path.join(SUBD, 'map.json')))
+_seqs = json.load(open(os.path.join(HERE_, 'force-links.json'))) + json.load(open(os.path.join(HERE_, 'list-chains.json')))
+_sb = json.load(open(os.path.join(HERE_, 'same-bus.json')))
+_seqs += [x[:2] for x in _sb['drop'] + _sb['board']] + json.load(open(os.path.join(HERE_, 'partial-stops.json')))
+for q in _seqs:
+    for a_ in q:
+        for b_ in q:
+            if a_ != b_:
+                for _, ia in _map.get(a_, []):
+                    for _, ib in _map.get(b_, []): ALLOWED.add((ia, ib))
+SUBDROP = collections.Counter()
 def sub_records(d):
     import glob as _g
     for f in _g.glob(os.path.join(SUB, d + '-*.json')):
+        ids = tuple(os.path.basename(f)[:-5].split('-')[1:3])
+        if ids not in ALLOWED: SUBDROP['보통 시외'] += 1; continue
         for r in json.load(open(f)):
-            if '광주(경기)' in (r['depPlaceNm'], r['arrPlaceNm']): continue        # 경기 광주: 책의 광주(유·스퀘어)와 다른 곳
+            if str(r['depPlandTime'])[8:12] == '2359': SUBDROP['2359'] += 1; continue      # 23:59 발은 시각을 모르는 편(자료 잘못)으로 본다
+            if r['depPlaceNm'] == '광주(경기)': r = dict(r, depPlaceNm='경기광주')            # 경기 광주: 책의 광주(유·스퀘어)와 다른 곳
+            if r['arrPlaceNm'] == '광주(경기)': r = dict(r, arrPlaceNm='경기광주')
             r = dict(r, depPlaceNm=SUBNM.get(r['depPlaceNm'], r['depPlaceNm']), arrPlaceNm=SUBNM.get(r['arrPlaceNm'], r['arrPlaceNm']),
                      gradeNm=SG.get(r.get('gradeNm', ''), r.get('gradeNm', '')))
             yield r
@@ -58,6 +78,7 @@ SUBT -= EXPT
 def wdl(ws):
     ws = sorted(ws)
     if ws == [0, 1, 2, 3, 4]: return '월∼금'
+    if len(ws) == 6 and ws != [0, 1, 2, 3, 4, 5]: return WD[(set(range(7)) - set(ws)).pop()] + ' ' + '제외'      # 하루만 쉬면 「수 제외」 (월∼토는 그대로)
     if len(ws) >= 3 and len(ws) < 7:                     # 이어진 요일은 「금∼월」처럼 (주를 넘어 이어져도)
         for s0 in ws:
             if sorted((s0 + k) % 7 for k in range(len(ws))) == ws: return WD[s0] + '∼' + WD[(s0 + len(ws) - 1) % 7]
@@ -85,6 +106,7 @@ for d in days:
 origins = []
 nvar = 0
 FILLED = []
+FIRSTONLY = []
 for o in sorted(T):
     dests = []
     for x in sorted(T[o]):
@@ -93,7 +115,7 @@ for o in sorted(T):
         times, var_t = [], []
         for t in sorted(T[o][x]):
             pd = PD[(o, x, t)]
-            if not (set(pd) & LAST): continue                # 나중 주에 없는 편 (철이 바뀌어 없어진 편)
+            if not (set(pd) & LAST): FIRSTONLY.append((o, x, t, sorted({wd[d_] for d_ in pd})))      # 나중 주에 없는 편: 결행했을 수도 있어 싣고 목록에
             byw = collections.defaultdict(set)
             for d, g in pd.items(): byw[wd[d]].add(g)
             gvar = any(len(v) > 1 for v in byw.values())
@@ -131,7 +153,8 @@ for o in sorted(T):
             else: X['gnote'] = '◆ 날마다 등급이 바뀜'                  # 등급이 셋 넘으면 늘어놓지 않는다
         if times: dests.append(X)
     if dests: origins.append({'from': o, 'dests': dests})
-print('grade-rotating times', nvar, 'filled as daily', len(FILLED), file=sys.stderr)
+print('grade-rotating times', nvar, 'filled as daily', len(FILLED), 'first-week only', len(FIRSTONLY), 'sub dropped', dict(SUBDROP), file=sys.stderr)
+json.dump({'filled': FILLED, 'firstonly': FIRSTONLY}, open(os.path.join(HERE_, 'bus-review-data.json'), 'w'), ensure_ascii=False)
 json.dump({'days': days, 'origins': origins}, sys.stdout, ensure_ascii=False, indent=0)
 print('origins', len(origins), 'dests', sum(len(o['dests']) for o in origins), 'times', sum(len(x['times']) for o in origins for x in o['dests']),
       'daily', sum(1 for o in origins for x in o['dests'] for t in x['times'] if all(t[2])), 'missing files', dict(miss), file=sys.stderr)
