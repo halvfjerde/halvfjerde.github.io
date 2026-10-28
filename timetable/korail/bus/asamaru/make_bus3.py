@@ -32,6 +32,7 @@ ALLOWED = {tuple(p) for p in json.load(open(os.path.join(SUBD, 'jeonhwan-jobs.js
 if os.path.exists(os.path.join(SUBD, 'extra-jobs.json')): ALLOWED |= {tuple(p) for p in json.load(open(os.path.join(SUBD, 'extra-jobs.json')))}
 _map = json.load(open(os.path.join(SUBD, 'map.json')))
 _seqs = json.load(open(os.path.join(HERE_, 'force-links.json'))) + json.load(open(os.path.join(HERE_, 'list-chains.json')))
+if os.path.exists(os.path.join(HERE_, 'list-chains-oneway.json')): _seqs += json.load(open(os.path.join(HERE_, 'list-chains-oneway.json')))
 _sb = json.load(open(os.path.join(HERE_, 'same-bus.json')))
 _seqs += [x[:2] for x in _sb['drop'] + _sb['board']] + json.load(open(os.path.join(HERE_, 'partial-stops.json')))
 for q in _seqs:

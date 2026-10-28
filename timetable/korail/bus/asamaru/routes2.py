@@ -385,7 +385,7 @@ for T in pick:
     else:
         both.append((T, None)); used_.add(id(T))
 SHORT = {'센트럴시티(서울)': '서울호남', '광주(유·스퀘어)': '광주', '대전청사(샘머리)': '대전청사', '세종터미널(연구)': '세종터미널', '청주(센트럴)': '청주',
-         '동천(호남)': '동천', '임자(진리)': '임자', '가톨릭관동대강릉': '가톨릭관동대', '아산탕정사무소': '아산탕정', '천안종합운동장': '천안운동장',
+         '배방정류소': '배방', '동천(호남)': '동천', '임자(진리)': '임자', '가톨릭관동대강릉': '가톨릭관동대', '아산탕정사무소': '아산탕정', '천안종합운동장': '천안운동장',
          '평택굿모닝병원': '평택굿모닝', '원주의료진흥원': '원주의료원'}           # 책에 쓰는 짧은 터미널 이름
 NM = dict(SHORT, **{'인천공항T1': '인천공항1터미널', '인천공항T2': '인천공항2터미널'})        # 노선표 굵은 글꼴에는 로마자가 없어 한글로
 nm = lambda x: NM.get(x, x)
@@ -463,6 +463,7 @@ for k_, (T, U) in enumerate(both):                     # 서울이 있으면 서
 EXTRA = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'extra-stops.json'))) if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'extra-stops.json')) else []
 EXREF = []
 for E_ in EXTRA:
+    if E_.get('lists'): continue                         # 목록용은 아래에서
     af_, sp_, mn_ = E_['after'], E_['stop'], E_['min']
     for T_, U_ in both:
         st_ = T_['stops']
@@ -643,6 +644,19 @@ LOST = sorted((A, hm(t), D) for A, D in own for t in P[(A, D)]['t'] if (A, t, D)
 if LOST: print('표가 가진 구간인데 표에 없는 편', len(LOST), LOST[:12], file=sys.stderr)
 for O in b['origins']: O['dests'] = [X for X in O['dests'] if (O['from'], X['to']) not in own]
 b['origins'] = [O for O in b['origins'] if O['dests']]
+# 목록에도 TAGO 에 없는 끝 정류장 (extra-stops.json 의 lists: 그 출발지·행선지와 오가는 것만): after 행을 본떠 stop 행(착 +min), after 발을 본떠 stop 발(발 −min)
+for E_ in EXTRA:
+    if not E_.get('lists'): continue
+    af_, sp_, mn_ = E_['after'], E_['stop'], E_['min']
+    for O in b['origins']:
+        X = next((X for X in O['dests'] if X['to'] == af_ and 'times' in X), None) if O['from'] in E_['lists'] else None
+        if X and not any(Y['to'] == sp_ for Y in O['dests']):
+            O['dests'].append({'to': sp_, 'dur': X['dur'] + mn_, 'fare': None, 'times': [[t[0], hm(m_(t[1]) + mn_)] + t[2:] for t in X['times']]})
+    OA_ = next((O for O in b['origins'] if O['from'] == af_), None)
+    if OA_:
+        new_ = [{'to': X['to'], 'dur': X['dur'] + mn_, 'fare': None, 'times': [[hm(m_(t[0]) - mn_)] + t[1:] for t in X['times']]}
+                for X in OA_['dests'] if X['to'] in E_['lists'] and 'times' in X]
+        if new_: b['origins'].append({'from': sp_, 'dests': new_})
 for O in b['origins']:
     for X in O['dests']:
         k = (O['from'], X['to'])
@@ -768,11 +782,24 @@ def merge_board(D, os_, strict=False):
         n += 1
     return n
 OR = {O['from']: O for O in b['origins']}
+def extra_between():                                     # 시각 모르는 경유지(extra-stops.json 의 between)를 경유·승차 줄에 이름만
+    for E_ in EXTRA:
+        bt_ = E_.get('between')
+        if not bt_: continue
+        for O in b['origins']:
+            for X in O['dests']:
+                if O['from'] in E_.get('lists', []) and X['to'] == E_['stop'] and 'via' in X:
+                    k_ = next((i for i, v in enumerate(X['via']) if v[0] == bt_['after']), None)
+                    if k_ is not None: X['via'][k_ + 1:k_ + 1] = [[n_, None, None] for n_ in bt_['names']]
+                if O['from'] == E_['stop'] and X['to'] in E_.get('lists', []) and 'board' in X:
+                    k_ = next((i for i, v in enumerate(X['board']) if v.split(' ')[0] == bt_['after']), None)
+                    if k_ is not None: X['board'][k_:k_] = bt_['names'][::-1]
 # 사람이 확인한 노선(list-chains.json, 정류장 차례): 목록에서 가장 긴 구간으로 (두 방향)
 LCH = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'list-chains.json')))
 nl = 0
-for seq0 in LCH:
-    for seq in (seq0, seq0[::-1]):
+LCH1 = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'list-chains-oneway.json'))) if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'list-chains-oneway.json')) else []
+for seq0 in LCH + LCH1:
+    for seq in ((seq0,) if seq0 in LCH1 else (seq0, seq0[::-1])):      # 한 방향만(list-chains-oneway.json): 오는 길은 TAGO 에 타는 곳이 없어 시각으로 이을 수 없는 것
         for i, o in enumerate(seq):
             if o not in OR: continue
             d = {X['to']: X for X in OR[o]['dests'] if 'times' in X}
@@ -804,6 +831,7 @@ for O in b['origins']:
         else: REVIEW.append((O['from'], xs))
 NB_ = sum(merge_board(o, xs[::-1], strict=True) for o, xs in AUTO)      # 반대 방향(오는 길)도: 먼 데서 타는 차가 가까운 데서도 타면 「승차」
 print('auto chains up', NB_, file=sys.stderr)
+extra_between()
 print('auto chains', len(AUTO), 'review', len(REVIEW), file=sys.stderr)
 b['autoChains'] = [[o] + xs for o, xs in AUTO]
 b['reviewChains'] = [[o] + xs for o, xs in REVIEW]

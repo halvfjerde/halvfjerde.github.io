@@ -3741,6 +3741,10 @@ class Book:
         org = {O['from']: O for O in data['origins']}
         for A, D, tt, *df in data.get('tableRefs', []):
             if A not in org: org[A] = {'from': A, 'dests': []}; data['origins'].append(org[A])
+            ex_ = next((X for X in org[A]['dests'] if X['to'] == D and 'times' in X), None)
+            if ex_ is not None:                             # 같은 행선지 목록 덩이가 있으면 그 덩이에 「이 밖에 노선표 56」 (아산온양: 배방 경유는 목록, 아산탕정 경유는 노선표)
+                if tt not in ex_.setdefault('tabRefs', []): ex_['tabRefs'].append(tt)
+                continue
             org[A]['dests'].append({'to': D, 'seeTable': tt, 'dur': df[0] if df else None, 'fare': df[1] if len(df) > 1 else None})
         sn = data.get('names', {}); sh_ = lambda x: sn.get(x, x)      # 짧은 터미널 이름 (센트럴시티(서울) → 서울호남)
         for O in data['origins']:
@@ -3750,7 +3754,7 @@ class Book:
                 for k_ in ('see', 'seeFrom'):
                     if k_ in X: X[k_] = sh_(X[k_])
                 if 'via' in X: X['via'] = [[sh_(v[0])] + v[1:] for v in X['via']]
-                if 'board' in X: X['board'] = [sh_(v) for v in X['board']]
+                if 'board' in X: X['board'] = [' '.join([sh_(v.split(' ', 1)[0])] + v.split(' ', 1)[1:]) for v in X['board']]     # 「천안종합운동장 +20분」도 짧은 이름으로
         data['origins'].sort(key=lambda O: O['from'])
         for O in data['origins']: O['dests'].sort(key=lambda X: X['to'])
         R, fs = self.R, self.fs
@@ -3772,7 +3776,7 @@ class Book:
             """덩이 머리 밑 작은 줄: 「경유 서대구 3:10 19,600∼」, 「승차 평택굿모닝병원・평택대」"""
             out = []
             durs = collections.Counter([v[1] for v in X.get('via', [])] + [X['dur']])      # 소요가 같게 적힌 곳은 소요를 빼고 이름만
-            for lab, toks in (('경유', [v[0] + ('' if v[1] == X['dur'] else ' ' + hm_(v[1])) for v in X.get('via', [])]),      # 소요가 끝과 같게 적힌 곳(TAGO)은 이름만
+            for lab, toks in (('경유', [v[0] + ('' if v[1] in (None, X['dur']) else ' ' + hm_(v[1])) for v in X.get('via', [])]),      # 소요가 끝과 같게 적힌 곳(TAGO)·모르는 곳은 이름만
                               ('승차', X.get('board', []))):
                 if not toks: continue
                 cur = lab
@@ -3789,6 +3793,7 @@ class Book:
                     if cur and wsm(cur + ', ' + t_) > ww_: out.append(cur + ','); cur = '　' + t_
                     else: cur = (cur + ', ' + t_) if cur else t_
                 out.append(cur)
+            for tt_ in X.get('tabRefs', []): out.append('이 밖에 노선표 {#%s}' % tt_)      # {#표 이름}: 그 표의 쪽 번호 네모
             if X.get('gnote'):                              # 돌아가는 등급: 「※ 가운데 날마다 1∼2편 프리미엄, 나머지 우등」
                 cur = ''
                 for k_, t_ in enumerate(X['gnote'].split(', ')):
@@ -3932,7 +3937,10 @@ class Book:
                     if not it[3]:
                         for ln in X.get('_sub', []):
                             parts_ = re.split(r'\{([^}]*)\}', ln)          # {프}: 등급 네모 표지
-                            tex.append(self.put_box(xx + pad, y, ww - 2 * pad, SR, ''.join(gmark(p_, 0.66) if k_ % 2 else self.inl.run(p_, Ctx('M', 0.72).but(hscale=HS)) for k_, p_ in enumerate(parts_) if p_), 'l', 'm'))
+                            def pbadge_(p_):
+                                pg_ = self.bus_tpage.get(self._tkey(p_[1:]))
+                                return (r'\kern%.3fbp ' % (0.2 * fs) + self.page_badge(pg_ + first, 0.9, None, 0.72)) if pg_ is not None else ''
+                            tex.append(self.put_box(xx + pad, y, ww - 2 * pad, SR, ''.join((pbadge_(p_) if p_.startswith('#') else gmark(p_, 0.66)) if k_ % 2 else self.inl.run(p_, Ctx('M', 0.72).but(hscale=HS)) for k_, p_ in enumerate(parts_) if p_), 'l', 'm'))
                             y += SR
                         if X.get('_sub'): y += BG
                     st = y
