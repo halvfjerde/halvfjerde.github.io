@@ -248,11 +248,13 @@ for grp in groups.values():
         for k, s_ in zip(idx, best): stops[k] = s_
     fks = {fkey(tr) for tr in grp}
     isforce = len(fks) == 1 and None not in fks
-    brs_ = {}
+    brs_, brm_ = {}, set()
     if len(fks) == 1 and None not in fks:               # 사람이 확인한 노선: 그 차례대로 (TAGO 가 같은 시각을 붙인 곳도 차례가 맞게)
         sq0_ = FORCE[fks.pop()]; sq_ = flat_(sq0_)
         stops = sorted({s_ for tr in grp for s_ in list(tr['board']) + list(tr['drop'])}, key=lambda s_: sq_.index(s_) if s_ in sq_ else len(sq_))   # 끝까지 가지 않는 차의 정류장도
         brs_ = {s_: j for x in sq0_ if isinstance(x, list) for j, s_ in enumerate(x) if s_ in stops}    # 갈래 정류장 → 갈래 번호
+        # 줄기에 바로 붙는 갈래(끝 갈래면 줄기 쪽 첫째)는 줄기와 한 선(사이에 선을 긋지 않음): [..., "창원", ["진해", "김해"]] 이면 진해―창원이 한 줄
+        brm_ = {x[0] if k_ == len(sq0_) - 1 else x[-1] for k_, x in enumerate(sq0_) if isinstance(x, list) and k_ in (0, len(sq0_) - 1)}
     bset = {A for tr in grp for A in tr['board']}
     dset = {D for tr in grp for D in tr['drop']} - bset
     pairs = {(A, D) for tr in grp for A, t, D in tr['nodes']}
@@ -276,7 +278,7 @@ for grp in groups.values():
     for c in cols:                                     # 갈래 끝 노선: 차마다 제 갈래
         js_ = {brs_[s_] for s_ in c if s_ in brs_}
         if len(js_) == 1: c['_br'] = js_.pop()
-    tables.append({'stops': stops, 'board': bset, 'cols': cols, 'pairs': pairs, 'last': L, 'force': isforce} | ({'branch': brs_} if len(set(brs_.values())) > 1 else {}))
+    tables.append({'stops': stops, 'board': bset, 'cols': cols, 'pairs': pairs, 'last': L, 'force': isforce} | ({'branch': brs_, 'brmain': brm_} if len(set(brs_.values())) > 1 else {}))
 
 GR = {'우': '우등', '일': '일반', '프': '프리', '심': '심우', '심프': '심프', '심일': '심일'}
 def wdl(ws):
@@ -530,7 +532,8 @@ for T, U, ttl, part, cols_, ucols in emit:
         ad = '發' if s_ in T['board'] else '着'
         mk = '*' if i in (0, len(st) - 1) or s_ in T.get('mids', ()) else ''     # 처음·끝, 중간에서 시발·종착하는 주요 정류장 (조준선)
         rl = ''
-        if BR and i > 0 and BR.get(s_, -1) != BR.get(st[i - 1], -1): rl = ' style=bt=1'      # 갈래가 바뀌는 곳(갈래 구간 위아래)에 선
+        bg_ = lambda x: -1 if x in T.get('brmain', ()) else BR.get(x, -1)       # 줄기에 붙는 갈래는 줄기와 한 선
+        if BR and i > 0 and bg_(s_) != bg_(st[i - 1]): rl = ' style=bt=1'      # 갈래가 바뀌는 곳(갈래 구간 위아래)에 선
         if U:
             au = '發' if s_ in U['board'] else '着'
             out.append('%s %s%s %s%s' % (ad if ad != pv else '〃', mk, nm(s_), au if au != pu else '〃', rl))

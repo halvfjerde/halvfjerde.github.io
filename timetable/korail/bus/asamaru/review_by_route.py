@@ -5,6 +5,9 @@ S = '/tmp/claude-0/-home-claude/f0c8a077-152e-527e-9fb9-53dee448f1fc/scratchpad/
 sys.argv = ['routes2.py', 'bus.json', '/dev/null', S + 'rr.json', S + 'rs.md']
 with contextlib.redirect_stderr(io.StringIO()): g = runpy.run_path('routes2.py')
 b0 = json.load(open('bus.json')); R = json.load(open('bus-review-data.json'))
+import os
+DEC = json.load(open('review-decisions.json')) if os.path.exists('review-decisions.json') else {}
+DONE = {tuple(t) for v in DEC.values() for e in v for t in e['trips']}      # 사람이 확인한 편은 빼고
 rest = g['b']; both = g['both']; TTL = g['TTL']; nm = g['nm']
 WD = '월화수목금토일'
 m_ = lambda s: int(s[:-2]) * 60 + int(s[-2:])
@@ -41,6 +44,7 @@ def route_of(o, x, t):
     return ('목록 %s 발 %s 행%s' % (nm(o), nm(x), (' (경유 %s)' % via) if via else ''), '%s %s' % (nm(o), hm(t)), t)
 items = collections.defaultdict(lambda: collections.defaultdict(list))
 def add(o, x, t, tag):
+    if (o, x, t) in DONE: return
     r, lab, t0 = route_of(o, x, t)
     items[r][(t0, lab)].append(tag)
 def contig(ws):
