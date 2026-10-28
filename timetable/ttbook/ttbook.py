@@ -3265,9 +3265,21 @@ class Book:
             pend = [collections.deque([] if id(T) in prefilled else self.jobs_of(T)) for T in bunch]
             init = [len(q) for q in pend]
             whole = [n <= 1 for n in init]          # 한 번에 다 실리는 표만 당겨 올 수 있다 (짝에 묶여 일감이 없는 표 포함)
+            def gkey(T):                                # 고속버스 노선표: 같은 노선의 하행·상행 띠들(이름의 두 끝이 같은 것)은 한 쪽에 잇달아
+                tt = (T.title.text() if T.title is not None else '').replace('︱', '―').replace('︵', '（').replace('︶', '）')     # 세로쓰기 글자를 되돌려
+                tt = re.sub(r'（[^）]*）', '', tt)
+                return frozenset(x.strip() for x in tt.split('―')) if '―' in tt else None
             while any(pend):
                 pi = next(i for i, q in enumerate(pend) if q)
                 job = pend[pi][0]
+                if bunch[pi].line in OTH_ and len(pend[pi]) == init[pi] and (pi == 0 or gkey(bunch[pi - 1]) != gkey(bunch[pi])) and gkey(bunch[pi]):
+                    grp = [k for k in range(pi, len(bunch)) if gkey(bunch[k]) == gkey(bunch[pi])]
+                    k2 = pi
+                    while k2 < len(bunch) and gkey(bunch[k2]) == gkey(bunch[pi]): k2 += 1
+                    js_ = [j for k in range(pi, k2) for j in pend[k]]
+                    if k2 - pi > 1 and all(j['kind'] == 'single' for j in js_):
+                        tot = sum(j['h'] for j in js_) - (len(js_) - 1) * fw
+                        if top(cur['c']) > 0 and top(cur['c']) + tot > PH + 0.01 and tot <= PH + 0.01: cur['c'] += 1     # 다음 쪽에서 한꺼번에
                 for guard in range(400):
                     c = cur['c']
                     if try_place(job, c):

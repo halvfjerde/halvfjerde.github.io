@@ -143,7 +143,7 @@ for seq in FORCE:
                     cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb) for d in range(0, 421)}
                     dd_ = P[(A, D)]['dur'] - P[(B, D)]['dur']
                     d = max(cnt, key=lambda d: (cnt[d], -abs(d - dd_)))          # 같으면 소요 차에 가까운 δ
-                    if cnt[d] >= 1 and abs(d - dd_) <= max(15, 0.15 * abs(dd_)): LB.append((D, A, B, d, cnt[d], 0.0)); have.add((D, A, B))   # 소요 차와 아주 다른 δ 는 우연
+                    if cnt[d] >= 1 and abs(d - dd_) <= max(30, 0.2 * abs(dd_)): LB.append((D, A, B, d, cnt[d], 0.0)); have.add((D, A, B))   # 소요 차와 아주 다른 δ 는 우연
             for D2 in seq[i + 1:]:                           # 내리는 곳: A 에서 B(먼저) 거쳐 D2
                 if D2 != B and seq.index(D2) > seq.index(B) and (A, B) in P and (A, D2) in P and (A, B, D2) not in haved:
                     n = len(set(P[(A, B)]['t']) & set(P[(A, D2)]['t']))
@@ -301,6 +301,7 @@ ALL = tables
 def rev_ok(T, U):
     cm = [s_ for s_ in T['stops'] if s_ in U['stops']]
     if len(cm) < 2 or len(cm) < 0.5 * min(len(T['stops']), len(U['stops'])): return 0
+    if not ({T['stops'][0], T['stops'][-1]} & set(U['stops']) and {U['stops'][0], U['stops'][-1]} & set(T['stops'])): return 0   # 끝 정류장을 서로 나눠 가져야
     ui = [U['stops'].index(s_) for s_ in cm]
     return len(cm) if all(ui[k] > ui[k + 1] for k in range(len(ui) - 1)) else 0
 def merge_stops(a, b):
@@ -352,8 +353,18 @@ for tail, ps in grp_.items():
     for p in ps: both.remove(p)
     both.append((M, None))
     for T in Ts: title_merge[id(T)] = M
+SEOUL = {'서울경부', '센트럴시티(서울)', '동서울', '서울남부'}
+for k_, (T, U) in enumerate(both):                     # 서울이 있으면 서울 쪽을 위로 (서울에서 나가는 방향을 하행으로)
+    if not U: continue
+    st = T['stops']
+    ks = [i for i, s_ in enumerate(st) if s_ in SEOUL]
+    if ks and ks[0] > (len(st) - 1) / 2:
+        rv_ = list(reversed(st))
+        T2 = dict(U, stops=rv_); T2.pop('title', None)
+        U2 = dict(T); U2['stops'] = st
+        both[k_] = (T2, U2)
 for T, U in both:
-    if U and not T.get('title'): T['title'] = '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1]))
+    if U: T['title'] = '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1]))
 ncols = lambda p: len(p[0]['cols']) + (len(p[1]['cols']) if p[1] else 0)
 both.sort(key=lambda p: (-(ncols(p) > W1), -apt(p[0]), p[0]['stops'][0], p[0]['stops'][-1]))
 def foot(c):
@@ -382,16 +393,23 @@ def cut(xs, k):
     for z in sz: out_.append(xs[a_:a_ + z]); a_ += z
     return out_
 emit = []
-for T, U in both:                                       # 한 쪽 폭을 넘는 표는 같은 이름의 표 여럿으로 나눠 위아래로 (펼침면으로 넘기지 않게). 상하 병기는 두 방향을 같은 몫으로
+TTL = {}                                                # 표 → 이름 (목록의 참조 줄)
+for T, U in both:
+    # 한 쪽 폭에 드는 상하 병기는 한 표로. 넘으면 보통 시각표로 하행(서울에서 나가는 쪽) 띠들, 이어서 상행 띠들 (같은 이름의 표 여럿을 위아래로)
+    st = T['stops']
+    tT = T.get('title') or '%s ― %s' % (nm(st[0]), nm(st[-1]))
     n = len(T['cols']) + (len(U['cols']) if U else 0)
-    if n <= W1: emit.append((T, U, '', T['cols'], U['cols'] if U else [])); continue
-    k = -(-n // W1)
-    pt, pu_ = cut(T['cols'], k), (cut(U['cols'], k) if U else [[]] * k)
-    for i in range(k): emit.append((T, U, '（%s）' % ORD[i], pt[i], pu_[i]))
-for T, U, part, cols_, ucols in emit:
+    if U and n <= W1:
+        emit.append((T, U, tT, '', T['cols'], U['cols'])); TTL[id(T)] = TTL[id(U)] = tT; continue
+    for X_, tt in ((T, tT),) + (((dict(U, stops=list(reversed(st))), '%s ― %s' % (nm(st[-1]), nm(st[0]))),) if U else ()):
+        TTL[id(X_ if X_ is T else U)] = tt
+        m = len(X_['cols'])
+        if m <= W1: emit.append((X_, None, tt, '', X_['cols'], [])); continue
+        k = -(-m // W1)
+        for i, cs in enumerate(cut(X_['cols'], k)): emit.append((X_, None, tt, '（%s）' % ORD[i], cs, []))
+for T, U, ttl, part, cols_, ucols in emit:
     st = T['stops']
     BR.clear(); BR.update(T.get('branch', {}))
-    ttl = T.get('title') or '%s ― %s' % (nm(st[0]), nm(st[-1]))
     out += ['=== %s%s ===' % (ttl, part), '{{#invoke:Timetable|main|data=', 'title "%s%s"' % (ttl, part), 'headl "b%s"' % ttl]
     out += (['cols ad st ad', 'both 1'] if U else ['cols st ad', 'rcols st']) + ['',
             '[rows]', 'kind 등급 style=va=b r=等級', '', '[footer]', 'days 운행일 r=運行日 style=va=t', 'rem 비고 r=備考 style=va=t', '', '[stations]']
@@ -412,7 +430,7 @@ for T, U, part, cols_, ucols in emit:
         out += ['', '[trains up]'] + [line(c, rs) for c in ucols]
     out += ['', '[notes]', '}}', '']
 tables = [T for p in both for T in p if T]
-title_of = {id(X_): T.get('title') or '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1])) for T, U in both for X_ in (T, U) if X_}      # 상하 병기면 상행도 하행 표 이름으로
+title_of = dict(TTL)                                    # 한 표 상하 병기면 상행도 하행 표 이름으로, 따로 실으면 제 이름으로
 for k_, M_ in title_merge.items(): title_of[k_] = title_of[id(M_)]
 open(sys.argv[2], 'w').write('\n'.join(out))
 # 일부 편만 들르는 정류장 (사람이 확인한 것, partial-stops.json: [A, B, D] = A 발 D 행의 몇 편이 B 에도 선다): 목록의 A→D 에 ◇ 표지와 안내 줄.
