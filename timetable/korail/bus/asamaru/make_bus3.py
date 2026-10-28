@@ -78,7 +78,6 @@ SUBT -= EXPT
 def wdl(ws):
     ws = sorted(ws)
     if ws == [0, 1, 2, 3, 4]: return '월∼금'
-    if len(ws) == 6 and ws != [0, 1, 2, 3, 4, 5]: return WD[(set(range(7)) - set(ws)).pop()] + ' ' + '제외'      # 하루만 쉬면 「수 제외」 (월∼토는 그대로)
     if len(ws) >= 3 and len(ws) < 7:                     # 이어진 요일은 「금∼월」처럼 (주를 넘어 이어져도)
         for s0 in ws:
             if sorted((s0 + k) % 7 for k in range(len(ws))) == ws: return WD[s0] + '∼' + WD[(s0 + len(ws) - 1) % 7]
