@@ -3498,7 +3498,9 @@ class Book:
         colw = (self.cw - (NC - 1) * gut) / NC
         TH, SH = 2 * R, R                                   # 머리 행, 칸 이름 행
         pad = 0.5 * fs
-        WM = 1.5 * fs                                       # 주 앞 기호 자리 (기호는 오른쪽에 붙여, 편명은 늘 같은 자리에서)
+        nmk = max([len(self.air_marks(r_[3])) for P in data['pairs'] for L in (P['out'], P['in']) for r_ in L] + [1])
+        self._air_mk = (len({ch for P in data['pairs'] for L in (P['out'], P['in']) for r_ in L for ch in self.air_marks(r_[3])}) and 4, 0.55 * fs)   # 기호 자리: ◇ ▲ ● ※ 넷의 정해진 칸
+        WM = 1.5 * fs                                       # 주 앞 기호 자리 (기호는 오른쪽에 붙여 매달고, 편명은 늘 같은 자리에서)
         nw = colw / 2 - 2 * pad - WM                        # 주의 글줄 폭: 가는 편의 주는 왼쪽 반, 오는 편의 주는 오른쪽 반
         wd = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.85)), len(t)) * fs
         def wrap(text):                                     # 주: 「・」·띄어쓰기에서 (괄호 속은 날 뒤에서만)
@@ -3570,14 +3572,19 @@ class Book:
         air_nw = sec['nw']
         wide = sec['wide']
         WDN, DWd = '월화수목금토일', 0.95 * fs                 # 요일 칸
+        nmk, PM = self._air_mk
         WMn = 1.5 * fs                                      # 주 앞 기호 자리 (plan 의 WM 과 같게)
-        def mark_(m):                                       # 기호는 늘 오른쪽에 붙인다 (여럿이면 작게). ▲ 는 글꼴에서 커서 줄여 다른 기호와 맞춘다
+        def mark_(m):                                       # 주의 기호: 오른쪽에 붙여 매단다 (여럿이면 작게). ▲ 는 글꼴에서 커서 줄인다
             z = {1: 0.8, 2: 0.66}.get(len(m), 0.48)
             return ''.join(self.inl.run(ch, Ctx('M', z * (0.72 if ch == '▲' else 1.0))) for ch in m)
+        SLOT = '◇▲●※'
+        def marks_at(x_, y_, m):                            # 기호마다 정해진 자리(◇ ▲ ● ※ 차례), 같은 크기로. ▲ 는 글꼴에서 커서 줄여 다른 기호와 맞춘다
+            for ch in m:
+                tex.append(self.put_box(x_ + SLOT.index(ch) * PM, y_, PM, R, self.inl.run(ch, Ctx('M', 0.6 * (0.82 if ch == '▲' else 1.0))), 'c', 'm'))
         tex, rects, ops = [], [], []
         y0 = self.mt
         hw = colw / 2
-        cT, cA, cM, cC = 2.3 * fs, 1.1 * fs, 1.2 * fs, 2.2 * fs   # 시각 칸, 화살표 칸, 기호(◇▲●※) 칸, 항공사 부호 칸
+        cT, cA, cM, cC = 2.3 * fs, 1.1 * fs, self._air_mk[0] * self._air_mk[1] + 0.2 * fs, 2.2 * fs   # 시각 칸, 화살표 칸, 기호(◇▲●※) 칸, 항공사 부호 칸
         room_ = hw - 2 * pad - 2 * cT - cA - cM - cC        # 편 번호에 쓸 폭: 가장 긴 것이 넘치면 가로로 좁힌다
         hsN = min(0.82, (room_ - 0.3 * fs) / air_nw)
         cN = cM + cC + min(room_, air_nw * hsN + 0.3 * fs)
@@ -3640,7 +3647,7 @@ class Book:
                                 for d_, f_ in enumerate(L[r_][4]):
                                     if f_ == '1': rects.append(('dot', xw + (d_ + 0.5) * DWd, yy + R / 2, 0.32 * fs))
                             mk_ = self.air_marks(lab_)
-                            if mk_: tex.append(self.put_box(hx - 0.3 * fs, yy, cM + 0.2 * fs, R, mark_(mk_), 'r', 'm'))
+                            if mk_: marks_at(hx - 0.2 * fs, yy, mk_)
                             co_, nu_ = self._fno(no)
                             tex.append(self.put_box(hx + cM, yy, cC, R, self.inl.run(co_, Ctx('G', 0.85).but(hscale=HS)), 'l', 'm'))
                             tex.append(self.put_box(hx + cM + cC, yy, cN - cM - cC, R, self.inl.run(nu_, Ctx('M', 1.0).but(hscale=hsN)), 'l', 'm'))
