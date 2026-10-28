@@ -123,6 +123,23 @@ for x in LD:
     if not (pv < 1e-12 or rev_board(A, D1, D2) or near(D1, D2, dd) or (n == len(P[(A, D1)]['t']) == len(P[(A, D2)]['t']) and n >= 3)):
         unconf.append(((A, D1, D2), '%s 발 %s 행이 %s 에 들름, 같은 시각 %d번' % (A, D2, D1, n)))
 LB, LD = LB2, LD2
+# 사람이 확인한 같은 차(force-links.json: 정류장 차례): 맞물린 편이 하나뿐이어도 잇는다 (시각이 맞는 δ 로)
+FORCE = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'force-links.json')))
+have = {(D, A, B) for D, A, B, *_ in LB}
+haved = {(A, D1, D2) for A, D1, D2, *_ in LD}
+for seq in FORCE:
+    for i, A in enumerate(seq):
+        for B in seq[i + 1:]:
+            for D in seq[seq.index(B) + 1:]:                 # 타는 곳: A 다음 B, 둘 다 D 로
+                if (A, D) in P and (B, D) in P and (D, A, B) not in have:
+                    ta, tb = P[(A, D)]['t'], P[(B, D)]['t']
+                    cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb) for d in range(0, 181)}
+                    d = max(cnt, key=lambda d: cnt[d])
+                    if cnt[d] >= 1: LB.append((D, A, B, d, cnt[d], 0.0)); have.add((D, A, B))
+            for D2 in seq[i + 1:]:                           # 내리는 곳: A 에서 B(먼저) 거쳐 D2
+                if D2 != B and seq.index(D2) > seq.index(B) and (A, B) in P and (A, D2) in P and (A, B, D2) not in haved:
+                    n = len(set(P[(A, B)]['t']) & set(P[(A, D2)]['t']))
+                    if n >= 1: LD.append((A, B, D2, n, 0.0)); haved.add((A, B, D2))
 
 # 마디 (A, t, D) 를 단서로 잇는다
 par = {}
