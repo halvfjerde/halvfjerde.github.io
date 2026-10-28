@@ -3927,7 +3927,7 @@ class Book:
 
     @staticmethod
     def day_text(mask):
-        """다니는 요일 (노선표 비고와 같게): 날마다는 빈칸, 이어진 날은 「금∼일」, 아니면 「토일」, 넉 자 넘으면 쉬는 날로 「금일휴」"""
+        """다니는 요일 (노선표 비고와 같게): 날마다는 빈칸, 이어진 날은 「금∼일」, 아니면 「토일」「월화수목토」(다섯 자까지)"""
         WD = '월화수목금토일'
         ws = [d for d in range(7) if mask[d]]
         def one(ws_):
@@ -3937,11 +3937,7 @@ class Book:
                 for s0 in ws_:
                     if sorted((s0 + k) % 7 for k in range(len(ws_))) == ws_: return WD[s0] + '∼' + WD[(s0 + len(ws_) - 1) % 7]
             return ''.join(WD[w] for w in ws_)
-        t = one(ws)
-        if len(t) > 3:
-            t2 = one([d for d in range(7) if not mask[d]]) + '휴'
-            if len(t2) < len(t): t = t2
-        return t
+        return one(ws)
 
     @staticmethod
     def dur_text(m):
@@ -4036,11 +4032,12 @@ class Book:
                     lab_, cells = it[2]
                     if lab_ is not None:
                         (gk, sb) = lab_
-                        dt_ = self.day_text(gk)                # 노선표처럼 석 자까지: 「금∼일」「토일」「금일휴」, 날마다는 비움
+                        dt_ = self.day_text(gk)                # 노선표처럼: 「금∼일」「토일」, 넉・다섯 자는 석 자 폭으로 눌러 (명조), 날마다는 비움
                         if dt_:
-                            ct_ = self.inl.run(dt_, Ctx('G', 0.74))
+                            ct_ = self.inl.run(dt_, Ctx('M', 0.78))
                             wd_ = self.inl.wc.get(ct_, len(dt_)) * fs
-                            if wd_ > LBW - 0.6 * fs: ct_ = self.inl.run(dt_, Ctx('G', 0.74).but(hscale=max(0.5, (LBW - 0.6 * fs) / wd_)))
+                            w3_ = self.inl.wc.get(self.inl.run('월화수', Ctx('M', 0.78)), 3) * fs
+                            if wd_ > w3_ + 0.01: ct_ = self.inl.run(dt_, Ctx('M', 0.78).but(hscale=w3_ / wd_))
                             tex.append(self.put_box(xL, y, LBW - 0.5 * fs, R, ct_, 'c', 'm'))
                         if sb: tex.append(self.put_box(xL + LBW - 0.5 * fs, y, 0.4 * fs, R, self.inl.run('†', Ctx('M', 0.7)), 'c', 'm'))
                     for k_, c_ in enumerate(cells):
