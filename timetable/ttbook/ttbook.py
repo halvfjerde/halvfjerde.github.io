@@ -3723,8 +3723,8 @@ class Book:
             codes = json.load(open(os.path.join(self.base, cf_), encoding='utf-8')) if cf_ else {}
             ent = sorted(al.items(), key=lambda kv: kv[1])
             NA = 3; nr = -(-len(ent) // NA)
-            AG = 0.35 * R                                    # 머리 줄과 첫 줄 사이
-            hA = TH + AG + nr * R + pad
+            AG = 0.3 * R                                     # 머리 줄 밑과 아래 끝에 같은 여백
+            hA = TH + AG + nr * R + AG
             top = max(e[1] for e in ends)
             if top + hA <= yB + 0.01:
                 yAL = yB - hA                                # 쪽 아래에 붙여
@@ -3919,7 +3919,8 @@ class Book:
             B['nsub'] = max(len(v[0]) for v in B['h'].values())
             B['nl'] = max(len(v[1]) for v in B['h'].values())
         HD = GP + TH + CH
-        subh = lambda B: SR * B['nsub'] + (BG if B['nsub'] else 0)
+        SP = 0.15 * R                                       # 안내 줄 위아래 여백 (같게: 글자가 위 줄에 붙지 않게)
+        subh = lambda B: SR * B['nsub'] + (2 * SP if B['nsub'] else 0)
         cols, col, y = [], [], 0.0
         cap = self.ch
         for B in order:
@@ -3934,7 +3935,7 @@ class Book:
             y += BG
         if col: cols.append(col)
         pages = [cols[k:k + NC] for k in range(0, len(cols), NC)]
-        self._bus = dict(colw=colw, pad=pad, hw=hw, CG=CG, TH=TH, CH=CH, GP=GP, SR=SR, BG=BG, LBW=LBW, SW=SW, NC=NC, HS=HS)
+        self._bus = dict(colw=colw, pad=pad, hw=hw, CG=CG, TH=TH, CH=CH, GP=GP, SR=SR, BG=BG, LBW=LBW, SW=SW, NC=NC, HS=HS, SP=SP)
         self.bus_bpage = {}                                 # (왼쪽, 오른쪽) → 그 구간 덩이가 실린 쪽 (self.pages 의 자리)
         for p in pages:
             for c_ in p:
@@ -3958,31 +3959,38 @@ class Book:
                 for p_ in ps_:
                     if p_ is not None: idx[A][D].add(p_)
         first = self.cfg.get('firstFolio', 2)
-        IC = 3                                              # 색인 단 수
-        icw = self.cw / IC
-        IR = 0.82 * R
-        nmC, enC = Ctx('GB', 0.78), Ctx('M', 0.72).but(hscale=HS)
-        wen = lambda t: self.inl.wc.get(self.inl.run(t, enC), len(t)) * fs
-        ilines = [('t', '터미널 색인'), ('n', '터미널에서 떠나 닿는 곳 · 실린 쪽')]
+        # 꼴은 역명 색인처럼: 네 단, 자음 머리(밑줄), 터미널(굵게) 밑에 행선지 ······ 쪽
+        IC = (self.cfg.get('stationIndex') or {}).get('cols', 4)
+        fw, fp, ipad = self.frame_w, self.frame_pad, self.band_inset
+        icw = (self.cw - 2 * (fw + fp)) / IC
+        IR = R
+        icap = int((self.ch - 2 * (fw + fp)) / IR + 1e-6)
+        CHO = 'ㄱㄱㄴㄷㄷㄹㅁㅂㅂㅅㅅㅇㅈㅈㅊㅋㅌㅍㅎ'
+        def rng(ps):
+            ps = sorted(ps); out = []; a = b = ps[0]
+            for p in ps[1:]:
+                if p == b + 1: b = p
+                else: out.append((a, b)); a = b = p
+            out.append((a, b))
+            return ', '.join(str(a) if a == b else '%d∼%d' % (a, b) for a, b in out)
+        lines, cur = [], None                                # (종류, 이름, 쪽, 터미널)
         for T in sorted(idx):
-            ents = ['%s %s' % (x, '・'.join(str(p + first) for p in sorted(ps))) for x, ps in sorted(idx[T].items())]
-            wn_ = self.inl.wc.get(self.inl.run(T, nmC), len(T)) * fs
-            room, cur, first_ = icw - 2 * pad - wn_ - 0.5 * fs, '', True
-            for e_ in ents:
-                if cur and wen(cur + ', ' + e_) > room:
-                    ilines.append(('e', T if first_ else None, cur + ','))
-                    first_, cur, room = False, e_, icw - 2 * pad - 1.2 * fs
-                else: cur = (cur + ', ' + e_) if cur else e_
-            ilines.append(('e', T if first_ else None, cur))
-        per = max(1, int(self.ch / IR))
-        icols = [ilines[k:k + per] for k in range(0, len(ilines), per)]
-        # 한 터미널이 단 끝에 이름만 남지 않게: 단 첫 줄이 이어지는 줄이면 이름을 다시
-        for c_ in icols[1:]:
-            if c_ and c_[0][0] == 'e' and c_[0][1] is None:
-                k_ = ilines.index(c_[0])
-                T_ = next(x[1] for x in reversed(ilines[:k_]) if x[0] == 'e' and x[1])
-                c_[0] = ('e', T_, c_[0][2], True)
-        self._busidx = dict(IC=IC, icw=icw, IR=IR)
+            c0 = CHO[(ord(T[0]) - 0xAC00) // 588] if '가' <= T[0] <= '힣' else T[0]
+            if c0 != cur: cur = c0; lines += [('b', '', '', None), ('h', c0, '', None)]
+            lines.append(('t', T, '', T))
+            for D, ps in sorted(idx[T].items()): lines.append(('e', D, rng(p + first for p in ps), T))
+        icols, col = [], []
+        for i, ln in enumerate(lines):
+            if not col and ln[0] == 'b': continue                      # 단 맨 위는 비우지 않는다
+            nxt = lines[i + 1] if i + 1 < len(lines) else None
+            keep = 2 if ln[0] == 'h' else 1 if ln[0] == 't' else 0     # 머리·터미널이 단 끝에 홀로 남지 않게
+            if len(col) + 1 + keep > icap and ln[0] in ('h', 't', 'b') or len(col) + 1 > icap:
+                icols.append(col); col = []
+                if ln[0] == 'b': continue
+                if ln[0] == 'e': col.append(('t', ln[3], '（계속）', ln[3]))      # 단을 넘어 이어지는 터미널은 이름을 다시
+            col.append(ln)
+        if col: icols.append(col)
+        self._busidx = dict(IC=IC, icw=icw, IR=IR, fw=fw, fp=fp, pad=ipad)
         for k in range(0, len(icols), IC):
             self.bus.append({'idx': icols[k:k + IC]}); self.pages.append({'pieces': [], 'lines': [], 'bus': len(self.bus) - 1, 'busidx': True})
 
@@ -4012,30 +4020,36 @@ class Book:
         y0 = self.mt
         yB = y0 + self.ch
         tex, rects = [], []
-        if isinstance(self.bus[k], dict):               # 터미널 색인
+        if isinstance(self.bus[k], dict):               # 터미널 색인 (역명 색인과 같은 꼴)
             I = self._busidx
-            pad = 0.5 * fs
+            ops = []
+            H = self.H
+            ix, iy = x0 + I['fw'] + I['fp'], y0 + I['fw'] + I['fp']
+            wd = lambda t: self.inl.wc.get(t, 1.0) * fs
+            c_ = Ctx('M', 1.0)
             for ci, col in enumerate(self.bus[k]['idx']):
-                xx = x0 + ci * I['icw']
-                for j, ln in enumerate(col):
-                    y = y0 + j * I['IR']
-                    if ln[0] == 't': tex.append(self.put_box(xx + pad, y, I['icw'] - 2 * pad, I['IR'], self.inl.run(ln[1], Ctx('GB', 1.0)), 'l', 'm'))
-                    elif ln[0] == 'n': tex.append(self.put_box(xx + pad, y, I['icw'] - 2 * pad, I['IR'], self.inl.run(ln[1], Ctx('M', 0.66)), 'l', 'm'))
-                    else:
-                        nm_ = ln[1]
-                        xe_ = xx + pad + 1.2 * fs
-                        if nm_:
-                            r_ = self.inl.run(nm_, Ctx('GB', 0.78))
-                            tex.append(self.put_box(xx + pad, y, I['icw'] - 2 * pad, I['IR'], r_, 'l', 'm'))
-                            xe_ = xx + pad + self.inl.wc.get(r_, len(nm_)) * fs + 0.5 * fs
-                            if len(ln) > 3 and ln[3]:            # 단을 넘어 이어진 터미널: 이름 뒤에 명조로 「（계속）」
-                                r2_ = self.inl.run('（계속）', Ctx('M', 0.66))
-                                tex.append(self.put_box(xe_ - 0.4 * fs, y, I['icw'], I['IR'], r2_, 'l', 'm'))
-                                xe_ += self.inl.wc.get(r2_, 2) * fs + 0.1 * fs
-                        tex.append(self.put_box(xe_, y, xx + I['icw'] - pad - xe_, I['IR'], self.inl.run(ln[2], Ctx('M', 0.72).but(hscale=0.82)), 'l', 'm'))
-                if ci: rects.append(('v', xx, y0, yB, 1))
+                xx = ix + ci * I['icw'] + I['pad']; ww = I['icw'] - 2 * I['pad']
+                for li, (kind, nm, ps, _) in enumerate(col):
+                    yy = iy + li * I['IR']; yl = yy + I['IR'] / 2
+                    if kind == 'b': continue
+                    if kind == 'h':
+                        ht = self.inl.run(nm, Ctx('GB', 1.0))
+                        tex.append(self.put_box(xx, yy, ww, I['IR'], ht, 'l', 'm'))
+                        ops.append('q %.3f w 0 G %.3f %.3f m %.3f %.3f l S Q' % (self.rw[1], xx + wd(ht) + 0.5 * fs, H - yl, xx + ww, H - yl))
+                        continue
+                    if kind == 't':                            # 터미널: 굵게, 이어지면 뒤에 명조로 「（계속）」
+                        tt = self.inl.run(nm, Ctx('GB', 0.9))
+                        tex.append(self.put_box(xx, yy, ww, I['IR'], tt, 'l', 'm'))
+                        if ps: tex.append(self.put_box(xx + wd(tt) + 0.2 * fs, yy, ww, I['IR'], self.inl.run(ps, Ctx('M', 0.72)), 'l', 'm'))
+                        continue
+                    xd = xx + 0.9 * fs                         # 행선지는 한 자 들여
+                    nt = self.inl.run(nm, c_); pt = self.inl.run(ps, c_)
+                    tex.append(self.put_box(xd, yy, ww - (xd - xx), I['IR'], nt, 'l', 'm'))
+                    tex.append(self.put_box(xx, yy, ww, I['IR'], pt, 'r', 'm'))
+                    a_, b_ = xd + wd(nt) + 0.5 * fs, xx + ww - wd(pt) - 0.5 * fs
+                    if b_ - a_ > fs: ops.append(self.dots(a_, b_, yl))
             tex += self.page_side_title(recto, [('', '고속버스')])
-            return tex, self.pdf_ops(rects) if rects else ''
+            return tex, ' '.join(ops)
         P = self._bus
         colw, pad, hw, CG, TH, CH, GP, SR, BG, LBW, SW, NC, HS = (P[k_] for k_ in ('colw', 'pad', 'hw', 'CG', 'TH', 'CH', 'GP', 'SR', 'BG', 'LBW', 'SW', 'NC', 'HS'))
         def gmark(g, sz):
@@ -4097,8 +4111,8 @@ class Book:
                     rects.append(('h', xx, xx + colw, s_['top'] + CH, 1))
                 elif it[0] == 's':
                     for j, sd in enumerate((B['L'], B['R'])):
-                        for m, ln in enumerate(B['h'][sd][0]): subline(xs_[j], y + m * SR, hw, ln)
-                    s_['end'] = y + SR * B['nsub'] + BG
+                        for m, ln in enumerate(B['h'][sd][0]): subline(xs_[j], y + P['SP'] + m * SR, hw, ln)
+                    s_['end'] = y + SR * B['nsub'] + 2 * P['SP']
                 else:
                     i = it[3]
                     for j, sd in enumerate((B['L'], B['R'])):
