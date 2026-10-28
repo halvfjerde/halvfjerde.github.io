@@ -197,6 +197,7 @@ seen = {}
 def fkey(tr):
     """사람이 확인한 노선(force-links)의 정류장만 지나는 차: 그 노선(방향)으로 한 표에 (끝 정류장이 달라도)"""
     st = set(tr['board']) | set(tr['drop'])
+    if all(len(P[(A, D)]['t']) > 20 for A, t, D in tr['nodes']): return None     # 촘촘한 구간끼리만 맞물린 차(광주→전주·호남제일 따위)는 그 노선의 차로 보지 않는다
     first = min(tr['board'], key=lambda A: (tr['board'][A] - min(tr['board'].values())) % 1440)
     ks = [i for i, seq in enumerate(FORCE) if st <= set(seq)]
     return min(ks, key=lambda i: FORCE[i].index(first)) if ks else None
@@ -236,6 +237,7 @@ for grp in groups.values():
         best = fw if agree(fw) >= agree(bw) else bw
         for k, s_ in zip(idx, best): stops[k] = s_
     fks = {fkey(tr) for tr in grp}
+    isforce = len(fks) == 1 and None not in fks
     if len(fks) == 1 and None not in fks:               # 사람이 확인한 노선: 그 차례대로 (TAGO 가 같은 시각을 붙인 곳도 차례가 맞게)
         sq_ = FORCE[fks.pop()]
         stops = sorted({s_ for tr in grp for s_ in list(tr['board']) + list(tr['drop'])}, key=lambda s_: sq_.index(s_) if s_ in sq_ else len(sq_))   # 끝까지 가지 않는 차의 정류장도
@@ -259,7 +261,7 @@ for grp in groups.values():
         for k_, s in enumerate(stops):
             if s in c: return (c[s][1] - 0) % 1440 + (0 if c[s][1] >= 240 else 1440), k_
     cols.sort(key=key)
-    tables.append({'stops': stops, 'board': bset, 'cols': cols, 'pairs': pairs, 'last': L})
+    tables.append({'stops': stops, 'board': bset, 'cols': cols, 'pairs': pairs, 'last': L, 'force': isforce})
 
 GR = {'우': '우등', '일': '일반', '프': '프리', '심': '심우', '심프': '심프', '심일': '심일'}
 def wdl(ws):
@@ -275,7 +277,7 @@ def real_board(T):
     return sum(1 for s_ in T['board'] if any(c.get(s_, ('', 0))[0] == 'd' for c in T['cols'])) >= 2 and \
         any(len({c[s_][1] for s_ in T['board'] if s_ in c and c[s_][0] == 'd'}) >= 2 for c in T['cols'])
 cand = sorted([T for T in tables if real_board(T)], key=lambda T: (-len(T['stops']), len(T['cols'])))
-isF = lambda T: any(sum(1 for s_ in T['stops'] if s_ in seq) >= 3 for seq in FORCE)
+isF = lambda T: T.get('force')
 pick, tot = [T for T in tables if isF(T)], 0             # 사람이 확인한 노선(force-links)은 늘 싣고, 아래 몫에는 세지 않는다
 for T in cand:
     if T in pick: continue
@@ -289,7 +291,7 @@ for T in sorted([T for T in tables if T not in pick and len(T['stops']) >= 4 and
                 key=lambda T: (-len(T['cols']) * len(T['stops']))):       # 주요(차가 많고) 긴(정류장이 많은) 노선부터
     if tot2 + len(T['cols']) <= CAP2: pick.append(T); tot2 += len(T['cols'])
 for T in tables:                                        # 사람이 확인한 노선(force-links)은 늘 싣는다
-    if T not in pick and any(sum(1 for s_ in T['stops'] if s_ in seq) >= 3 for seq in FORCE): pick.append(T)
+    if T not in pick and isF(T): pick.append(T)
 print('candidates', len(cand), 'picked', len(pick), 'cols', tot, '+', tot2, file=sys.stderr)
 # 편도 8편 이하: 반대 방향 표(정류장이 같은 것)와 상하 병기 한 표로 (고르지 않았어도 반대 방향은 곁들인다)
 ALL = tables

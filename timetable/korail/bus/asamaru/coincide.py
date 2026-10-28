@@ -13,7 +13,7 @@ R = json.load(open(sys.argv[2])) if len(sys.argv) > 2 else {'origins': [], 'rout
 handled = {tuple(x.split('→')) for x in R.get('routeOwned', [])}
 for O in R['origins']:
     for X in O['dests']:
-        if 'see' in X or 'seeFrom' in X or 'via' in X or 'board' in X: handled.add((O['from'], X['to']))
+        if 'see' in X or 'seeFrom' in X or 'via' in X or 'board' in X or 'vnote' in X: handled.add((O['from'], X['to']))
 known = [set(s) for s in fl] + [{x[0], x[1]} for x in sb['drop'] + sb['board']] + [set(x) for x in ps]
 NM = {'센트럴시티(서울)': '서울호남', '광주(유·스퀘어)': '광주', '대전청사(샘머리)': '대전청사'}
 nm = lambda x: NM.get(x, x)
@@ -45,7 +45,7 @@ for a in sorted(byA, key=nm):
     blk, dn = [], []
     for r, ms in sorted(roots.items(), key=lambda kv: -len(T[(a, kv[0])])):
         allx = sorted(ms + [r], key=lambda x: (P[(a, x)]['dur'], len(T[(a, x)])))
-        done = all((a, x) in handled for x in allx) or any(set([a] + allx) <= k for k in known)
+        done = all((a, x) in handled for x in allx)
         cnt += 1; ok_ += done
         chain = ' → '.join('%s(%d, %s)' % (nm(x), len(T[(a, x)]), hm(P[(a, x)]['dur'])) for x in allx)
         if done: dn.append(chain); continue
