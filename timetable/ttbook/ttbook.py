@@ -3498,8 +3498,8 @@ class Book:
         out = ''
         b2 = base.replace('매일', '')
         if re.search(r'(?<![0-9])[월화수목금토일](?![0-9])', re.sub(r'\d+월', '', b2)): out += '◇'
-        if '빼고' in base: out += '▲'
-        rest = re.sub(r'[^,]*빼고', '', base)
+        if '제외' in base or '빼고' in base: out += '▲'
+        rest = re.sub(r'[^,]*(제외|빼고)', '', base)
         if re.search(r'까지|부터|\d+일', rest): out += '●'
         if '(' in lab: out += '※'
         return out

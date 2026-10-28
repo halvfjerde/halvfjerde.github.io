@@ -81,7 +81,7 @@ def label_wk(days):
         parts.append((wl + ' ' if wl else '') + '・'.join(txt))
     return ', '.join(parts)
 def label_skip(days, noW=False):
-    """요일 W(그 요일 날의 절반 넘게 다님) 위에: 앞뒤를 자른 동안과 「…빼고」 동안, W 밖 요일에 더 다니는 날"""
+    """요일 W(그 요일 날의 절반 넘게 다님) 위에: 앞뒤를 자른 동안과 「…제외」 동안, W 밖 요일에 더 다니는 날"""
     days = set(days)
     lo0, hi0 = min(days), max(days)
     W = {w for w in range(7) if 2 * sum(1 for d in days if d.weekday() == w) > sum(1 for d in season if d.weekday() == w and lo0 <= d <= hi0)}
@@ -107,7 +107,7 @@ def label_skip(days, noW=False):
     out = (out + ' ' + per).strip()
     if gaps:
         g = '・'.join(md(a) if a == b else md(a) + '∼' + md(b, a) for a, b in gaps)
-        out = (out + ', ' if out else ('' if noW else '매일, ')) + '%s 빼고' % g
+        out = (out + ', ' if out else ('' if noW else '매일, ')) + '%s 제외' % g
     extra = days - set(B)
     if extra:
         e = label_wk(extra)
