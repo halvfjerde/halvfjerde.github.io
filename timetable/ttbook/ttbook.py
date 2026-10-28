@@ -3789,10 +3789,10 @@ class Book:
         mm_ = lambda s_: int(s_[:-2]) * 60 + int(s_[-2:])
         hmc = lambda m: ('%d:%02d' % divmod(int(m), 60)) if m >= 60 else '%d분' % m        # 띠의 짧은 소요 「3:35」「30분」
         # 덩이 몸: 발차 시각을 줄줄이. 줄 머리는 요일 점(그 줄의 차가 다니는 날)·등급 네모·시외 †
-        DWg = 0.62 * fs                                     # 요일 점 간격
-        LBW = 7 * DWg + 1.25 * fs                           # 줄 머리 폭 (요일 점 + 등급)
-        SW = 2.38 * fs                                      # 시각 한 칸
-        NT = max(3, int((colw - 2 * pad - LBW) / SW))       # 한 줄 시각 수
+        DWg = 0.56 * fs                                     # 요일 점 간격
+        LBW = 7 * DWg + 0.55 * fs                           # 줄 머리 폭 (요일 점 + 시외 †)
+        NT = 5                                              # 한 줄에 발차 시각 다섯
+        SW = (colw - 2 * pad - LBW) / NT                    # 시각 한 칸: 시각 + 오른쪽 작은 칸(위: ◇ → 따위, 아래: 등급)
         GORD = {'우': 0, '프': 1, '일': 2, '심': 3, '심프': 4, '심일': 5, '◆': 6}
         def block_lines(X, O):
             """덩이: (머리 밑 작은 줄들, 시각 줄들). 시각 줄 = (줄 머리 또는 None, [칸...])"""
@@ -3856,31 +3856,21 @@ class Book:
             grp = collections.OrderedDict()
             for t, mt, lab in rows:
                 w = t[2]; gs_ = {g for g in w if g}
-                gk = (tuple(1 if g else 0 for g in w), next(iter(gs_)) if len(gs_) == 1 else '※')      # 날에 따라 등급이 바뀌는 차(※)는 요일로만 묶는다 (어느 날 무슨 등급인지는 머리의 ◆ 풀이)
+                gk = tuple(1 if g else 0 for g in w)            # 요일로만 묶고 등급은 시각마다 (날에 따라 바뀌는 차는 ◆)
+                gr_ = next(iter(gs_)) if len(gs_) == 1 else '◆'
                 mk = ''.join(pmk[k] for k in sorted(pmk) if len(mt) > k and mt[k])
                 if lab.startswith('→'): mk += CM.get('→' + lab[1:].partition(' ')[0], '→')
                 elif lab.endswith('발'): mk += CM.get(lab[:-1].partition(' ')[0], '←')
                 if t[1]:
                     d_ = (mm_(t[1]) - mm_(t[0])) % 1440
                     if d_ in dlet: mk += dlet[d_]
-                grp.setdefault((gk, '시' in t[3:]), []).append((t[0], mk))
+                grp.setdefault((gk, '시' in t[3:]), []).append((t[0], mk, gr_))
             def gsort(kv):
                 (gk, sb), toks = kv
-                days = gk[0]
-                return (-sum(days), days[::-1], GORD.get(gk[1], 9), sb, mm_(toks[0][0]))
+                return (-sum(gk), gk[::-1], sb, mm_(toks[0][0]))
             lines = []
             for (gk, sb), toks in sorted(grp.items(), key=gsort):
-                cells, i = [], 0
-                while i < len(toks):                         # 거의 같은 간격(±5분)으로 다섯 넘게: 첫 차 · 「매 20분」 · 끝 차
-                    j = i; lo = hi = None
-                    while j + 1 < len(toks) and toks[j + 1][1] == toks[i][1]:
-                        g_ = mm_(toks[j + 1][0]) - mm_(toks[j][0])
-                        l2, h2 = min(lo if lo is not None else g_, g_), max(hi if hi is not None else g_, g_)
-                        if g_ < 5 or h2 - l2 > 5: break
-                        lo, hi = l2, h2; j += 1
-                    if j - i + 1 >= 5:
-                        cells += [('t',) + toks[i], ('z', lo, hi), ('t',) + toks[j]]; i = j + 1
-                    else: cells.append(('t',) + toks[i]); i += 1
+                cells = [('t',) + tk_ for tk_ in toks]
                 for k_ in range(0, len(cells), NT):
                     lines.append((((gk, sb) if k_ == 0 else None), cells[k_:k_ + NT]))
             return sub, lines
@@ -4030,20 +4020,22 @@ class Book:
                     if lab_ is not None:
                         (gk, sb) = lab_
                         for d in range(7):                     # 다니는 날은 점, 쉬는 날은 짧은 줄 (자리를 읽기 쉽게)
-                            if gk[0][d]: dot(xL + (d + 0.5) * DWg, y + R / 2)
-                            else: rects.append(('h', xL + (d + 0.5) * DWg - 0.14 * fs, xL + (d + 0.5) * DWg + 0.14 * fs, y + R / 2, 1))
-                        if gk[1] == '※': tex.append(self.put_box(xL + 7 * DWg + 0.1 * fs, y, 0.8 * fs, R, self.inl.run('◆', Ctx('M', 0.7)), 'c', 'm'))
-                        elif gk[1] != '우': tex.append(self.put_box(xL + 7 * DWg + 0.1 * fs, y, 0.8 * fs, R, gmark(gk[1], 0.72), 'c', 'm'))
-                        if sb: tex.append(self.put_box(xL + 7 * DWg + 0.85 * fs, y, 0.4 * fs, R, self.inl.run('†', Ctx('M', 0.7)), 'c', 'm'))
+                            if gk[d]: dot(xL + (d + 0.5) * DWg, y + R / 2)
+                            else: rects.append(('h', xL + (d + 0.5) * DWg - 0.13 * fs, xL + (d + 0.5) * DWg + 0.13 * fs, y + R / 2, 1))
+                        if sb: tex.append(self.put_box(xL + 7 * DWg + 0.05 * fs, y, 0.45 * fs, R, self.inl.run('†', Ctx('M', 0.7)), 'c', 'm'))
                     for k_, c_ in enumerate(cells):
                         xs = xT0 + k_ * SW
                         if c_[0] == 'z':                       # 거의 같은 간격: 「매 20분」「15∼20분」
                             zt = ('매%d분' % c_[1]) if c_[1] == c_[2] else ('%d∼%d분' % (c_[1], c_[2]))
                             tex.append(self.put_box(xs, y, SW, R, self.inl.run('⋯' + zt + '⋯', Ctx('M', 0.68).but(hscale=0.8)), 'c', 'm'))
                             continue
-                        _, tm_, mk_ = c_
-                        tex.append(self.put_box(xs, y, SW - 0.42 * fs, R, self.inl.run(tm_, Ctx('DM', 0.95)), 'r', 'm'))
-                        if mk_: tex.append(self.put_box(xs + SW - 0.44 * fs, y, 0.44 * fs, 0.62 * R, self.inl.run(mk_, Ctx('M', 0.62 if len(mk_) == 1 else 0.48)), 'l', 'm'))
+                        _, tm_, mk_, gr_ = c_
+                        MKW = 0.6 * fs
+                        tex.append(self.put_box(xs, y, SW - MKW, R, self.inl.run(tm_, Ctx('DM', 0.95)), 'r', 'm'))
+                        if mk_: tex.append(self.put_box(xs + SW - MKW + 0.04 * fs, y, MKW, 0.55 * R, self.inl.run(mk_, Ctx('M', 0.58 if len(mk_) == 1 else 0.46)), 'l', 'm'))
+                        if gr_ != '우':                        # 등급: 시각 오른쪽 아래 작은 네모 (◆ 날에 따라 바뀜)
+                            gm_ = self.inl.run('◆', Ctx('M', 0.5)) if gr_ == '◆' else gmark(gr_, 0.5)
+                            tex.append(self.put_box(xs + SW - MKW + 0.04 * fs, y + 0.45 * R, MKW, 0.55 * R, gm_, 'l', 'm'))
             yE = y0 + max(it[1] + (TH + GP if it[0] == 'o' else CH if it[0] == 'c' else it[4] if it[0] == 'd' else R + GP + SR * (2 if it[2].get('alsoTable') else 1) + BG if it[0] == 'r' else R + BG) for it in col)
             if st is not None: seg.append((st, lastT if lastT > st else yE))
             for a, b in seg:
