@@ -3475,6 +3475,20 @@ class Book:
             if dw: self.plan_air_one({'pairs': dw}, si, sc[1], wide=True)
             self.plan_air_one({'pairs': [P for P in data['pairs'] if not isw(P)]}, si, sc[1])
 
+    @staticmethod
+    def air_marks(lab):
+        """운항일 주의 갈래 → 기호: ◇ 요일에만, ▲ 빠지는 날, ● 기한(부터·까지·그날만), ※ 시각이 다른 날"""
+        if not lab: return ''
+        base = re.sub(r'\([^)]*\)', '', lab).strip()
+        out = ''
+        b2 = base.replace('매일', '')
+        if re.search(r'(?<![0-9])[월화수목금토일](?![0-9])', re.sub(r'\d+월', '', b2)): out += '◇'
+        if '빼고' in base: out += '▲'
+        rest = re.sub(r'[^,]*빼고', '', base)
+        if re.search(r'까지|부터|\d+일', rest): out += '●'
+        if '(' in lab: out += '※'
+        return out
+
     def plan_air_one(self, data, si, title, wide=False):
         R, fs = self.R, self.fs
         NC = 1 if wide else 2; gut = 0.0                    # 단 사이도 띄우지 않고 맞붙인다. 요일 칸 쌍은 한 단(쪽 폭)
@@ -3504,8 +3518,8 @@ class Book:
                 g = collections.OrderedDict()
                 for r_ in L:
                     no, lab = r_[0], (r_[5] if wide else r_[3])
-                    if lab: g.setdefault(re.sub(r'^\((.*)\)$', r'\1', lab) if lab.count('(') == 1 and lab.startswith('(') else lab, []).append(no)
-                return [ln for lab, nos in g.items() for ln in wrap('※%s %s' % ('・'.join(nos), lab))]
+                    if lab: g.setdefault(re.sub(r'^\((.*)\)$', r'\1', lab) if lab.count('(') == 1 and lab.startswith('(') else lab, [[], self.air_marks(lab)])[0].append(no)
+                return [ln for lab, (nos, mk) in g.items() for ln in wrap('%s%s %s' % (mk, '・'.join(nos), lab))]
             nl, nr = side_notes(P['out']), side_notes(P['in'])
             items += [('n', nl[k] if k < len(nl) else '', nr[k] if k < len(nr) else '') for k in range(max(len(nl), len(nr)))]
             seq.append((P, items))
@@ -3558,7 +3572,7 @@ class Book:
         tex, rects, ops = [], [], []
         y0 = self.mt
         hw = colw / 2
-        cT, cA, cM, cC = 2.3 * fs, 1.1 * fs, 0.9 * fs, 2.2 * fs   # 시각 칸, 화살표 칸, ※ 칸, 항공사 부호 칸
+        cT, cA, cM, cC = 2.3 * fs, 1.1 * fs, 1.2 * fs, 2.2 * fs   # 시각 칸, 화살표 칸, 기호(◇▲●※) 칸, 항공사 부호 칸
         room_ = hw - 2 * pad - 2 * cT - cA - cM - cC        # 편 번호에 쓸 폭: 가장 긴 것이 넘치면 가로로 좁힌다
         hsN = min(0.82, (room_ - 0.3 * fs) / air_nw)
         cN = cM + cC + min(room_, air_nw * hsN + 0.3 * fs)
@@ -3620,7 +3634,8 @@ class Book:
                                 xw = hx + cN + 2 * cT + cA + 0.8 * fs
                                 for d_, f_ in enumerate(L[r_][4]):
                                     if f_ == '1': rects.append(('dot', xw + (d_ + 0.5) * DWd, yy + R / 2, 0.32 * fs))
-                            if lab_: tex.append(self.put_box(hx, yy, cM, R, self.inl.run('※', Ctx('M', 0.8)), 'l', 'm'))
+                            mk_ = self.air_marks(lab_)
+                            if mk_: tex.append(self.put_box(hx - 0.2 * fs, yy, cM + 0.2 * fs, R, self.inl.run(mk_, Ctx('M', 0.8 if len(mk_) == 1 else 0.62).but(hscale=1.0 if len(mk_) < 3 else 0.8)), 'l', 'm'))
                             co_, nu_ = self._fno(no)
                             tex.append(self.put_box(hx + cM, yy, cC, R, self.inl.run(co_, Ctx('G', 0.85).but(hscale=HS)), 'l', 'm'))
                             tex.append(self.put_box(hx + cM + cC, yy, cN - cM - cC, R, self.inl.run(nu_, Ctx('M', 1.0).but(hscale=hsN)), 'l', 'm'))
