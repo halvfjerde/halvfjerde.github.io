@@ -3441,10 +3441,20 @@ class Book:
 
     # ── 항공 (JTB 국내선 꼴): 공항 쌍마다 한 덩이 — 머리(번호·쌍·운임), 왼쪽 가는 편·오른쪽 오는 편, 밑에 ※ 주. 두 단으로 흘려 짠다 ──
     def plan_air(self):
-        self.air = []
+        """항공: 설정 air 가 파일 하나면 한 장, [[파일, 장 이름], …] 이면 장마다 따로 (정기편 다이아 / 그 달의 임시편·연결편). 덩이 번호는 장을 넘어 잇는다"""
+        self.air, self.air_secs = [], []
         f = self.cfg.get('air')
         if not f: return
-        data = json.load(open(os.path.join(self.base, f), encoding='utf-8'))
+        secs = [[f, '항공']] if isinstance(f, str) else f
+        no0 = 0
+        for si, sc in enumerate(secs):
+            data = json.load(open(os.path.join(self.base, sc[0]), encoding='utf-8'))
+            for P in data['pairs']: P['no'] = no0 + P['no']
+            no0 = max([no0] + [P['no'] for P in data['pairs']])
+            self.plan_air_one(data, si, sc[1])
+            if len(sc) > 2: self.air_secs[-1]['sub'] = sc[2]             # 목차에 쓸 이름
+
+    def plan_air_one(self, data, si, title):
         R, fs = self.R, self.fs
         NC = 2; gut = 0.0                                   # 단 사이도 띄우지 않고 맞붙인다
         cf_ = self.cfg.get('airCodes')                      # 편명 앞 두 자(IATA) → 세 자 항공사 부호(ICAO): 「KAL 1122」
@@ -3456,7 +3466,10 @@ class Book:
         nw = colw / 2 - 2 * pad                             # 주의 글줄 폭: 가는 편의 주는 왼쪽 반, 오는 편의 주는 오른쪽 반
         wd = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.85)), len(t)) * fs
         def wrap(text):                                     # 주: 「・」·띄어쓰기에서 (괄호 속은 날 뒤에서만)
-            toks = re.findall(r'(?:\([^)]*\)|[^・ ])+[・ ]?', text)
+            toks = []
+            for t_ in re.findall(r'(?:\([^)]*\)|[^・ ])+[・ ]?', text):
+                if wd(t_.rstrip()) > nw: toks += re.findall(r'[^・ ]+[・ ]?', t_)     # 한 줄에 안 드는 괄호는 그 속에서도 끊는다
+                else: toks.append(t_)
             out, cur = [], ''
             for t_ in toks:
                 if cur and wd((cur + t_).rstrip()) > nw: out.append(cur.rstrip()); cur = '　' + t_
@@ -3508,21 +3521,24 @@ class Book:
             else: lo = mid
         pages[-1] = [c for c, _ in flow(last0, hi)]
         nos_ = [self._fno(r[0])[1] for P in data['pairs'] for L in (P['out'], P['in']) for r in L]
-        self._air_nw = max([self.inl.wc.get(self.inl.run(x, Ctx('M', 1.0)), len(x)) * fs for x in nos_] + [3 * fs])
-        self._air = (colw, gut, TH, SH, pad)
-        for i, p in enumerate(pages):
-            self.air.append(p); self.pages.append({'pieces': [], 'lines': [], 'air': i})
+        nw_ = max([self.inl.wc.get(self.inl.run(x, Ctx('M', 1.0)), len(x)) * fs for x in nos_] + [3 * fs])
+        self.air_secs.append({'title': title, 'nw': nw_, 'geom': (colw, gut, TH, SH, pad), 'NC': NC})
+        for p in pages:
+            self.pages.append({'pieces': [], 'lines': [], 'air': len(self.air), 'airSec': si}); self.air.append((si, p))
 
     def air_page(self, k, x0, recto):
         fs, H, R = self.fs, self.H, self.R
-        colw, gut, TH, SH, pad = self._air
+        si, cols_ = self.air[k]
+        sec = self.air_secs[si]
+        colw, gut, TH, SH, pad = sec['geom']
+        air_nw = sec['nw']
         tex, rects, ops = [], [], []
         y0 = self.mt
         hw = colw / 2
         cT, cA, cM, cC = 2.3 * fs, 1.1 * fs, 0.9 * fs, 2.2 * fs   # 시각 칸, 화살표 칸, ※ 칸, 항공사 부호 칸
         room_ = hw - 2 * pad - 2 * cT - cA - cM - cC        # 편 번호에 쓸 폭: 가장 긴 것이 넘치면 가로로 좁힌다
-        hsN = min(0.82, (room_ - 0.3 * fs) / self._air_nw)
-        cN = cM + cC + min(room_, self._air_nw * hsN + 0.3 * fs)
+        hsN = min(0.82, (room_ - 0.3 * fs) / air_nw)
+        cN = cM + cC + min(room_, air_nw * hsN + 0.3 * fs)
         hmf = lambda t: str(int(t[:2])) + t[2:]
         rgb0 = '0 0 0'
         HS = 0.82                                           # 로마자·숫자(편명·항공사)는 장평을 줄인다
@@ -3534,8 +3550,11 @@ class Book:
                 for q_ in re.split(r'([A-Z0-9]*[A-Z][A-Z0-9]*\d+[A-Z]?)', p_):
                     if q_: out_.append(self.inl.run(q_, Ctx('M', size).but(hscale=HS) if re.fullmatch(r'[A-Z0-9]+', q_) else Ctx('M', size)))
             return ''.join(out_)
-        for ci, col in enumerate(self.air[k]):
+        yB = y0 + self.ch
+        for ci in range(sec['NC']):
+            col = cols_[ci] if ci < len(cols_) else []
             xx = x0 + ci * (colw + gut)
+            yEnd = y0
             for pc in col:
                 P = pc['P']; Y = y0 + pc['y']
                 # 머리: 검은 바탕 흰 번호, 공항 쌍, 오른쪽에 일반석 운임
@@ -3592,7 +3611,9 @@ class Book:
                     rects.append(('v', xx + hw, n0, yy, 1))
                 yy += pad
                 rects.append(('box', xx, Y, xx + colw, yy, self.rw[1]))
-        tex += self.page_side_title(recto, [('', '항공')])
+                yEnd = yy
+            if yB - yEnd > 1.5 * R: rects.append(('box', xx, yEnd, xx + colw, yB, self.rw[1]))     # 남는 자리: 빈 상자
+        tex += self.page_side_title(recto, [('', sec['title'])])
         return tex, ' '.join(ops) + ' ' + (self.pdf_ops(rects) if rects else '')
 
     # ── 고속버스: 출발 터미널마다(가나다) 행선지마다 소요·요금과 발차 시각을 죽. 두 단으로 흘려 짠다 ──
@@ -3610,6 +3631,8 @@ class Book:
         colw = self.cw / NC
         DW = (colw - 0.7 * fs - 2 * TS - GW) / 7                # 남는 폭은 요일 칸에
         TH, CH = 1.5 * R, 0.85 * R                          # 출발 터미널 머리, 칸 머리
+        GP = 0.4 * R                                        # 행선지 이름 위 여백
+        DH = R + GP
         items = []                                          # (종류, 높이, 내용)
         for O in data['origins']:
             items.append(('o', O['from']))
@@ -3633,31 +3656,35 @@ class Book:
             if not col: head(cur_o, True)
             if k == 'd':
                 cur_x = v
-                need = R * (1 + min(3, len(v['times'])))       # 머리 밑에 적어도 세 줄
+                need = DH + R * min(3, len(v['times']))        # 머리 밑에 적어도 세 줄
                 if y + need > cap + 1e-6: cols.append(col); col, y = [], 0.0; continue
-                col.append(('d', y, v, False)); y += R; i += 1; continue
+                col.append(('d', y, v, False)); y += DH; i += 1; continue
             if y + R > cap + 1e-6:
                 cols.append(col); col, y = [], 0.0
-                head(cur_o, True); col.append(('d', y, cur_x, True)); y += R
+                head(cur_o, True); col.append(('d', y, cur_x, True)); y += DH
             col.append(('t', y, v)); y += R; i += 1
         if col: cols.append(col)
         pages = [cols[k:k + NC] for k in range(0, len(cols), NC)]
-        self._bus = (colw, pad, TS, GW, DW, TH, CH)
+        self._bus = (colw, pad, TS, GW, DW, TH, CH, GP, NC)
         for i, p in enumerate(pages):
             self.bus.append(p); self.pages.append({'pieces': [], 'lines': [], 'bus': i})
 
     def bus_page(self, k, x0, recto):
         fs, R = self.fs, self.R
-        colw, pad, TS, GW, DW, TH, CH = self._bus
+        colw, pad, TS, GW, DW, TH, CH, GP, NC = self._bus
+        yB = y0_ = self.mt
+        yB = y0_ + self.ch
         tex, rects = [], []
         y0 = self.mt
         HS = 0.82
         WD = '월화수목금토일'
         rd = 0.16 * fs
         def dot(cx, cy): rects.append(('dot', cx, cy, 2 * rd))
-        for ci, col in enumerate(self.bus[k]):
-            xx = x0 + ci * colw + (0.2 * fs if ci else 0)
-            ww = colw - 0.4 * fs
+        for ci in range(NC):                           # 단은 맞붙여 한 표처럼
+            xx = x0 + ci * colw
+            ww = colw
+            col = self.bus[k][ci] if ci < len(self.bus[k]) else []
+            if not col: rects.append(('box', xx, y0, xx + ww, yB, self.rw[1])); continue
             xA = xx + 0.15 * fs; xB = xA + TS; xG = xB + TS; xD = xG + GW
             seg = []                                   # 세로줄을 그을 시각 줄 구간
             st = None
@@ -3679,6 +3706,7 @@ class Book:
                 elif kd == 'd':
                     X = it[2]
                     if it[1] > 0 and col[col.index(it) - 1][0] == 't': rects.append(('h', xx, xx + ww, y, 1))
+                    y += GP
                     tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, self.inl.run(X['to'], Ctx('GB', 0.9)), 'l', 'm'))
                     du = '%d:%02d' % (X['dur'] // 60, X['dur'] % 60)
                     fa = ('{:,}'.format(X['fare'][0]) + ('∼' if X['fare'][1] != X['fare'][0] else '')) if X.get('fare') else ''
@@ -3694,14 +3722,16 @@ class Book:
                         if g != '우': tex.append(self.put_box(xG, y, GW, R, self.inl.run(g, Ctx('M', 0.8).but(hscale=HS)), 'c', 'm'))
                         for d in range(7):
                             if w[d]: dot(xD + (d + 0.5) * DW, y + R / 2)
-                    else:
+                    else:                                  # 날에 따라 등급이 바뀜: 등급 칸에 ※, 요일 칸에 그날 등급
+                        tex.append(self.put_box(xG, y, GW, R, self.inl.run('※', Ctx('M', 0.8)), 'c', 'm'))
                         for d in range(7):
                             if w[d]: tex.append(self.put_box(xD + d * DW, y, DW, R, self.inl.run(w[d], Ctx('M', 0.75).but(hscale=0.7 if len(w[d]) > 1 else 0.9)), 'c', 'm'))
-            yE = y0 + max(it[1] + (TH if it[0] == 'o' else CH if it[0] == 'c' else R) for it in col)
+            yE = y0 + max(it[1] + (TH if it[0] == 'o' else CH if it[0] == 'c' else R + GP if it[0] == 'd' else R) for it in col)
             if st is not None: seg.append((st, yE))
             for a, b in seg:
                 for xv in (xB, xG, xD): rects.append(('v', xv, a, b, 1))
             rects.append(('box', xx, y0, xx + ww, yE, self.rw[1]))
+            if yB - yE > 1.5 * R: rects.append(('box', xx, yE, xx + ww, yB, self.rw[1]))     # 남는 자리: 빈 상자
         tex += self.page_side_title(recto, [('', '고속버스')])
         return tex, self.pdf_ops(rects) if rects else ''
 
@@ -3820,6 +3850,10 @@ class Book:
         for key_, lab_ in (('air', '항공'), ('bus', '고속버스')):
             ai_ = [i for i, pg in enumerate(self.pages) if key_ in pg]
             if ai_: seq += [('g',), ('h', lab_, ai_[0] + first, ai_[-1] + first, None)]
+            if key_ == 'air' and len(getattr(self, 'air_secs', [])) > 1:          # 항공 밑에 장마다
+                for si_, sc_ in enumerate(self.air_secs):
+                    pi_ = [i for i, pg in enumerate(self.pages) if pg.get('airSec') == si_]
+                    if pi_: seq.append(('i', sc_['sub'] if 'sub' in sc_ else sc_['title'], pi_[0] + first, pi_[-1] + first, None))
         if bk_: seq += [('g',), ('h', '역명 색인', bk_[0] + first, bk_[-1] + first, None)]
         # 범례: 세 단 (등급 · KTX · 관광열차)
         lg = self.cfg.get('legend', [])

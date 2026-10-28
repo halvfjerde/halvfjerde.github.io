@@ -14,7 +14,7 @@ for f in sorted(glob.glob(sys.argv[2] + '/*SCHEDULE_DOM_*.xlsx')):
         kind, al, no, ap, sec, dt, at = r[:7]
         flags = r[7:14]; per = r[14]
         if kind == '出発': dep, arr = ap, sec
-        elif kind == '到着' and sec == 'INCHEON': dep, arr = sec, ap            # 인천발은 도착 행에서
+        elif kind == '到着' and ap == 'INCHEON': dep, arr = ap, sec            # 인천발은 도착 행에서 (도착 행의 「공항」 칸은 떠난 공항)
         else: continue
         for x in (dep, arr):
             if x not in EN: unknown.add(x)
