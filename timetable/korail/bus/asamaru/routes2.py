@@ -762,8 +762,10 @@ def merge_board(D, os_, strict=False):
             tA = [m_(t[0]) for t in Y['times']]; tB = {m_(t[0]) for t in X['times']}
             dd = Y['dur'] - X['dur']
             for e in range(0, 421):
-                if abs(e - dd) > max(15, 0.2 * abs(dd)): continue
+                far_ = abs(e - dd) > max(15, 0.2 * abs(dd))
+                if far_ and (strict or e > 180): continue
                 k = sum(1 for t in tA if (t + e) % 1440 in tB)
+                if far_ and (k < len(tA) or k < 2): continue    # 사람이 준 노선: TAGO 소요(노선마다 하나라 같게 적히기도)와 달라도 편이 모두 같은 δ 로 맞으면 (청양 → 정산 +20분)
                 key_ = (k == len(tA), k, -abs(e - dd))
                 if k and (best is None or key_ > best[0]): best = (key_, k, e, A, tA)
         if not best: continue
