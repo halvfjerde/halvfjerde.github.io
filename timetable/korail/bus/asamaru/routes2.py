@@ -401,20 +401,25 @@ for O in b['origins']:
 # board [A, B] = B 에서 타는 차는 다 A 에서 온다 (TAGO 는 B 에도 A 의 발차 시각을 붙인다) → A 덩이에 「승차 B」, B 발 목록에는 참조 줄
 SAME = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'same-bus.json')))
 ts_ = lambda X: {t[0] for t in X.get('times', [])}
-for B_, D in SAME['drop']:
+for B_, D, *only in SAME['drop']:                      # 셋째 칸이 있으면 그 출발지들에만
     for O in b['origins']:
+        if only and O['from'] not in only[0]: continue
         d = {X['to']: X for X in O['dests']}
         if B_ in d and D in d and 'times' in d[B_] and 'times' in d[D] and ts_(d[B_]) <= ts_(d[D]):
             XB = d[B_]; d[D].setdefault('via', []).append([B_, XB['dur'], XB.get('fare')])
             XB.clear(); XB.update({'to': B_, 'see': D})
-for A, B_ in SAME['board']:
+for A, B_, *only in SAME['board']:                      # 셋째 칸이 있으면 그 행선지들에만
     oa = next((O for O in b['origins'] if O['from'] == A), None); ob = next((O for O in b['origins'] if O['from'] == B_), None)
     if not oa or not ob: continue
     da = {X['to']: X for X in oa['dests']}
     for X in ob['dests']:
         Y = da.get(X['to'])
-        if Y and 'times' in X and 'times' in Y and ts_(X) <= ts_(Y):
-            Y.setdefault('board', []).append(B_)
+        if only and X['to'] not in only[0]: continue
+        if not (Y and 'times' in X and 'times' in Y): continue
+        tA, tB = {m_(t) for t in ts_(Y)}, {m_(t) for t in ts_(X)}
+        d = next((d for d in range(0, 61) if {(t - d) % 1440 for t in tB} <= tA), None)     # B 발 = A 발 + δ (TAGO 가 같은 시각을 붙이면 δ=0)
+        if d is not None:
+            Y.setdefault('board', []).append(B_ + (' %d분 뒤' % d if d else ''))
             to_ = X['to']; X.clear(); X.update({'to': to_, 'seeFrom': A})
 b['routeOwned'] = sorted('%s→%s' % p for p in own)
 b['names'] = SHORT
