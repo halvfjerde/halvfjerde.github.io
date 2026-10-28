@@ -3767,6 +3767,12 @@ class Book:
                     else: cur += sep + t_
                 out.append(cur)
             if X.get('vnote'): out.append(X['vnote'])       # 일부 편만 서는 곳: 「◇ 원주문막 경유 (원주 발 15분 뒤)」
+            if X.get('vnote2'):                             # 더 먼 행선지 덩이에 실은 편: 「이 밖에 배방정류소 행 22편도 섬」
+                cur = ''
+                for t_ in X['vnote2'].split(', '):
+                    if cur and wsm(cur + ', ' + t_) > ww_: out.append(cur + ','); cur = '　' + t_
+                    else: cur = (cur + ', ' + t_) if cur else t_
+                out.append(cur)
             if X.get('gnote'):                              # 돌아가는 등급: 「※ 가운데 날마다 1∼2편 프리미엄, 나머지 우등」
                 cur = ''
                 for k_, t_ in enumerate(X['gnote'].split(', ')):

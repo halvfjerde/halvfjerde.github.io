@@ -431,6 +431,53 @@ for A, B_, *only in SAME['board']:                      # 셋째 칸이 있으�
         if d is not None:
             Y.setdefault('board', []).append(B_ + (' %d분 뒤' % d if d else ''))
             to_ = X['to']; X.clear(); X.update({'to': to_, 'seeFrom': A})
+# 겹치는 행선지 묶음(chains.py) 가운데 같은 차로 볼 만하고(sure) 차례가 시각으로 정해지는 것(ordered): 차마다 가장 먼 행선지 덩이에 싣고
+# 그 앞에 서는 곳은 「경유」(모든 편) 또는 ◇(몇 편만, 하나까지). 앞 행선지 덩이에는 남은 편과 「이 밖에 … 행 n편도 섬」, 남은 편이 없으면 참조 줄
+import chains
+hmd = lambda m: ('%d시간' % (m // 60) if m >= 60 else '') + (' ' if m >= 60 and m % 60 else '') + ('%d분' % (m % 60) if m % 60 or m < 60 else '')
+AUTO, REVIEW = [], []
+for O in b['origins']:
+    d = {X['to']: X for X in O['dests'] if 'times' in X and 'via' not in X and 'vnote' not in X}
+    blocks = {x: (frozenset(t[0] for t in X['times']), X['dur']) for x, X in d.items()}
+    for r, ms in chains.trees(blocks):
+        xs = sorted(ms + [r], key=lambda x: blocks[x][1])
+        if not chains.sure(blocks, xs): continue
+        if not chains.ordered(blocks, xs): REVIEW.append((O['from'], xs)); continue
+        far = {}                                          # 발차 → 가장 먼 행선지
+        for x in xs:
+            for t in blocks[x][0]: far[t] = x
+        plan, ok = {}, True
+        for j, x in enumerate(xs):
+            mine = sorted(t for t in blocks[x][0] if far[t] == x)
+            vias, part = [], []
+            for y in xs[:j]:
+                k = sum(1 for t in mine if t in blocks[y][0])
+                if k == len(mine) and mine: vias.append(y)
+                elif k: part.append(y)
+            if len(part) > 1: ok = False
+            plan[x] = (mine, vias, part)
+        for x in xs:                                      # 남은 편이 없는 앞 행선지: 그 편들이 한 덩이에 다 있어야 참조 줄로
+            if not plan[x][0] and len({far[t] for t in blocks[x][0]}) > 1: ok = False
+        if not ok: REVIEW.append((O['from'], xs)); continue
+        AUTO.append((O['from'], xs))
+        for x in xs:
+            mine, vias, part = plan[x]
+            X = d[x]
+            if not mine:
+                tgt = far[next(iter(blocks[x][0]))]
+                du_, fa_ = X['dur'], X.get('fare'); X.clear(); X.update({'to': x, 'see': tgt, 'dur': du_, 'fare': fa_}); continue
+            X['times'] = [t for t in X['times'] if t[0] in set(mine)]
+            if vias: X['via'] = [[y, d[y]['dur'] if 'dur' in d[y] else blocks[y][1], d[y].get('fare')] for y in vias]
+            if part:
+                y = part[0]
+                for t in X['times']:
+                    if t[0] in blocks[y][0]: t.append('◇')
+                X['vnote'] = '◇ 경유 %s %s' % (nm(y), hmd(blocks[y][1]))
+            also = collections.Counter(far[t] for t in blocks[x][0] if far[t] != x)
+            if also: X['vnote2'] = '이 밖에 ' + ', '.join('%s 행 %d편' % (nm(z), n) for z, n in sorted(also.items(), key=lambda kv: blocks[kv[0]][1])) + '도 섬'
+print('auto chains', len(AUTO), 'review', len(REVIEW), file=sys.stderr)
+b['autoChains'] = [[o] + xs for o, xs in AUTO]
+b['reviewChains'] = [[o] + xs for o, xs in REVIEW]
 b['routeOwned'] = sorted('%s→%s' % p for p in own)
 b['names'] = SHORT
 b['tableRefs'] = sorted([A, D, title_of[id(T)], P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄

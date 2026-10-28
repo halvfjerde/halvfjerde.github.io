@@ -13,7 +13,7 @@ R = json.load(open(sys.argv[2])) if len(sys.argv) > 2 else {'origins': [], 'rout
 handled = {tuple(x.split('→')) for x in R.get('routeOwned', [])}
 for O in R['origins']:
     for X in O['dests']:
-        if 'see' in X or 'seeFrom' in X or 'via' in X or 'board' in X or 'vnote' in X: handled.add((O['from'], X['to']))
+        if 'see' in X or 'seeFrom' in X or 'via' in X or 'board' in X or 'vnote' in X or 'vnote2' in X: handled.add((O['from'], X['to']))
 known = [set(s) for s in fl] + [{x[0], x[1]} for x in sb['drop'] + sb['board']] + [set(x) for x in ps]
 NM = {'센트럴시티(서울)': '서울호남', '광주(유·스퀘어)': '광주', '대전청사(샘머리)': '대전청사'}
 nm = lambda x: NM.get(x, x)
@@ -55,6 +55,8 @@ for a in sorted(byA, key=nm):
             if x != r and T[(a, x)] != T[(a, r)]: blk.append('  - %s 은 %s' % (nm(x), ' '.join(sorted(T[(a, x)], key=key))))
     if blk: OUT += ['**%s 발**' % nm(a)] + blk + ['']
     DONE += ['- %s 발: %s' % (nm(a), c) for c in dn]
+RV = ['- %s 발: %s' % (nm(c[0]), ' / '.join('%s(%d, %s)' % (nm(x), len(T[(c[0], x)]), hm(P[(c[0], x)]['dur'])) for x in c[1:])) for c in R.get('reviewChains', [])]
+L += ['## 같은 차로 볼 만하나 소요가 같아 차례를 사람이 볼 것', '', '(가장 적은 행선지도 15편 넘거나, 행선지 넷 넘게 편수가 같은 묶음. 소요가 같은 곳이 있어 들르는 차례를 시각으로 정할 수 없음)', ''] + RV + ['']
 L += ['## 아직 정리하지 않은 것', ''] + OUT + ['## 이미 정리한 것', ''] + DONE
 print('\n'.join(L))
 print('묶음', cnt, '정리함', ok_, file=sys.stderr)
