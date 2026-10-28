@@ -3636,10 +3636,12 @@ class Book:
         SR = 0.85 * R                                       # 경유·승차 줄
         ww_ = colw - 1.0 * fs
         wsm = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.72).but(hscale=0.82)), len(t)) * fs
+        hm_ = self.dur_text
         def sub_lines(X):
             """덩이 머리 밑 작은 줄: 「경유 서대구 3:10 19,600∼」, 「승차 평택굿모닝병원・평택대」"""
             out = []
-            for lab, toks in (('경유', ['%s %d:%02d' % (v[0], v[1] // 60, v[1] % 60) for v in X.get('via', [])]),
+            durs = collections.Counter([v[1] for v in X.get('via', [])] + [X['dur']])      # 소요가 같게 적힌 곳은 소요를 빼고 이름만
+            for lab, toks in (('경유', [v[0] + (' ' + hm_(v[1]) if durs[v[1]] == 1 else '') for v in X.get('via', [])]),
                               ('승차', X.get('board', []))):
                 if not toks: continue
                 cur = lab
@@ -3695,6 +3697,12 @@ class Book:
                     if it[0] == 'o': self.bus_opage.setdefault(it[2], len(self.pages))
             self.bus.append(p); self.pages.append({'pieces': [], 'lines': [], 'bus': i})
 
+    @staticmethod
+    def dur_text(m):
+        """소요: 「3시간 20분」「45분」「2시간」"""
+        h, mi = divmod(int(m), 60)
+        return ('%d시간' % h if h else '') + (' ' if h and mi else '') + ('%d분' % mi if mi or not h else '')
+
     def bus_page(self, k, x0, recto):
         fs, R = self.fs, self.R
         colw, pad, TS, GW, DW, TH, CH, GP, NC, SR = self._bus
@@ -3744,10 +3752,15 @@ class Book:
                     X = it[2]
                     if it[1] > 0 and col[col.index(it) - 1][0] == 't': rects.append(('h', xx, xx + ww, y, 1))
                     y += GP
-                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, self.inl.run(X['to'], Ctx('GB', 0.9)), 'l', 'm'))
-                    du = '%d:%02d' % (X['dur'] // 60, X['dur'] % 60)
-                    fa = ('{:,}'.format(X['fare'][0]) + ('∼' if X['fare'][1] != X['fare'][0] else '')) if X.get('fare') else ''
-                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, self.inl.run(du + '　' + fa, Ctx('M', 0.72).but(hscale=HS)), 'r', 'm'))
+                    du = self.dur_text(X['dur'])
+                    fa = ('{:,}원'.format(X['fare'][0]) + ('∼' if X['fare'][1] != X['fare'][0] else '')) if X.get('fare') else ''
+                    it_ = self.inl.run(du + '　' + fa, Ctx('M', 0.72).but(hscale=HS))
+                    nt_ = self.inl.run(X['to'], Ctx('GB', 0.9))
+                    room = ww - 2 * pad - self.inl.wc.get(it_, 0) * fs - 0.4 * fs        # 이름이 소요·요금에 닿으면 이름을 가로로 좁힌다
+                    wn_ = self.inl.wc.get(nt_, 0) * fs
+                    if wn_ > room > 0: nt_ = self.inl.run(X['to'], Ctx('GB', 0.9).but(hscale=max(0.6, room / wn_)))
+                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, nt_, 'l', 'm'))
+                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, it_, 'r', 'm'))
                     y += R
                     if not it[3]:
                         for ln in X.get('_sub', []):
