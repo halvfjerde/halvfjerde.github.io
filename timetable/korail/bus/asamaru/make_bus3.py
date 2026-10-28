@@ -35,6 +35,7 @@ _seqs = json.load(open(os.path.join(HERE_, 'force-links.json'))) + json.load(ope
 _sb = json.load(open(os.path.join(HERE_, 'same-bus.json')))
 _seqs += [x[:2] for x in _sb['drop'] + _sb['board']] + json.load(open(os.path.join(HERE_, 'partial-stops.json')))
 for q in _seqs:
+    q = [y for x in q for y in (x if isinstance(x, list) else [x])]      # 갈래 끝(["김해", "진해"])은 펼쳐서
     for a_ in q:
         for b_ in q:
             if a_ != b_:
@@ -106,6 +107,11 @@ origins = []
 nvar = 0
 FILLED = []
 FIRSTONLY = []
+# 사람이 확인한 편 (decide.py 로 적음): daily 는 매일로, drop 은 빼기
+DEC = json.load(open(os.path.join(HERE_, 'review-decisions.json'))) if os.path.exists(os.path.join(HERE_, 'review-decisions.json')) else {}
+DEC_DAILY = {tuple(t) for e in DEC.get('daily', []) for t in e['trips']}
+DEC_DROP = {tuple(t) for e in DEC.get('drop', []) for t in e['trips']}
+DEC_KEEP = {tuple(t) for e in DEC.get('keep', []) for t in e['trips']}      # 요일 그대로가 맞음: 채우지도 목록에 올리지도 않음
 MERGED1 = []
 for o in sorted(T):
     dests = []
@@ -116,14 +122,19 @@ for o in sorted(T):
         obs = {t: {wd[d_] for d_ in PD[(o, x, t)]} for t in T[o][x]}       # 편마다 다닌 요일 (자료 그대로)
         for t in sorted(T[o][x]):
             pd = PD[(o, x, t)]
-            if not (set(pd) & LAST): FIRSTONLY.append((o, x, t, sorted({wd[d_] for d_ in pd})))      # 나중 주에 없는 편: 결행했을 수도 있어 싣고 목록에
+            if (o, x, t) in DEC_DROP: continue
+            if not (set(pd) & LAST) and (o, x, t) not in DEC_KEEP | DEC_DAILY: FIRSTONLY.append((o, x, t, sorted({wd[d_] for d_ in pd})))      # 나중 주에 없는 편: 결행했을 수도 있어 싣고 목록에
             byw = collections.defaultdict(set)
             for d, g in pd.items(): byw[wd[d]].add(g)
             gvar = any(len(v) > 1 for v in byw.values())
             miss_ = set(range(7)) - set(byw)                # 다섯 요일 넘게 다니는데 빠진 요일이 주말꼴(금·토·일)이 아니면 임의 결행으로 보고 날마다
             # 같은 구간 한 시간 안에 빠진 요일에만 다니는 편이 있으면 요일별 배차(세종의 월요일 편 따위)로 보고 채우지 않는다
             comp_ = any(u != t and abs(u - t) <= 60 and obs[u] and obs[u] <= miss_ for u in obs)
-            if len(byw) >= 5 and miss_ and not miss_ <= {4, 5, 6} and not comp_:
+            if (o, x, t) in DEC_DAILY and miss_:
+                g_all = collections.Counter(g for v in byw.values() for g in v).most_common(1)[0][0]
+                for w_ in miss_: byw[w_] = {g_all}
+            elif (o, x, t) in DEC_KEEP: pass
+            elif len(byw) >= 5 and miss_ and not miss_ <= {4, 5, 6} and not comp_:
                 g_all = collections.Counter(g for v in byw.values() for g in v).most_common(1)[0][0]
                 for w_ in miss_: byw[w_] = {g_all}
                 FILLED.append((o, x, t, sorted(miss_)))

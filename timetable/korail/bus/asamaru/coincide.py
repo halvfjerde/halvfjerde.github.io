@@ -14,7 +14,7 @@ handled = {tuple(x.split('→')) for x in R.get('routeOwned', [])}
 for O in R['origins']:
     for X in O['dests']:
         if 'see' in X or 'seeFrom' in X or 'via' in X or 'board' in X or 'vnote' in X or 'vnote2' in X: handled.add((O['from'], X['to']))
-known = [set(s) for s in fl] + [{x[0], x[1]} for x in sb['drop'] + sb['board']] + [set(x) for x in ps]
+known = [{y for x in s for y in (x if isinstance(x, list) else [x])} for s in fl] + [{x[0], x[1]} for x in sb['drop'] + sb['board']] + [set(x) for x in ps]
 NM = {'센트럴시티(서울)': '서울호남', '광주(유·스퀘어)': '광주', '대전청사(샘머리)': '대전청사'}
 nm = lambda x: NM.get(x, x)
 hm = lambda m: '%d:%02d' % divmod(m, 60)

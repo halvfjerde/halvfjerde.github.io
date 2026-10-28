@@ -131,10 +131,18 @@ SHARED = {p for A, B_, D in PART for p in ((B_, D), (D, B_))}         # 노선�
 LB = [x for x in LB if not any((x[0], x[1], x[2]) == (D, A, B_) for A, B_, D in PART)]
 LD = [x for x in LD if not any((x[0], x[1], x[2]) == (D, B_, A) for A, B_, D in PART)]
 # 사람이 확인한 같은 차(force-links.json: 정류장 차례): 맞물린 편이 하나뿐이어도 잇는다 (시각이 맞는 δ 로)
+# 한 끝이 갈래인 노선은 그 자리에 정류장 목록을 둔다: ["광주", …, "창원", ["김해", "진해"]] — 한 표에 갈래로 (다른 갈래 칸은 ║)
 FORCE = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'force-links.json')))
+flat_ = lambda q: [y for x in q for y in (x if isinstance(x, list) else [x])]
+def lin_(q):
+    out_ = [[]]
+    for x in q: out_ = [o + [y] for o in out_ for y in (x if isinstance(x, list) else [x])]
+    return out_
+fpos = lambda q, s_: next(i for i, x in enumerate(q) if x == s_ or (isinstance(x, list) and s_ in x))
+FORCE_LIN = [l_ for q in FORCE for l_ in lin_(q)]
 have = {(D, A, B) for D, A, B, *_ in LB}
 haved = {(A, D1, D2) for A, D1, D2, *_ in LD}
-for seq in FORCE:
+for seq in FORCE_LIN:
     for i, A in enumerate(seq):
         for B in seq[i + 1:]:
             for D in seq[seq.index(B) + 1:]:                 # 타는 곳: A 다음 B, 둘 다 D 로
@@ -200,9 +208,9 @@ def fkey(tr):
     st = set(tr['board']) | set(tr['drop'])
     if all(len(P[(A, D)]['t']) > 20 for A, t, D in tr['nodes']): return None     # 촘촘한 구간끼리만 맞물린 차(광주→전주·호남제일 따위)는 그 노선의 차로 보지 않는다
     first = min(tr['board'], key=lambda A: (tr['board'][A] - min(tr['board'].values())) % 1440)
-    ks = [i for i, seq in enumerate(FORCE) if st <= set(seq)]
-    agree = lambda q: sum(1 for A in tr['board'] for D in tr['drop'] if A != D and q.index(A) < q.index(D))      # 타는 곳이 내리는 곳보다 앞인 방향 (TAGO 가 같은 시각을 붙여 첫 정류장이 헷갈려도)
-    return min(ks, key=lambda i: (-agree(FORCE[i]), FORCE[i].index(first))) if ks else None
+    ks = [i for i, seq in enumerate(FORCE) if st <= set(flat_(seq))]
+    agree = lambda q: sum(1 for A in tr['board'] for D in tr['drop'] if A != D and fpos(q, A) < fpos(q, D))      # 타는 곳이 내리는 곳보다 앞인 방향 (TAGO 가 같은 시각을 붙여 첫 정류장이 헷갈려도)
+    return min(ks, key=lambda i: (-agree(FORCE[i]), fpos(FORCE[i], first))) if ks else None
 for i, tr in enumerate(trips):
     fk = fkey(tr)
     if fk is not None:
@@ -240,9 +248,11 @@ for grp in groups.values():
         for k, s_ in zip(idx, best): stops[k] = s_
     fks = {fkey(tr) for tr in grp}
     isforce = len(fks) == 1 and None not in fks
+    brs_ = {}
     if len(fks) == 1 and None not in fks:               # 사람이 확인한 노선: 그 차례대로 (TAGO 가 같은 시각을 붙인 곳도 차례가 맞게)
-        sq_ = FORCE[fks.pop()]
+        sq0_ = FORCE[fks.pop()]; sq_ = flat_(sq0_)
         stops = sorted({s_ for tr in grp for s_ in list(tr['board']) + list(tr['drop'])}, key=lambda s_: sq_.index(s_) if s_ in sq_ else len(sq_))   # 끝까지 가지 않는 차의 정류장도
+        brs_ = {s_: j for x in sq0_ if isinstance(x, list) for j, s_ in enumerate(x) if s_ in stops}    # 갈래 정류장 → 갈래 번호
     bset = {A for tr in grp for A in tr['board']}
     dset = {D for tr in grp for D in tr['drop']} - bset
     pairs = {(A, D) for tr in grp for A, t, D in tr['nodes']}
@@ -263,7 +273,10 @@ for grp in groups.values():
         for k_, s in enumerate(stops):
             if s in c: return (c[s][1] - 0) % 1440 + (0 if c[s][1] >= 240 else 1440), k_
     cols.sort(key=key)
-    tables.append({'stops': stops, 'board': bset, 'cols': cols, 'pairs': pairs, 'last': L, 'force': isforce})
+    for c in cols:                                     # 갈래 끝 노선: 차마다 제 갈래
+        js_ = {brs_[s_] for s_ in c if s_ in brs_}
+        if len(js_) == 1: c['_br'] = js_.pop()
+    tables.append({'stops': stops, 'board': bset, 'cols': cols, 'pairs': pairs, 'last': L, 'force': isforce} | ({'branch': brs_} if len(set(brs_.values())) > 1 else {}))
 
 GR = {'우': '우등', '일': '일반', '프': '프리', '심': '심우', '심프': '심프', '심일': '심일'}
 def wdl(ws):
