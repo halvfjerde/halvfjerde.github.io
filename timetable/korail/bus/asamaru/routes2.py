@@ -12,7 +12,7 @@ python3 routes2.py bus.json routes.txt rest.json suspects.txt
   routes.txt   : 노선표 원문 (위키 문서 꼴: == 고속버스 == 밑에 표마다 {{#invoke:Timetable}})
   rest.json    : 노선표에 들지 않은 구간 (bus.json 꼴, 목록용)
   suspects.txt : 사람이 확인할 만한 것 (근거가 약한 단서, 한 차 안에서 시각이 엇갈린 것 등)"""
-import json, sys, os, collections, math
+import json, sys, os, collections, math, re
 
 b = json.load(open(sys.argv[1]))
 m_ = lambda s: int(s[:-2]) * 60 + int(s[-2:])
@@ -863,9 +863,17 @@ for B_, D, *only in SAME['drop']:                      # 셋째 칸이 있으면
     for O in b['origins']:
         if only and O['from'] not in only[0]: continue
         d = {X['to']: X for X in O['dests']}
-        if B_ in d and D in d and 'times' in d[B_] and 'times' in d[D] and ts_(d[B_]) <= ts_(d[D]):
+        if B_ in d and D in d and 'times' in d[B_] and 'times' in d[D]:
+            kb_ = {t[0] for t in d[B_]['times'] if '시' not in t[3:]}      # 같은 차라고 확인한 것은 고속 편: B 에서 끝나는 시외(진주 → 서대구 합천 경유)는 B 에 남긴다
+            if not (kb_ and kb_ <= ts_(d[D])): continue
             XB = d[B_]; d[D].setdefault('via', []).append([B_, XB['dur'], XB.get('fare')])
-            XB.clear(); XB.update({'to': B_, 'see': D})
+            rest_ = [t for t in XB['times'] if t[0] not in ts_(d[D]) or '시' in t[3:]]
+            if rest_:
+                n_ = len(XB['times']) - len(rest_); XB['times'] = rest_; XB['vnote2'] = '이 밖에 %s 행 %d편도 섬' % (nm(D), n_)
+                XB['dur'] = sorted((m_(t[1]) - m_(t[0])) % 1440 for t in rest_)[len(rest_) // 2]      # 남은 편(시외)의 소요・요금으로
+                mf_ = [M_['fare'] for M_ in json.load(open(os.path.join(HERE2_, 'manual-trips.json'))) if M_['from'] == O['from'] and M_['to'] == B_ and M_.get('fare')]
+                if mf_: XB['fare'] = [min(f_[0] for f_ in mf_), max(f_[1] for f_ in mf_)]
+            else: XB.clear(); XB.update({'to': B_, 'see': D})
 for A, B_, *only in SAME['board']:                      # 셋째 칸이 있으면 그 행선지들에만
     oa = next((O for O in b['origins'] if O['from'] == A), None); ob = next((O for O in b['origins'] if O['from'] == B_), None)
     if not oa or not ob: continue
@@ -1019,6 +1027,17 @@ for O in b['origins']:                                  # ◇ 경유가 남은 �
             vv = {v[0]: v for v in X.get('via', [])}
             for v in X.pop('_part'): vv.setdefault(v[0], v)
             X['via'] = sorted(vv.values(), key=lambda v: v[1]); X.pop('vnote', None)
+# 모든 편이 B 에서 타는데(「승차 강릉 +30분」) 몇 편만 B 에 내린다(◇ 경유 강릉 23분, TAGO 동네 시외 요금으로만 팔린 편): 모든 편이 B 에 서니 「경유 B」 로
+for O in b['origins']:
+    for X in O['dests']:
+        pt_ = X.get('_part') or []
+        bd_ = {s_.split(' ')[0]: s_ for s_ in X.get('board', [])}
+        if 'times' in X and len(pt_) == 1 and pt_[0][0] in bd_ and '\n' not in X.get('vnote', ''):
+            for t in X['times']:
+                if '◇' in t: t.remove('◇')
+            mo_ = re.match(r'\S+ \+(?:(\d+)시간)? ?(?:(\d+)분)?', bd_[pt_[0][0]])
+            dv_ = (int(mo_.group(1) or 0) * 60 + int(mo_.group(2) or 0)) if mo_ else 0
+            X['via'] = X.get('via', []) + [[pt_[0][0], dv_ or pt_[0][1], pt_[0][2]]]; X.pop('_part'); X.pop('vnote', None)      # 내리는 때도 타는 때로 (시각표)
 # ◇・△ 가 다 붙은 편: 같은 시각이라도 날마다 한 곳만 들른다 (진주개양 또는 진주혁신, 요일에 따라) → 요일로 두 줄로 나눈다
 for O in b['origins']:
     for X in O['dests']:
@@ -1066,11 +1085,23 @@ for K_ in (json.load(open(KB_)) if os.path.exists(KB_) else []):
         if O['from'] != K_['from']: continue
         for X in O['dests']:
             if X['to'] != K_['to'] or 'times' not in X: continue
-            hit_ = [t for t in X['times'] if t[0] in K_['times']]
+            hit_ = [t for t in X['times'] if t[0] in K_['times'] and (not K_.get('sub') or '시' in t[3:])]      # sub: 시외 편만 (같은 시각 고속 편은 빼고)
             if len(hit_) == len(X['times']): X.setdefault('board', []).extend(K_['board'])
             elif hit_:
                 for t in hit_: t.append('◇')
                 X['vnote'] = '◇ 승차 ' + '・'.join(K_['board'])
+            for bs_ in K_['board']:                     # 그 타는 곳 발 목록에 따로 있는 같은 차(TAGO 합천 → 서대구)는 접는다
+                mo_ = re.match(r'(\S+) \+(?:(\d+)시간)? ?(?:(\d+)분)?', bs_)
+                if not mo_: continue
+                dv_ = int(mo_.group(2) or 0) * 60 + int(mo_.group(3) or 0)
+                OB_ = next((O2 for O2 in b['origins'] if O2['from'] == mo_.group(1)), None)
+                XB_ = next((X2 for X2 in (OB_['dests'] if OB_ else []) if X2['to'] == K_['to'] and 'times' in X2), None)
+                if not XB_: continue
+                tt_ = {(m_(t[0]) + dv_) % 1440 for t in hit_}
+                rest_ = [t for t in XB_['times'] if m_(t[0]) not in tt_]
+                if len(rest_) == len(XB_['times']): continue
+                if rest_: XB_['vnote3'] = '이 밖에 %s 발 %d편도 탐' % (nm(K_['from']), len(XB_['times']) - len(rest_)); XB_['times'] = rest_
+                else: du_, fa_ = XB_['dur'], XB_.get('fare'); XB_.clear(); XB_.update({'to': K_['to'], 'seeFrom': K_['from'], 'dur': du_, 'fare': fa_})
 print('auto chains', len(AUTO), 'review', len(REVIEW), file=sys.stderr)
 b['autoChains'] = [[o] + xs for o, xs in AUTO]
 b['reviewChains'] = [[o] + xs for o, xs in REVIEW]

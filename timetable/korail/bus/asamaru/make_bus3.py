@@ -198,7 +198,8 @@ for M_ in (json.load(open(_MT)) if os.path.exists(_MT) else []):
     if X_ is None: X_ = {'to': M_['to'], 'dur': M_['dur'], 'fare': M_.get('fare'), 'times': []}; O_['dests'].append(X_)
     _h = lambda m: '%d%02d' % (m // 60 % 24, m % 60)
     have_ = {t[0] for t in X_['times']}
-    X_['times'] += [[t, _h(int(t[:-2]) * 60 + int(t[-2:]) + M_['dur']), [M_['grade']] * 7] + (['시'] if M_.get('sub') else []) for t in M_['times'] if t not in have_]
+    _dw = lambda t: [M_['grade'] if WD[d_] in M_.get('days', {}).get(t, WD) else 0 for d_ in range(7)]      # 요일 한정 편(「금토일」)
+    X_['times'] += [[t, _h(int(t[:-2]) * 60 + int(t[-2:]) + M_['dur']), _dw(t)] + (['시'] if M_.get('sub') else []) for t in M_['times'] if t not in have_ or M_.get('dup')]   # dup: 같은 시각의 다른 차(고속 830 과 시외 830)도 싣는다
     X_['times'].sort(key=lambda t: int(t[0][:-2]) * 60 + int(t[0][-2:]))
     O_['dests'].sort(key=lambda X: X['to'])
 origins.sort(key=lambda O: O['from'])
