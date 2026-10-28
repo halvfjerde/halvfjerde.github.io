@@ -651,12 +651,15 @@ for E_ in EXTRA:
     for O in b['origins']:
         X = next((X for X in O['dests'] if X['to'] == af_ and 'times' in X), None) if O['from'] in E_['lists'] else None
         if X and not any(Y['to'] == sp_ for Y in O['dests']):
-            O['dests'].append({'to': sp_, 'dur': X['dur'] + mn_, 'fare': None, 'times': [[t[0], hm(m_(t[1]) + mn_)] + t[2:] for t in X['times']]})
+            fr_ = P[(sp_, O['from'])]['fare'] if (sp_, O['from']) in P else None          # 요금은 반대 방향(TAGO 에 있으면)과 같게
+            O['dests'].append({'to': sp_, 'dur': X['dur'] + mn_, 'fare': fr_, 'times': [[t[0], hm(m_(t[1]) + mn_)] + t[2:] for t in X['times']]})
     OA_ = next((O for O in b['origins'] if O['from'] == af_), None)
     if OA_:
         new_ = [{'to': X['to'], 'dur': X['dur'] + mn_, 'fare': None, 'times': [[hm(m_(t[0]) - mn_)] + t[1:] for t in X['times']]}
                 for X in OA_['dests'] if X['to'] in E_['lists'] and 'times' in X]
-        if new_: b['origins'].append({'from': sp_, 'dests': new_})
+        OS_ = next((O for O in b['origins'] if O['from'] == sp_), None)
+        if OS_: OS_['dests'] += [X for X in new_ if not any(Y['to'] == X['to'] for Y in OS_['dests'])]
+        elif new_: b['origins'].append({'from': sp_, 'dests': new_})
 for O in b['origins']:
     for X in O['dests']:
         k = (O['from'], X['to'])
@@ -832,6 +835,18 @@ for O in b['origins']:
 NB_ = sum(merge_board(o, xs[::-1], strict=True) for o, xs in AUTO)      # 반대 방향(오는 길)도: 먼 데서 타는 차가 가까운 데서도 타면 「승차」
 print('auto chains up', NB_, file=sys.stderr)
 extra_between()
+# 시각표로 아는 승차(known-boarding.json): TAGO 에 타는 곳이 없는 편 — 그 편에 ◇ 와 「◇ 승차 신철원 +20분・포천 +1시간」
+KB_ = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'known-boarding.json')
+for K_ in (json.load(open(KB_)) if os.path.exists(KB_) else []):
+    for O in b['origins']:
+        if O['from'] != K_['from']: continue
+        for X in O['dests']:
+            if X['to'] != K_['to'] or 'times' not in X: continue
+            hit_ = [t for t in X['times'] if t[0] in K_['times']]
+            if len(hit_) == len(X['times']): X.setdefault('board', []).extend(K_['board'])
+            elif hit_:
+                for t in hit_: t.append('◇')
+                X['vnote'] = '◇ 승차 ' + '・'.join(K_['board'])
 print('auto chains', len(AUTO), 'review', len(REVIEW), file=sys.stderr)
 b['autoChains'] = [[o] + xs for o, xs in AUTO]
 b['reviewChains'] = [[o] + xs for o, xs in REVIEW]
