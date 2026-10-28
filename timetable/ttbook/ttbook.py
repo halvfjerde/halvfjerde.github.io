@@ -3604,8 +3604,18 @@ class Book:
         pad = 0.5 * fs
         TH = 2 * R
         LW = 6.2 * fs                                       # 행선지 칸 (이름 / 소요·요금)
-        TS, MK = 2.3 * fs, 1.0 * fs                         # 시각 칸, 등급 표지 칸
+        TS, MK = 2.3 * fs, 1.3 * fs                         # 시각 칸, 등급·요일 표지 칸
         per = max(1, int((colw - LW - 2 * pad) / (TS + MK)))
+        NW = colw - LW - 2 * pad                            # 주(요일 표지 풀이)의 글줄 폭
+        wn = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.72)), len(t)) * fs
+        def note_lines(notes):
+            out, cur = [], ''
+            for m_, lab in notes:
+                it = '%s %s' % (m_, lab)
+                if cur and wn(cur + '　' + it) > NW: out.append(cur); cur = it
+                else: cur = (cur + '　' + it) if cur else it
+            if cur: out.append(cur)
+            return out
         cols, col, y = [], [], 0.0
         def newcol():
             nonlocal col, y
@@ -3613,7 +3623,8 @@ class Book:
         for O in data['origins']:
             ents = []
             for X in O['dests']:
-                n = max(2, -(-len(X['times']) // per))
+                X['_nl'] = note_lines(X.get('notes', []))
+                n = max(2, -(-len(X['times']) // per) + len(X['_nl']))
                 ents.append((X, n))
             i = 0
             while i < len(ents):
@@ -3656,11 +3667,16 @@ class Book:
                     du = '%d:%02d' % (X['dur'] // 60, X['dur'] % 60)
                     fa = ('{:,}'.format(X['fare'][0]) + ('∼' if X['fare'][1] != X['fare'][0] else '')) if X.get('fare') else ''
                     tex.append(self.put_box(xx + pad, yy + R, LW, R, self.inl.run(du + ' ' + fa, Ctx('M', 0.72).but(hscale=HS)), 'l', 'm'))
-                    for m_, (t, g) in enumerate(X['times']):
+                    for m_, tg in enumerate(X['times']):
+                        t, g = tg[0], tg[1]; dm = tg[2] if len(tg) > 2 else ''
                         r_, c_ = divmod(m_, per)
                         tx = xx + LW + pad + c_ * (TS + MK)
                         tex.append(self.put_box(tx, yy + r_ * R, TS, R, self.inl.run(t, Ctx('DM', 1.0)), 'r', 'm'))
-                        if g: tex.append(self.put_box(tx + TS + 0.1 * fs, yy + r_ * R, MK, R, self.inl.run(g, Ctx('M', 0.6)), 'l', 'm'))
+                        mk_ = (self.inl.run(g, Ctx('M', 0.6)) if g else '') + (self.inl.run(dm, Ctx('M', 0.7).but(hscale=HS)) if dm else '')
+                        if mk_: tex.append(self.put_box(tx + TS + 0.1 * fs, yy + r_ * R, MK, R, mk_, 'l', 'm'))
+                    tr_ = -(-len(X['times']) // per)
+                    for li, ln in enumerate(X.get('_nl', [])):      # 요일 표지 풀이: 시각들 밑에
+                        tex.append(self.put_box(xx + LW + pad, yy + (tr_ + li) * R, colw - LW - 2 * pad, R, self.inl.run(ln, Ctx('M', 0.72)), 'l', 'm'))
                     yy += n * R
                 rects.append(('v', xx + LW, Y + TH, yy, 1))
                 yy += pad

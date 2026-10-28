@@ -1,6 +1,6 @@
 """pairs-ids.json 의 구간마다 TAGO 고속버스 운행을 받는다: python3 fetch_pairs.py 20261029 > trips.json"""
 import json, sys, os, time, urllib.request, urllib.parse, concurrent.futures as cf
-KEY = open('/root/.config/tago.key').read().strip()
+KEY = open(os.environ.get('TAGO_KEY', '/root/.config/tago.key')).read().strip()
 day = sys.argv[1]
 CACHE = os.path.expanduser('~/.cache/tago-bus'); os.makedirs(CACHE, exist_ok=True)
 def get(dep, arr):
