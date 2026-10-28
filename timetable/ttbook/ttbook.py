@@ -582,7 +582,7 @@ class Inline:
                 lines[-1].append(('obj', r'\vbox{\hbox to %.3fbp{\hss\rotatebox{-90}{%s}\hss}\kern%.3fbp}' % (
                     1.0 * em_, self.run('➡', c2.but(font='DG')), 0.1 * em_), 1.0 * c2.size, 1.2 * c2.size, c2.size))
                 continue
-            if 'jtt-b' in cls: c2 = c2.but(font='DGB', size=c2.size * 1.2)
+            if 'jtt-b' in cls: c2 = c2.but(font='GB' if ctx.font == 'M' else 'DGB', size=c2.size * 1.2)      # 굵은 역・정류장 이름 속 숫자(세종2청사)는 시각 숫자(DiaPro) 말고 여느 고딕 굵게
             elif 'jtt-k' in cls: c2 = c2.but(font='DGB')
             if 'jtt-g' in cls: c2 = c2.but(size=c2.size * 1.2)
             self._walk(k, c2, lines)

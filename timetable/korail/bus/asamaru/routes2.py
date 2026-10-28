@@ -360,6 +360,8 @@ for i in range(len(trips)): groups[g(i)].append(trips[i])
 
 BJF_ = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'branch-join.json')
 BJOIN = json.load(open(BJF_)) if os.path.exists(BJF_) else []
+_LAF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'list-also.json')
+LISTALSO = {tuple(p) for p in (json.load(open(_LAF)) if os.path.exists(_LAF) else [])}
 tables, owned = [], set()
 SKIPOWN = set()
 N2T = {x: tr for tr in trips for x in tr['nodes']}
@@ -414,6 +416,7 @@ for grp in groups.values():
     pairs = {(A, D) for tr in grp for A, t, D in tr['nodes']}
     nn = collections.Counter((A, D) for tr in grp for A, t, D in tr['nodes'])
     dense = {p for p in pairs if len(P[p]['t']) > 3 * nn[p] + 5 and not (NNF[p[::-1]] and not dense_raw(p[::-1]))}   # 반대 방향 표가 그 구간을 다 가지면 이쪽도 (서울경부 ⇄ 강릉)      # 이 노선의 차는 몇 편뿐인 촘촘한 구간(광주→목포 따위): 표가 갖지 않고 목록에 둔다
+    dense |= {p for p in pairs if p in LISTALSO}          # list-also.json: 노선표 밖의 차가 많은 구간 (세종터미널 → 서울경부: 연구단지 노선 표 밖에 세종2청사를 거치는 차)
     if isforce: SKIPOWN.update(dense)                    # 그 목록 덩이에서는 표에 실린 편을 빼고 「이 밖에 노선표」
     if isforce: fk0_ = fkey(grp[0]); pairs = {p for p in pairs if NNG[p][fk0_] >= max(NNG[p].values())}
     pairs = {p for p in pairs if p not in owned and p not in SHARED and p not in dense}
@@ -809,11 +812,58 @@ def cells_of(c, st, up=False):
         if c.get('_sub'): return 'c'                                  # 시외는 TAGO 가 끝과 끝만 팔아 사이 정류장은 모름 (통과 아님): 빈칸
         return '↿' if up else 'v'                                     # 통과·지나지 않음: レ
     out_ = [cell(k, s_) for k, s_ in enumerate(st)]
-    # 내리는 곳 여럿에 TAGO 가 같은 착을 붙인 것(수원 → 강원대・삼척해변・삼척 1040): 끝 정류장 말고는 하차 전용이라 착을 모른다 → 마지막만 시각, 앞은 빈칸
+    # 내리는 곳 여럿에 TAGO 가 같은 착을 붙인 것(수원 → 강원대・삼척해변・삼척 1040): 끝 정류장 말고는 하차 전용이라 착을 모른다 → 마지막만 그 시각
+    drop_run = set()
     for k in range(len(st) - 1):
         a_, b_ = st[k], st[k + 1]
-        if a_ in c and b_ in c and c[a_][0] == 'a' and c[b_][0] == 'a' and c[a_][1] == c[b_][1]: out_[k] = 'c'
+        if a_ in c and b_ in c and c[a_][0] == 'a' and c[b_][0] == 'a' and c[a_][1] == c[b_][1]: out_[k] = 'c'; drop_run.add(k)
+    # 빈칸 채우기: 서는 곳이면 시각을 어림한다 (다른 표・반대 방향에서 잰 두 정류장 사이 시간, 없으면 거리 비례), 서지 않으면 통과
+    for k in range(len(st)):
+        if out_[k] != 'c' or k in drop_run: continue
+        s_ = st[k]
+        before = [x for x in st[:k] if x in c]; after = [x for x in st[k + 1:] if x in c]
+        if not (any((x, s_) in P for x in before) or any((s_, y) in P for y in after)): out_[k] = '↿' if up else 'v'
+    tk = {k: m_(out_[k]) for k in range(len(st)) if re.fullmatch(r'\d{3,4}', out_[k])}
+    for _ in range(len(st)):
+        todo = [k for k in range(len(st)) if out_[k] == 'c']
+        if not todo: break
+        done_ = False
+        for k in sorted(todo, reverse=True):
+            s_ = st[k]
+            nx = min((j for j in tk if j > k), default=None); pv = max((j for j in tk if j < k), default=None)
+            cand = []
+            if nx is not None and offs_(s_, st[nx]) is not None: cand.append((tk[nx] - offs_(s_, st[nx])) % 1440)
+            if pv is not None and offs_(st[pv], s_) is not None: cand.append((tk[pv] + offs_(st[pv], s_)) % 1440)
+            if nx is not None and pv is not None and s_ in GEO and st[pv] in GEO and st[nx] in GEO:
+                d1, d2 = km(st[pv], s_), km(s_, st[nx]); span_ = (tk[nx] - tk[pv]) % 1440
+                cand.append((tk[pv] + round(span_ * d1 / max(d1 + d2, 0.1))) % 1440)
+            ok_ = lambda e: pv is None or nx is None or 0 < (e - tk[pv]) % 1440 < (tk[nx] - tk[pv]) % 1440 or (tk[nx] - tk[pv]) % 1440 == 0      # 앞뒤 시각 사이로
+            est = next((e for e in cand if ok_(e)), None)
+            if est is None: continue
+            out_[k] = hm(est); tk[k] = est; done_ = True
+        if not done_: break
     return out_
+_OFFS = None
+def offs_(a, b):
+    """a 에서 b 까지 걸리는 시간 (노선표의 모든 차에서 잰 것의 최빈값, 없으면 반대 방향)"""
+    global _OFFS
+    if _OFFS is None:
+        _OFFS = collections.defaultdict(collections.Counter)
+        for T_, U_ in both:
+            for X_ in (T_, U_):
+                if not X_: continue
+                for c in X_['cols']:
+                    ks_ = [s_ for s_ in c if not s_.startswith('_')]
+                    if len(ks_) < 2: continue
+                    t0 = min(c[s_][1] for s_ in ks_)
+                    seq_ = sorted(ks_, key=lambda s_: (c[s_][1] - t0) % 1440 if (c[s_][1] - t0) % 1440 < 720 else c[s_][1] - t0)
+                    for i_, x in enumerate(seq_):
+                        for y in seq_[i_ + 1:]:
+                            d_ = (c[y][1] - c[x][1]) % 1440
+                            if 0 < d_ < 600: _OFFS[(x, y)][d_] += 1
+    if _OFFS.get((a, b)): return _OFFS[(a, b)].most_common(1)[0][0]
+    if _OFFS.get((b, a)): return _OFFS[(b, a)].most_common(1)[0][0]
+    return None
 def line(c, st, up=False):
     g0, dl_, rem_ = foot(c)
     KB = {'우': '우', '일': '일', '프': '프', '심': '우', '심프': '프', '심일': '일'}          # 목록처럼 한 글자 등급
