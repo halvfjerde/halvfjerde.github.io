@@ -182,6 +182,9 @@ for o in sorted(T):
         if times: dests.append(X)
     if dests: origins.append({'from': o, 'dests': dests})
 print('grade-rotating times', nvar, 'filled as daily', len(FILLED), 'first-week only', len(FIRSTONLY), 'merged 1-min', len(MERGED1), 'sub dropped', dict(SUBDROP), file=sys.stderr)
+_mm = lambda s_: int(s_[:-2]) * 60 + int(s_[-2:])
+_gone = {(o, x, _mm(a if k == b else b)) for o, x, a, b, k in MERGED1}     # 1분 차이로 합쳐 없어진 편은 확인 목록에서도 뺀다
+FILLED = [e for e in FILLED if tuple(e[:3]) not in _gone]; FIRSTONLY = [e for e in FIRSTONLY if tuple(e[:3]) not in _gone]
 json.dump({'filled': FILLED, 'firstonly': FIRSTONLY, 'merged1': MERGED1}, open(os.path.join(HERE_, 'bus-review-data.json'), 'w'), ensure_ascii=False)
 json.dump({'days': days, 'origins': origins}, sys.stdout, ensure_ascii=False, indent=0)
 print('origins', len(origins), 'dests', sum(len(o['dests']) for o in origins), 'times', sum(len(x['times']) for o in origins for x in o['dests']),

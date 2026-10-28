@@ -28,8 +28,11 @@ for T, U in both:
                 for D in sv[i + 1:]: node[(A, c[A][1], D)] = ('표 「%s」' % title, lab, c[sv[0]][1])
 # 2) 목록 덩이: 참조 줄이면 그 덩이로 (seeFrom 은 승차 δ 만큼 앞 시각으로)
 blk = {(O['from'], X['to']): X for O in rest['origins'] for X in O['dests']}
+BOFF = {tuple(k.split('|')): v for k, v in json.load(open('board-offsets.json')).items()}
 def route_of(o, x, t):
     if (o, t, x) in node: return node[(o, t, x)]
+    for (_, B), v in BOFF.items():                     # 노선표에서 승차 분수만큼 뒤로 민 칸
+        if B == o and (o, (t + v) % 1440, x) in node: return node[(o, (t + v) % 1440, x)]
     X = blk.get((o, x))
     if X is None: return ('(없음)', '%s→%s %s' % (nm(o), nm(x), hm(t)), t)
     if 'see' in X: return route_of(o, X['see'], t)

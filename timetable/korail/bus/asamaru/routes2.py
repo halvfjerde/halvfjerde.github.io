@@ -140,20 +140,23 @@ def lin_(q):
     return out_
 fpos = lambda q, s_: next(i for i, x in enumerate(q) if x == s_ or (isinstance(x, list) and s_ in x))
 FORCE_LIN = [l_ for q in FORCE for l_ in lin_(q)]
+# 서로 다른 길(alt-stops.json: 진주개양|진주혁신 따위)은 한 차가 둘 다 들르지 않는다 → 그 둘 사이는 잇지 않는다
+ALTP = {(x, y) for A_ in json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'alt-stops.json')))
+        for g in A_ for g2 in A_ if g2 is not g for x in g for y in g2}
 have = {(D, A, B) for D, A, B, *_ in LB}
 haved = {(A, D1, D2) for A, D1, D2, *_ in LD}
 for seq in FORCE_LIN:
     for i, A in enumerate(seq):
         for B in seq[i + 1:]:
             for D in seq[seq.index(B) + 1:]:                 # 타는 곳: A 다음 B, 둘 다 D 로
-                if (A, D) in P and (B, D) in P and (D, A, B) not in have and len(P[(B, D)]['t']) <= 20:      # B→D 가 촘촘하면(전주→광주 따위) 어느 편에 이어지는지 시각으로 알 수 없다
+                if (A, D) in P and (B, D) in P and (D, A, B) not in have and len(P[(B, D)]['t']) <= 20 and (A, B) not in ALTP:      # B→D 가 촘촘하면(전주→광주 따위) 어느 편에 이어지는지 시각으로 알 수 없다
                     ta, tb = P[(A, D)]['t'], P[(B, D)]['t']
                     cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb) for d in range(0, 421)}
                     dd_ = P[(A, D)]['dur'] - P[(B, D)]['dur']
                     d = max(cnt, key=lambda d: (cnt[d], -abs(d - dd_)))          # 같으면 소요 차에 가까운 δ
                     if cnt[d] >= 1 and abs(d - dd_) <= max(30, 0.2 * abs(dd_)): LB.append((D, A, B, d, cnt[d], 0.0)); have.add((D, A, B))   # 소요 차와 아주 다른 δ 는 우연
             for D2 in seq[i + 1:]:                           # 내리는 곳: A 에서 B(먼저) 거쳐 D2
-                if D2 != B and seq.index(D2) > seq.index(B) and (A, B) in P and (A, D2) in P and (A, B, D2) not in haved:
+                if D2 != B and seq.index(D2) > seq.index(B) and (A, B) in P and (A, D2) in P and (A, B, D2) not in haved and (B, D2) not in ALTP:
                     n = len(set(P[(A, B)]['t']) & set(P[(A, D2)]['t']))
                     if n >= 1: LD.append((A, B, D2, n, 0.0)); haved.add((A, B, D2))
 
@@ -281,7 +284,7 @@ for grp in groups.values():
     tables.append({'stops': stops, 'board': bset, 'cols': cols, 'pairs': pairs, 'last': L, 'force': isforce} | ({'branch': brs_, 'brmain': brm_} if len(set(brs_.values())) > 1 else {}))
 
 # 이틀씩 번갈아 다니는 노선(alt-routes.json): 등급마다 서는 곳이 다르다 (수원 ― 삼척: 프리미엄은 강원대, 우등은 삼척해변).
-# 한 시각에 등급마다 한 칸씩, 운행일은 「2일교대」. 자동으로 만든 표 가운데 이 정류장들만 쓰는 것은 버리고 새로 짠다
+# 한 시각에 한 칸: 등급마다 들르는 곳을 모두 싣고 시각은 느린 쪽, 비고에 등급마다 들르는 곳. 자동으로 만든 표 가운데 이 정류장들만 쓰는 것은 버리고 새로 짠다
 ALTF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'alt-routes.json')
 for R_ in (json.load(open(ALTF)) if os.path.exists(ALTF) else []):
     seq_, S_ = R_['seq'], set(R_['seq'])
@@ -291,6 +294,7 @@ for R_ in (json.load(open(ALTF)) if os.path.exists(ALTF) else []):
         if (path0[0], path0[-1]) not in P: continue
         cols, prs_ = [], set()
         for t in sorted(P[(path0[0], path0[-1])]['t'], key=lambda t: t + (1440 if t < 240 else 0)):
+            m_c = {}
             for v, mine in R_['variants'].items():
                 path = [s_ for s_ in path0 if s_ not in vst_ or s_ in mine]
                 c, brd = {path[0]: ('d', t)}, [(path[0], t)]
@@ -302,8 +306,10 @@ for R_ in (json.load(open(ALTF)) if os.path.exists(ALTF) else []):
                         if (S2, B) in P and ts in P[(S2, B)]['t']: c[B] = ('a', (ts + P[(S2, B)]['dur']) % 1440); break
                 for A, ta in brd:
                     prs_ |= {(A, D) for D in path[path.index(A) + 1:] if D in c and (A, D) in P}
-                c.update({'_w': [v] * 7, '_sub': False, '_days': R_['label']})
-                cols.append(c)
+                for s_, x in c.items():
+                    if s_ not in m_c or (x[1] - t) % 1440 > (m_c[s_][1] - t) % 1440: m_c[s_] = x
+            m_c.update({'_w': ['◆'] * 7, '_sub': False, '_note': R_['note']})
+            cols.append(m_c)
         tables.append({'stops': [s_ for s_ in path0 if any(s_ in c for c in cols)], 'board': {s_ for c in cols for s_, x in c.items() if not s_.startswith('_') and x[0] == 'd'},
                        'cols': cols, 'pairs': prs_, 'last': path0[-1], 'force': True})
         owned |= prs_
@@ -491,7 +497,7 @@ def foot(c):
         g1 = w[diff[0]]
         rem_ = '%s/%s{%s}' % (''.join(WD[d] for d in diff), 'BS' if g1.startswith('심') else 'S', {'심': '우', '심프': '프', '심일': '일'}.get(g1, g1))
     if c.get('_sub'): rem_ = '†' if rem_ == '_' else '†/' + rem_          # 시외버스로 파는 편
-    if c.get('_days'): return g0, c['_days'], rem_                       # 이틀씩 번갈아 (alt-routes.json)
+    if c.get('_note'): rem_ = c['_note']                                  # 등급마다 들르는 곳 (alt-routes.json)
     return g0, wdl([d for d in range(7) if w[d]]), rem_
 BR = {}
 ALT = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'alt-stops.json')))
@@ -596,6 +602,10 @@ for A, B_, D in PART:
         pmark[(D, A)] = ({t for t in ta if t in tb}, '◇ 경유 %s %s' % (nm(B_), hmd(P[(D, B_)]['dur'])))
         pfold[(D, B_)] = ('see', A, pmark[(D, A)][0])
 own = {p for T in tables for p in T['pairs']}
+_cov = {(A, c[A][1], D) for T in tables for c in T['cols'] for A in c if not A.startswith('_') and c[A][0] == 'd' for D in c if not D.startswith('_') and D != A}
+_bo = {tuple(k.split('|')): v for k, v in json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'board-offsets.json'))).items()}
+LOST = sorted((A, hm(t), D) for A, D in own for t in P[(A, D)]['t'] if (A, t, D) not in _cov and not any(B == A and (A, (t + v) % 1440, D) in _cov for (_, B), v in _bo.items()))
+if LOST: print('표가 가진 구간인데 표에 없는 편', len(LOST), LOST[:12], file=sys.stderr)
 for O in b['origins']: O['dests'] = [X for X in O['dests'] if (O['from'], X['to']) not in own]
 b['origins'] = [O for O in b['origins'] if O['dests']]
 for O in b['origins']:
