@@ -214,6 +214,29 @@ for M_ in (json.load(open(_MT)) if os.path.exists(_MT) else []):
     X_['times'].sort(key=lambda t: int(t[0][:-2]) * 60 + int(t[0][-2:]))
     O_['dests'].sort(key=lambda X: X['to'])
 origins.sort(key=lambda O: O['from'])
+# 오가는 편의 요일 맞추기: 한 구간(A ⇄ B) 두 방향의 요일 한정 편 가운데, 한 편의 다니는 날이 그 구간에 두 번 넘게 나오는 요일 묶음보다 하루만 모자라면 그 묶음으로
+# (성남 → 부산 16:30 금토 → 금토일: 성남 07:30 · 부산 09:30 · 14:30 이 금토일). 시각표로 받은 편(manual-trips)은 건드리지 않는다
+_MAN = {(M_['from'], M_['to'], t) for M_ in (json.load(open(_MT)) if os.path.exists(_MT) else []) for t in M_['times']}
+_PX = {(O['from'], X['to']): X for O in origins for X in O['dests']}
+ALIGN = []
+for (a_, b_), X in _PX.items():
+    if a_ > b_ and (b_, a_) in _PX: continue
+    trs = [(p_, t) for p_ in ((a_, b_), (b_, a_)) if p_ in _PX for t in _PX[p_]['times'] if (p_[0], p_[1], t[0]) not in _MAN]
+    mk = lambda t: tuple(1 if g else 0 for g in t[2])
+    cnt = collections.Counter(mk(t) for _, t in trs if 1 < sum(mk(t)) < 7)
+    nall = sum(len(_PX[p_]['times']) for p_ in ((a_, b_), (b_, a_)) if p_ in _PX)
+    if nall > 40: continue                                # 편이 많은 구간은 오가는 짝을 가리기 어렵다 (다섯 주 판정대로)
+    for p_, t in trs:
+        m = mk(t)
+        if not (1 < sum(m) < 6) or cnt[m] != 1: continue  # 그 구간에서 하나뿐인 요일 묶음만
+        sup = [M for M, n in cnt.items() if n >= 2 and sum(M) == sum(m) + 1 and all(M[d] >= m[d] for d in range(7))]
+        if not sup: continue
+        M = max(sup, key=lambda M: cnt[M])
+        g0 = collections.Counter(g for g in t[2] if g).most_common(1)[0][0]
+        d = next(d for d in range(7) if M[d] and not m[d])
+        t[2][d] = g0; ALIGN.append([p_[0], p_[1], t[0], WD[d]])
+json.dump(ALIGN, open(os.path.join(HERE_, 'align-days.log.json'), 'w'), ensure_ascii=False, indent=0)
+print('요일 맞춤', len(ALIGN), file=sys.stderr)
 _mm = lambda s_: int(s_[:-2]) * 60 + int(s_[-2:])
 _gone = {(o, x, _mm(a if k == b else b)) for o, x, a, b, k in MERGED1}     # 1분 차이로 합쳐 없어진 편은 확인 목록에서도 뺀다
 FILLED = [e for e in FILLED if tuple(e[:3]) not in _gone]; FIRSTONLY = [e for e in FIRSTONLY if tuple(e[:3]) not in _gone]
