@@ -58,7 +58,9 @@ SUBT -= EXPT
 def wdl(ws):
     ws = sorted(ws)
     if ws == [0, 1, 2, 3, 4]: return '월∼금'
-    if len(ws) >= 3 and ws == list(range(ws[0], ws[-1] + 1)): return WD[ws[0]] + '∼' + WD[ws[-1]]
+    if len(ws) >= 3 and len(ws) < 7:                     # 이어진 요일은 「금∼월」처럼 (주를 넘어 이어져도)
+        for s0 in ws:
+            if sorted((s0 + k) % 7 for k in range(len(ws))) == ws: return WD[s0] + '∼' + WD[(s0 + len(ws) - 1) % 7]
     return '・'.join(WD[w] for w in ws)
 # 두 주(이레 × 2)를 맞대어:
 # · 다니는 요일: 나중 주에 한 번이라도 다니는 편만 싣고, 두 주 가운데 한 번이라도 다닌 요일은 다니는 날로 (하루 빠진 것은 거의 임의 결행)
