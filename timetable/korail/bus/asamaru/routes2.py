@@ -442,7 +442,11 @@ for O in b['origins']:
     for r, ms in chains.trees(blocks):
         xs = sorted(ms + [r], key=lambda x: blocks[x][1])
         if not chains.sure(blocks, xs): continue
-        if not chains.ordered(blocks, xs): REVIEW.append((O['from'], xs)); continue
+        sq_ = next((q for q in SEQ if O['from'] in q and all(x in q for x in xs)), None)     # 사람이 확인한 차례(stop-order.json)가 있으면 그대로
+        if sq_:
+            i0 = sq_.index(O['from'])
+            xs = sorted(xs, key=lambda x: abs(sq_.index(x) - i0))
+        elif not chains.ordered(blocks, xs): REVIEW.append((O['from'], xs)); continue
         far = {}                                          # 발차 → 가장 먼 행선지
         for x in xs:
             for t in blocks[x][0]: far[t] = x
