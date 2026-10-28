@@ -183,6 +183,19 @@ for o in sorted(T):
         if times: dests.append(X)
     if dests: origins.append({'from': o, 'dests': dests})
 print('grade-rotating times', nvar, 'filled as daily', len(FILLED), 'first-week only', len(FIRSTONLY), 'merged 1-min', len(MERGED1), 'sub dropped', dict(SUBDROP), file=sys.stderr)
+# TAGO 에 없는 편(manual-trips.json: 시각표로 안 것)을 덧붙인다 — 요일은 매일, 등급 하나
+_MT = os.path.join(HERE_, 'manual-trips.json')
+for M_ in (json.load(open(_MT)) if os.path.exists(_MT) else []):
+    O_ = next((O for O in origins if O['from'] == M_['from']), None)
+    if O_ is None: O_ = {'from': M_['from'], 'dests': []}; origins.append(O_)
+    X_ = next((X for X in O_['dests'] if X['to'] == M_['to']), None)
+    if X_ is None: X_ = {'to': M_['to'], 'dur': M_['dur'], 'fare': M_.get('fare'), 'times': []}; O_['dests'].append(X_)
+    _h = lambda m: '%d%02d' % (m // 60 % 24, m % 60)
+    have_ = {t[0] for t in X_['times']}
+    X_['times'] += [[t, _h(int(t[:-2]) * 60 + int(t[-2:]) + M_['dur']), [M_['grade']] * 7] for t in M_['times'] if t not in have_]
+    X_['times'].sort(key=lambda t: int(t[0][:-2]) * 60 + int(t[0][-2:]))
+    O_['dests'].sort(key=lambda X: X['to'])
+origins.sort(key=lambda O: O['from'])
 _mm = lambda s_: int(s_[:-2]) * 60 + int(s_[-2:])
 _gone = {(o, x, _mm(a if k == b else b)) for o, x, a, b, k in MERGED1}     # 1분 차이로 합쳐 없어진 편은 확인 목록에서도 뺀다
 FILLED = [e for e in FILLED if tuple(e[:3]) not in _gone]; FIRSTONLY = [e for e in FIRSTONLY if tuple(e[:3]) not in _gone]
