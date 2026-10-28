@@ -778,6 +778,8 @@ def merge_board(D, os_, strict=False):
             for t in Y['times']:
                 if (m_(t[0]) + e) % 1440 in got: t.append('◇')
             Y['vnote'] = '◇ 승차 %s%s' % (nm(o), ' ' + es if es else '')
+        elif ' %s ' % nm(o) in Y['vnote'] + ' ' and {m_(t[0]) for t in Y['times'] if '◇' in t[3:]} == {t for t in tA if (t + e) % 1440 in got}:
+            Y['vnote'] += '・승차 %s' % es if es else '・승차'      # 같은 ◇ 편이 그 정류장에 내리고 타기도: 「◇ 경유 황간 30분・승차 +30분」
         else: continue
         rest_ = [t for t in X['times'] if m_(t[0]) not in got]
         if rest_: X['times'] = rest_; X['vnote3'] = '이 밖에 %s 발 %d편도 탐' % (nm(A), len(got))
