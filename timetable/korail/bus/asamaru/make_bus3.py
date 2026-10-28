@@ -44,7 +44,7 @@ for o in sorted(T):
             m = ''
             if ws != ALL:
                 k = wdl(ws)
-                if k not in marks: marks[k] = 'abcdefghijklmnopqrstuvwxyz'[len(marks)]; lab.append([marks[k], k])
+                if k not in marks: marks[k] = (lambda n: 'abcdefghijklmnopqrstuvwxyz'[n] if n < 26 else 'z%d' % n)(len(marks)); lab.append([marks[k], k])
                 m = marks[k]
             times.append(['%d%02d' % (t // 60 % 24, t % 60), g, m])
         ds = [du for du, _ in info[o][x]]; fs = [c for _, c in info[o][x] if c]

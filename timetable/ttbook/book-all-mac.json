@@ -198,5 +198,6 @@
   "sub": "2026년 11월호"
  },
  "air": "air.json",
- "airCodes": "iata2icao.json"
+ "airCodes": "iata2icao.json",
+ "bus": "bus.json"
 }

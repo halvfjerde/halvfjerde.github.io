@@ -3608,6 +3608,13 @@ class Book:
         per = max(1, int((colw - LW - 2 * pad) / (TS + MK)))
         NW = colw - LW - 2 * pad                            # 주(요일 표지 풀이)의 글줄 폭
         wn = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.72)), len(t)) * fs
+        HS = 0.82
+        def mkw(tg):
+            g = tg[1]; dm = tg[2] if len(tg) > 2 else ''
+            w = 0.0
+            if g: w += self.inl.wc.get(self.inl.run(g, Ctx('M', 0.6)), len(g)) * fs
+            if dm: w += self.inl.wc.get(self.inl.run(dm, Ctx('M', 0.7).but(hscale=HS)), len(dm)) * fs
+            return w
         def note_lines(notes):
             out, cur = [], ''
             for m_, lab in notes:
@@ -3624,7 +3631,10 @@ class Book:
             ents = []
             for X in O['dests']:
                 X['_nl'] = note_lines(X.get('notes', []))
-                n = max(2, -(-len(X['times']) // per) + len(X['_nl']))
+                mw = max([mkw(tg) for tg in X['times']] + [0])
+                X['_mk'] = (mw + 0.15 * fs) if mw else 0.25 * fs        # 표지 칸은 행선지마다 가장 넓은 표지에 맞춤
+                X['_per'] = max(1, int((NW + X['_mk']) / (TS + X['_mk'])))
+                n = max(2, -(-len(X['times']) // X['_per']) + len(X['_nl']))
                 ents.append((X, n))
             i = 0
             while i < len(ents):
@@ -3669,12 +3679,12 @@ class Book:
                     tex.append(self.put_box(xx + pad, yy + R, LW, R, self.inl.run(du + ' ' + fa, Ctx('M', 0.72).but(hscale=HS)), 'l', 'm'))
                     for m_, tg in enumerate(X['times']):
                         t, g = tg[0], tg[1]; dm = tg[2] if len(tg) > 2 else ''
-                        r_, c_ = divmod(m_, per)
-                        tx = xx + LW + pad + c_ * (TS + MK)
+                        r_, c_ = divmod(m_, X['_per'])
+                        tx = xx + LW + pad + c_ * (TS + X['_mk'])
                         tex.append(self.put_box(tx, yy + r_ * R, TS, R, self.inl.run(t, Ctx('DM', 1.0)), 'r', 'm'))
                         mk_ = (self.inl.run(g, Ctx('M', 0.6)) if g else '') + (self.inl.run(dm, Ctx('M', 0.7).but(hscale=HS)) if dm else '')
-                        if mk_: tex.append(self.put_box(tx + TS + 0.1 * fs, yy + r_ * R, MK, R, mk_, 'l', 'm'))
-                    tr_ = -(-len(X['times']) // per)
+                        if mk_: tex.append(self.put_box(tx + TS + 0.1 * fs, yy + r_ * R, X['_mk'], R, mk_, 'l', 'm'))
+                    tr_ = -(-len(X['times']) // X['_per'])
                     for li, ln in enumerate(X.get('_nl', [])):      # 요일 표지 풀이: 시각들 밑에
                         tex.append(self.put_box(xx + LW + pad, yy + (tr_ + li) * R, colw - LW - 2 * pad, R, self.inl.run(ln, Ctx('M', 0.72)), 'l', 'm'))
                     yy += n * R
