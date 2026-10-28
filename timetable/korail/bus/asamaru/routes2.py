@@ -19,6 +19,19 @@ m_ = lambda s: int(s[:-2]) * 60 + int(s[-2:])
 hm = lambda x: '%d%02d' % (x // 60 % 24, x % 60)
 hmd = lambda m: ('%d시간' % (m // 60) if m >= 60 else '') + (' ' if m >= 60 and m % 60 else '') + ('%d분' % (m % 60) if m % 60 or m < 60 else '')
 WD = '월화수목금토일'
+_OTF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'only-trips.json')
+for k_, v_ in (json.load(open(_OTF)) if os.path.exists(_OTF) else {}).items():     # 시각표에 있는 편만 (그 밖의 TAGO 편은 뺀다)・소요 고침
+    A_, D_ = k_.split('|')
+    for O in b['origins']:
+        if O['from'] != A_: continue
+        for X in O['dests']:
+            if X['to'] != D_: continue
+            if 'times' in v_: X['times'] = [t for t in X['times'] if t[0] in v_['times']]
+            if 'dur' in v_:
+                X['dur'] = v_['dur']
+                for t in X['times']:
+                    if t[1]: t[1] = '%d%02d' % divmod((m_(t[0]) + v_['dur']) % 1440, 60)
+        O['dests'] = [X for X in O['dests'] if X.get('times')]
 P = {}                                                   # (A, D) → 소요·요금·{발 분: 요일 칸}
 for O in b['origins']:
     for X in O['dests']:
