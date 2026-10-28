@@ -3723,7 +3723,8 @@ class Book:
             codes = json.load(open(os.path.join(self.base, cf_), encoding='utf-8')) if cf_ else {}
             ent = sorted(al.items(), key=lambda kv: kv[1])
             NA = 3; nr = -(-len(ent) // NA)
-            hA = TH + nr * R + pad
+            AG = 0.35 * R                                    # 머리 줄과 첫 줄 사이
+            hA = TH + AG + nr * R + pad
             top = max(e[1] for e in ends)
             if top + hA <= yB + 0.01:
                 yAL = yB - hA                                # 쪽 아래에 붙여
@@ -3732,7 +3733,7 @@ class Book:
                 rects.append(('h', x0, x0 + Wf, yAL + TH, 2))
                 cw3 = Wf / NA
                 for i_, (iata, nm) in enumerate(ent):
-                    cx, ry = x0 + (i_ // nr) * cw3 + pad, yAL + TH + (i_ % nr) * R
+                    cx, ry = x0 + (i_ // nr) * cw3 + pad, yAL + TH + AG + (i_ % nr) * R
                     nt = self.inl.run(nm, Ctx('M', 0.9)); ct = self.inl.run('%s　%s' % (iata, codes.get(iata, '')), Ctx('M', 0.9).but(hscale=HS))
                     tex.append(self.put_box(cx, ry, cw3 - 2 * pad, R, nt, 'l', 'm'))
                     tex.append(self.put_box(cx, ry, cw3 - 2 * pad, R, ct, 'r', 'm'))
@@ -3808,9 +3809,10 @@ class Book:
         wsm = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.72).but(hscale=0.82)), len(t)) * fs
         hm_ = self.dur_text
         mm_ = lambda s_: int(s_[:-2]) * 60 + int(s_[-2:])
-        hmc = lambda m: ('%d:%02d' % divmod(int(m), 60)) if m >= 60 else '%d분' % m        # 띠의 짧은 소요 「3:35」「30분」
+        hmc = lambda m: ('%d:%02d' % divmod(int(m), 60)) if m >= 60 else '%d분' % m        # 짧은 소요 「3:35」「30분」
+        hmz = lambda m: '%d:%02d' % divmod(int(m), 60)                                      # 띠: 늘 시:분 「0:10」
         # 덩이 몸: 발차 시각을 줄줄이. 줄 머리는 다니는 날·시외 †
-        LBW = 2.45 * fs + 0.5 * fs                          # 줄 머리 폭 (다니는 날 석 자 + 시외 †)
+        LBW = 2.45 * fs + 0.8 * fs                          # 줄 머리 폭 (다니는 날 석 자 + 시외 † + 줄 앞 여백)
         NT = 3                                              # 한 쪽 한 줄에 발차 시각 셋 (두 방향 합쳐 여섯)
         SW = (hw - LBW) / NT                                # 시각 한 칸: 시각 + 오른쪽 작은 칸(위: ◇ → 따위, 아래: 등급)
         GORD = {'우': 0, '프': 1, '일': 2, '심': 3, '심프': 4, '심일': 5, '◆': 6}
@@ -3831,16 +3833,17 @@ class Book:
                 offs = collections.Counter((mm_(mt[k]) - mm_(t[0])) % 1440 for t, mt, _ in rows if len(mt) > k and mt[k])
                 if not offs: continue
                 o_ = offs.most_common(1)[0][0]
-                el.append((o_, m_[0] + pmk.get(k, ''), ('+' + hmc(o_)) if m_[1] == 'd' else hmc(o_)))
+                el.append((o_, m_[0] + pmk.get(k, ''), hmz(o_)))      # 띠의 시각은 모두 떠나서 걸린 시간 「비아 0:10」 (타는 곳도 + 없이)
             for v in X.get('via', []):
-                el.append((v[1] if v[1] not in (None, X['dur']) else 10 ** 6, v[0], hmc(v[1]) if v[1] not in (None, X['dur']) else ''))
+                el.append((v[1] if v[1] not in (None, X['dur']) else 10 ** 6, v[0], hmz(v[1]) if v[1] not in (None, X['dur']) else ''))
             for s_ in X.get('board', []):
                 n_, _, r_ = s_.partition(' ')
-                el.append((-1, n_, r_.replace('시간 ', ':').replace('시간', ':00').replace('분', '') if r_ else ''))
+                mo_ = re.match(r'\+?(?:(\d+)시간)? ?(?:(\d+)분)?', r_) if r_ else None
+                el.append((-1, n_, hmz(int(mo_.group(1) or 0) * 60 + int(mo_.group(2) or 0)) if mo_ and (mo_.group(1) or mo_.group(2)) else r_))
             el.sort(key=lambda e: e[0])
             sub = []
             if el:
-                parts_ = [O['from']] + ['%s %s' % (e[1], e[2]) if e[2] else e[1] for e in el] + ['%s %s' % (X['to'], hmc(dur0))]
+                parts_ = [O['from']] + ['%s %s' % (e[1], e[2]) if e[2] else e[1] for e in el] + ['%s %s' % (X['to'], hmz(dur0))]
                 cur = ''
                 for k_, p_ in enumerate(parts_):
                     sep_ = '' if k_ == 0 else ' ─ '
@@ -3978,7 +3981,7 @@ class Book:
             if c_ and c_[0][0] == 'e' and c_[0][1] is None:
                 k_ = ilines.index(c_[0])
                 T_ = next(x[1] for x in reversed(ilines[:k_]) if x[0] == 'e' and x[1])
-                c_[0] = ('e', T_ + '(계속)', c_[0][2])
+                c_[0] = ('e', T_, c_[0][2], True)
         self._busidx = dict(IC=IC, icw=icw, IR=IR)
         for k in range(0, len(icols), IC):
             self.bus.append({'idx': icols[k:k + IC]}); self.pages.append({'pieces': [], 'lines': [], 'bus': len(self.bus) - 1, 'busidx': True})
@@ -4025,6 +4028,10 @@ class Book:
                             r_ = self.inl.run(nm_, Ctx('GB', 0.78))
                             tex.append(self.put_box(xx + pad, y, I['icw'] - 2 * pad, I['IR'], r_, 'l', 'm'))
                             xe_ = xx + pad + self.inl.wc.get(r_, len(nm_)) * fs + 0.5 * fs
+                            if len(ln) > 3 and ln[3]:            # 단을 넘어 이어진 터미널: 이름 뒤에 명조로 「（계속）」
+                                r2_ = self.inl.run('（계속）', Ctx('M', 0.66))
+                                tex.append(self.put_box(xe_ - 0.4 * fs, y, I['icw'], I['IR'], r2_, 'l', 'm'))
+                                xe_ += self.inl.wc.get(r2_, 2) * fs + 0.1 * fs
                         tex.append(self.put_box(xe_, y, xx + I['icw'] - pad - xe_, I['IR'], self.inl.run(ln[2], Ctx('M', 0.72).but(hscale=0.82)), 'l', 'm'))
                 if ci: rects.append(('v', xx, y0, yB, 1))
             tex += self.page_side_title(recto, [('', '고속버스')])
@@ -4055,8 +4062,8 @@ class Book:
                     wd_ = self.inl.wc.get(ct_, len(dt_)) * fs
                     w3_ = self.inl.wc.get(self.inl.run('월화수', Ctx('M', 0.78)), 3) * fs
                     if wd_ > w3_ + 0.01: ct_ = self.inl.run(dt_, Ctx('M', 0.78).but(hscale=w3_ / wd_))
-                    tex.append(self.put_box(xL, y, LBW - 0.5 * fs, R, ct_, 'c', 'm'))
-                if sb: tex.append(self.put_box(xL + LBW - 0.5 * fs, y, 0.4 * fs, R, self.inl.run('†', Ctx('M', 0.7)), 'c', 'm'))
+                    tex.append(self.put_box(xL, y, LBW - 0.8 * fs, R, ct_, 'c', 'm'))
+                if sb: tex.append(self.put_box(xL + LBW - 0.8 * fs, y, 0.4 * fs, R, self.inl.run('†', Ctx('M', 0.7)), 'c', 'm'))      # 오른쪽 줄과 띄워
             for k_, c_ in enumerate(cells):
                 xs = xT0 + k_ * SW
                 _, tm_, mk_, gr_ = c_
@@ -4078,11 +4085,11 @@ class Book:
                 if it[0] == 'h':
                     s_['top'] = y + GP + TH; s_['end'] = s_['top'] + CH
                     if it[1] > 0: rects.append(('h', xx, xx + colw, y, 2))
-                    nm_ = '%s ― %s' % (B['L'], B['R']) + ('（계속）' if it[3] else '')
+                    nm_ = '%s ― %s' % (B['L'], B['R'])
                     X0 = B['side'].get(B['L']) or B['side'].get(B['R'])
                     fa = ('{:,}원'.format(X0['fare'][0]) + ('∼' if X0['fare'][1] != X0['fare'][0] else '')) if X0.get('fare') else ''
                     tex.append(self.put_box(xx + pad, y + GP, colw - 2 * pad, TH, self.inl.run(nm_, Ctx('GB', 0.95)), 'l', 'm'))
-                    if not it[3]: tex.append(self.put_box(xx + pad, y + GP, colw - 2 * pad, TH, self.inl.run(fa, Ctx('M', 0.72).but(hscale=HS)), 'r', 'm'))
+                    tex.append(self.put_box(xx + pad, y + GP, colw - 2 * pad, TH, self.inl.run('（계속）' if it[3] else fa, Ctx('M', 0.72).but(hscale=HS)), 'r', 'm'))   # 이어진 덩이는 요금 자리에 「（계속）」
                     for j, sd in enumerate((B['L'], B['R'])):     # 방향 줄: 「광주 발」 … 소요
                         d0 = B['h'][sd][2]
                         tex.append(self.put_box(xs_[j], s_['top'], hw, CH, self.inl.run('%s 발' % sd, Ctx('G', 0.7)), 'l', 'm'))
@@ -4106,10 +4113,7 @@ class Book:
                 for j in (0, 1):
                     ys = s_['lines'][j]
                     if ys: rects.append(('v', xs_[j] + LBW - 0.15 * fs, min(ys), max(ys) + R, 1))     # 줄 머리 | 시각
-            yE = max(s_['end'] for s_ in span.values()) + BG
-            if yB - yE < R: yE = yB                    # 한 줄도 안 남으면 빈 상자 없이 표를 쪽 끝까지 (아래는 여백으로)
-            rects.append(('box', xx, y0, xx + colw, yE, self.rw[1]))
-            if yB - yE >= R: rects.append(('box', xx, yE, xx + colw, yB, self.rw[1]))     # 남는 자리: 빈 상자
+            rects.append(('box', xx, y0, xx + colw, yB, self.rw[1]))      # 단 상자는 늘 쪽 끝까지 (남는 자리에 경계선을 긋지 않는다)
         tex += self.page_side_title(recto, [('', '고속버스')])
         return tex, self.pdf_ops(rects) if rects else ''
 
@@ -4294,17 +4298,23 @@ class Book:
                 yy += h_
         nG = max(1, len(groups))
         cw3 = (W - (nG - 1) * gut) / nG
-        bw_ = 4.2 * fs
+        LGAP = 0.7 * fs                                  # 기호와 글자 사이 (어느 모둠이나 같게)
         for g_, (head_, items) in enumerate(groups):
             xx = x0 + g_ * (cw3 + gut); yy = yl0
             head(xx, yy, cw3, head_); yy += hh
+            sym = []
             for n_, name in items:
                 if n_ is None:
-                    tex.append(self.put_box(xx, yy, cw3, ih, self.inl.run(name, Ctx('M', 1.0)), 'l', 'm'))
+                    mo_ = re.match(r'^(\S)\s+(.*)$', name)          # 「† 시외버스」: 앞 한 자를 기호로
+                    sym.append((self.inl.run(mo_.group(1), Ctx('M', 1.0)), mo_.group(2)) if mo_ else (None, name))
                 else:
                     ln_ = self.inl.lines(rows_[n_], Ctx('M', 1.0)) if n_ < len(rows_) else []
-                    if ln_: tex.append(self.put_box(xx, yy, bw_, ih, self.inl.flat(ln_[0]), 'l', 'm'))
-                    tex.append(self.put_box(xx + bw_, yy, cw3 - bw_, ih, self.inl.run(name, Ctx('M', 1.0)), 'l', 'm'))
+                    sym.append((self.inl.flat(ln_[0]) if ln_ else None, name, self.inl.line_w(ln_[0]) * fs if ln_ else 0))
+            sw_ = max([s3[2] for s3 in sym if len(s3) > 2] + [self.inl.wc.get(s3[0], 0.5) * fs for s3 in sym if len(s3) == 2 and s3[0]] + [0])
+            for s3 in sym:
+                if s3[0] is not None: tex.append(self.put_box(xx, yy, sw_, ih, s3[0], 'c' if len(s3) == 2 else 'l', 'm'))
+                x2_ = xx + (sw_ + LGAP if s3[0] is not None else 0)
+                tex.append(self.put_box(x2_, yy, cw3 - (x2_ - xx), ih, self.inl.run(s3[1], Ctx('M', 1.0)), 'l', 'm'))
                 yy += ih
         if rects: ops.append(self.pdf_ops(rects))
         return [r'\begin{picture}(%.3f,%.3f)' % (self.W, self.H), r'\put(0,0){\pdfextension literal{%s}}' % ' '.join(ops)] + tex + [r'\end{picture}', r'\newpage']
