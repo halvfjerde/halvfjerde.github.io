@@ -280,6 +280,33 @@ for grp in groups.values():
         if len(js_) == 1: c['_br'] = js_.pop()
     tables.append({'stops': stops, 'board': bset, 'cols': cols, 'pairs': pairs, 'last': L, 'force': isforce} | ({'branch': brs_, 'brmain': brm_} if len(set(brs_.values())) > 1 else {}))
 
+# 이틀씩 번갈아 다니는 노선(alt-routes.json): 등급마다 서는 곳이 다르다 (수원 ― 삼척: 프리미엄은 강원대, 우등은 삼척해변).
+# 한 시각에 등급마다 한 칸씩, 운행일은 「2일교대」. 자동으로 만든 표 가운데 이 정류장들만 쓰는 것은 버리고 새로 짠다
+ALTF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'alt-routes.json')
+for R_ in (json.load(open(ALTF)) if os.path.exists(ALTF) else []):
+    seq_, S_ = R_['seq'], set(R_['seq'])
+    for T in [T for T in tables if set(T['stops']) <= S_]: tables.remove(T); owned -= T['pairs']
+    vst_ = {s_ for v in R_['variants'].values() for s_ in v}
+    for path0 in (seq_, seq_[::-1]):
+        if (path0[0], path0[-1]) not in P: continue
+        cols, prs_ = [], set()
+        for t in sorted(P[(path0[0], path0[-1])]['t'], key=lambda t: t + (1440 if t < 240 else 0)):
+            for v, mine in R_['variants'].items():
+                path = [s_ for s_ in path0 if s_ not in vst_ or s_ in mine]
+                c, brd = {path[0]: ('d', t)}, [(path[0], t)]
+                for k, B in enumerate(path[1:], 1):
+                    cand = sorted((not set(x for x in w if x) <= {v}, (tb - t) % 1440, tb) for X in path[k + 1:] if (B, X) in P
+                                  for tb, w in P[(B, X)]['t'].items() if 0 < (tb - t) % 1440 <= 90 and set(x for x in w if x) <= {v, '◆'})
+                    if cand: c[B] = ('d', cand[0][2]); brd.append((B, cand[0][2])); continue          # 그 등급의 차가 타는 곳
+                    for S2, ts in reversed(brd):                                                       # 내리는 곳: 가장 늦게 탄 곳에서 잰 착
+                        if (S2, B) in P and ts in P[(S2, B)]['t']: c[B] = ('a', (ts + P[(S2, B)]['dur']) % 1440); break
+                for A, ta in brd:
+                    prs_ |= {(A, D) for D in path[path.index(A) + 1:] if D in c and (A, D) in P}
+                c.update({'_w': [v] * 7, '_sub': False, '_days': R_['label']})
+                cols.append(c)
+        tables.append({'stops': [s_ for s_ in path0 if any(s_ in c for c in cols)], 'board': {s_ for c in cols for s_, x in c.items() if not s_.startswith('_') and x[0] == 'd'},
+                       'cols': cols, 'pairs': prs_, 'last': path0[-1], 'force': True})
+        owned |= prs_
 GR = {'우': '우등', '일': '일반', '프': '프리', '심': '심우', '심프': '심프', '심일': '심일'}
 def wdl(ws):
     ws = sorted(ws)
@@ -464,6 +491,7 @@ def foot(c):
         g1 = w[diff[0]]
         rem_ = '%s/%s{%s}' % (''.join(WD[d] for d in diff), 'BS' if g1.startswith('심') else 'S', {'심': '우', '심프': '프', '심일': '일'}.get(g1, g1))
     if c.get('_sub'): rem_ = '†' if rem_ == '_' else '†/' + rem_          # 시외버스로 파는 편
+    if c.get('_days'): return g0, c['_days'], rem_                       # 이틀씩 번갈아 (alt-routes.json)
     return g0, wdl([d for d in range(7) if w[d]]), rem_
 BR = {}
 ALT = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'alt-stops.json')))
@@ -530,12 +558,14 @@ for T, U, ttl, part, cols_, ucols in emit:
     pv, pu = None, None
     for i, s_ in enumerate(st):
         ad = '發' if s_ in T['board'] else '着'
+        if pv and not any(s_ in c for c in T['cols']): ad = pv                 # 이 방향으로는 서지 않는 정류장: 앞 줄을 따라 〃
         mk = '*' if i in (0, len(st) - 1) or s_ in T.get('mids', ()) else ''     # 처음·끝, 중간에서 시발·종착하는 주요 정류장 (조준선)
         rl = ''
         bg_ = lambda x: -1 if x in T.get('brmain', ()) else BR.get(x, -1)       # 줄기에 붙는 갈래는 줄기와 한 선
         if BR and i > 0 and bg_(s_) != bg_(st[i - 1]): rl = ' style=bt=1'      # 갈래가 바뀌는 곳(갈래 구간 위아래)에 선
         if U:
             au = '發' if s_ in U['board'] else '着'
+            if pu and not any(s_ in c for c in U['cols']): au = pu
             out.append('%s %s%s %s%s' % (ad if ad != pv else '〃', mk, nm(s_), au if au != pu else '〃', rl))
             pu = au
         else:

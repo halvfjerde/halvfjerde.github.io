@@ -6,7 +6,7 @@
 """
 import runpy, sys, io, contextlib, json, os, re
 what, route, bus, why = sys.argv[1:5]
-assert what in ('daily', 'drop', 'keep')
+assert what in ('daily', 'drop', 'keep', 'alt')      # alt: 이틀씩 번갈아 다니는 편 (alt-routes.json 으로 따로 싣는다, 요일은 손대지 않음)
 HERE = os.path.dirname(os.path.abspath(__file__)); os.chdir(HERE)
 S = '/tmp/claude-0/-home-claude/f0c8a077-152e-527e-9fb9-53dee448f1fc/scratchpad/'
 sys.argv = ['routes2.py', 'bus.json', '/dev/null', S + 'rr.json', S + 'rs.md']
