@@ -3820,8 +3820,9 @@ class Book:
                 head(v, False); i += 1; cur_x = None; continue
             if not col: head(cur_o, True)
             if k == 'r':                                    # 참조 줄: 「서대구 → 동대구 행」「서울경부 → 평택 발 52」
-                if y + DH + SR + BG > cap + 1e-6: cols.append(col); col, y = [], 0.0; continue
-                col.append(('r', y, v, cur_o)); y += DH + SR + BG; i += 1; continue
+                rh_ = DH + SR * (2 if v.get('alsoTable') else 1) + BG          # 「→ 원주 행」 밑에 「→ 노선표」도 (갈래 노선의 편이 표에 실린 것)
+                if y + rh_ > cap + 1e-6: cols.append(col); col, y = [], 0.0; continue
+                col.append(('r', y, v, cur_o)); y += rh_; i += 1; continue
             if k == 'd':
                 cur_x = v
                 hd = DH + SR * len(v['_sub']) + (BG if v['_sub'] else 0)      # 안내 줄 밑에도 덩이 아래만큼 여백
@@ -3909,6 +3910,11 @@ class Book:
                     rc = Ctx('M', 0.72).but(hscale=HS)
                     bx = (r'\kern%.3fbp ' % (0.3 * fs) + self.page_badge(pg_ + first, 0.9, None, 0.72)) if pg_ is not None else ''    # 쪽 번호는 철도처럼 네모 안에
                     tex.append(self.put_box(xx + pad, y, ww - 2 * pad, SR, self.inl.run('→ ' + rt, rc) + bx, 'l', 'm'))
+                    if X.get('alsoTable'):
+                        y += SR
+                        pg2_ = self.bus_tpage.get(self._tkey(X['alsoTable']))
+                        bx2 = (r'\kern%.3fbp ' % (0.3 * fs) + self.page_badge(pg2_ + first, 0.9, None, 0.72)) if pg2_ is not None else ''
+                        tex.append(self.put_box(xx + pad, y, ww - 2 * pad, SR, self.inl.run('→ 노선표', rc) + bx2, 'l', 'm'))
                 elif kd == 'd':
                     X = it[2]
                     if it[1] > 0 and col[col.index(it) - 1][0] in ('t', 'r'): rects.append(('h', xx, xx + ww, y, 1))
@@ -3947,7 +3953,7 @@ class Book:
                         tex.append(self.put_box(xG, y, GW, R, self.inl.run('※', Ctx('M', 0.8)), 'c', 'm'))
                         for d in range(7):
                             if w[d]: tex.append(self.put_box(xD + d * DW, y, DW, R, gmark(w[d], 0.64), 'c', 'm'))
-            yE = y0 + max(it[1] + (TH + GP if it[0] == 'o' else CH if it[0] == 'c' else it[4] if it[0] == 'd' else R + GP + SR + BG if it[0] == 'r' else R + BG) for it in col)
+            yE = y0 + max(it[1] + (TH + GP if it[0] == 'o' else CH if it[0] == 'c' else it[4] if it[0] == 'd' else R + GP + SR * (2 if it[2].get('alsoTable') else 1) + BG if it[0] == 'r' else R + BG) for it in col)
             if st is not None: seg.append((st, lastT if lastT > st else yE))
             for a, b in seg:
                 for xv in (xB, xG, xG + GW): rects.append(('v', xv, a, b, 1))       # 요일 칸 왼쪽 괘선은 등급 칸에 붙여 (점·글자만 가운데로)

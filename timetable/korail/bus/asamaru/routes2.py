@@ -149,12 +149,14 @@ for seq in FORCE_LIN:
     for i, A in enumerate(seq):
         for B in seq[i + 1:]:
             for D in seq[seq.index(B) + 1:]:                 # 타는 곳: A 다음 B, 둘 다 D 로
-                if (A, D) in P and (B, D) in P and (D, A, B) not in have and len(P[(B, D)]['t']) <= 20 and (A, B) not in ALTP:      # B→D 가 촘촘하면(전주→광주 따위) 어느 편에 이어지는지 시각으로 알 수 없다
+                if (A, D) in P and (B, D) in P and (D, A, B) not in have and (A, B) not in ALTP:
                     ta, tb = P[(A, D)]['t'], P[(B, D)]['t']
                     cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb) for d in range(0, 421)}
                     dd_ = P[(A, D)]['dur'] - P[(B, D)]['dur']
                     d = max(cnt, key=lambda d: (cnt[d], -abs(d - dd_)))          # 같으면 소요 차에 가까운 δ
-                    if cnt[d] >= 1 and abs(d - dd_) <= max(30, 0.2 * abs(dd_)): LB.append((D, A, B, d, cnt[d], 0.0)); have.add((D, A, B))   # 소요 차와 아주 다른 δ 는 우연
+                    # B→D 가 촘촘하면(20편 넘게: 전주→광주, 원주문막→서울경부 따위) 아무 δ 로나 몇 편은 맞는다 → A 의 편이 (거의) 모두 같은 δ 로 맞을 때만
+                    ok_ = cnt[d] >= 1 if len(tb) <= 20 else cnt[d] >= max(3, 0.9 * len(ta))
+                    if ok_ and abs(d - dd_) <= max(30, 0.2 * abs(dd_)): LB.append((D, A, B, d, cnt[d], 0.0)); have.add((D, A, B))   # 소요 차와 아주 다른 δ 는 우연
             for D2 in seq[i + 1:]:                           # 내리는 곳: A 에서 B(먼저) 거쳐 D2
                 if D2 != B and seq.index(D2) > seq.index(B) and (A, B) in P and (A, D2) in P and (A, B, D2) not in haved and (B, D2) not in ALTP:
                     n = len(set(P[(A, B)]['t']) & set(P[(A, D2)]['t']))
@@ -194,6 +196,7 @@ for nodes in comp.values():
     first = min(board, key=lambda A: (board[A] - min(board.values())) % 1440)
     w = list(P[(first, next(D for A, t, D in nodes if A == first))]['t'][board[first]])
     for A, t, D in nodes:                               # 다니는 요일: 한 차의 어느 구간에서든 그날 다니면 다닌다 (구간마다 팔린 날이 조금씩 빠지기도)
+        if A != first and len(P[(A, D)]['t']) > 20: continue      # 다만 촘촘한 구간(원주문막→서울경부 따위)은 다른 차와 시각이 겹치기도 해서 요일을 보태지 않는다
         for d_, g_ in enumerate(P[(A, D)]['t'][t]):
             if g_ and not w[d_]: w[d_] = g_
     trips.append({'board': board, 'drop': {D: a for D, (a, _) in drop.items()}, 'w': w, 'nodes': nodes, 'sub': any(x in SUBN for x in nodes)})
@@ -593,7 +596,13 @@ open(sys.argv[2], 'w').write('\n'.join(out))
 # 일부 편만 들르는 정류장 (사람이 확인한 것, partial-stops.json: [A, B, D] = A 발 D 행의 몇 편이 B 에도 선다): 목록의 A→D 에 ◇ 표지와 안내 줄.
 # B 의 편 가운데 노선표에 실린 다른 노선의 차는 빼고 맞춘다
 pmark, pfold = {}, {}                                    # pfold: B 쪽 덩이의 편이 모두 ◇ 편이면 참조 줄로 (가장 긴 구간에 싣는다)
-intab = lambda X, Y: {c[X][1] for T in tables for c in T['cols'] if X in c and Y in c and c[X][0] == 'd'}
+def intab(X, Y):
+    """노선표에 실린 X 발(Y 에 서는) 시각 — 그 시각의 모든 요일이 표의 칸으로 덮일 때만 (원주문막 1245 처럼 월∼목은 기업도시 차, 금∼일은 원주 차인 것은 빼지 않는다)"""
+    cov = collections.defaultdict(set)
+    for T in tables:
+        for c in T['cols']:
+            if X in c and Y in c and c[X][0] == 'd': cov[c[X][1]] |= {d_ for d_ in range(7) if c['_w'][d_]}
+    return {t for t, ds in cov.items() if (X, Y) not in P or t not in P[(X, Y)]['t'] or {d_ for d_ in range(7) if P[(X, Y)]['t'][t][d_]} <= ds}
 for A, B_, D in PART:
     if (A, D) in P and (B_, D) in P:                     # 오는 길: A 발 + δ 에 B 발
         ta, tb = P[(A, D)]['t'], set(P[(B_, D)]['t']) - intab(B_, D)
@@ -620,12 +629,19 @@ for O in b['origins']:
             X['vnote'] = note
             for t in X['times']:
                 if m_(t[0]) in ts: t.append('◇')
+def tab_of(X_, Y_, t_):                                 # 그 편(X_ 발 t_, Y_ 에 섬)이 실린 노선표 이름
+    for T in tables:
+        if any(X_ in c and Y_ in c and c[X_] == ('d', t_) for c in T['cols']): return title_of.get(id(T))
 for O in b['origins']:
     for X in O['dests']:
         k = (O['from'], X['to'])
-        if k in pfold and 'times' in X and {m_(t[0]) for t in X['times']} <= pfold[k][2]:
-            kind, A_, _ = pfold[k]; du_, fa_ = X['dur'], X.get('fare'); to_ = X['to']
-            X.clear(); X.update({'to': to_, kind: A_ if kind == 'seeFrom' else A_, 'dur': du_, 'fare': fa_})
+        if k in pfold and 'times' in X:
+            ts0 = {m_(t[0]) for t in X['times']}
+            tt_ = {t_: tab_of(k[0], k[1], t_) for t_ in ts0 - pfold[k][2]}     # ◇ 편이 아닌 것은 노선표(갈래 노선 따위)에 실렸으면 그리로
+            if all(tt_.values()) and len(set(tt_.values())) <= 1:
+                kind, A_, _ = pfold[k]; du_, fa_ = X['dur'], X.get('fare'); to_ = X['to']
+                X.clear(); X.update({'to': to_, kind: A_ if kind == 'seeFrom' else A_, 'dur': du_, 'fare': fa_})
+                if tt_: X['alsoTable'] = next(iter(tt_.values()))              # 참조 줄 둘: 「→ 원주 행」「→ 노선표」
 # 같은 차 (사람이 확인, same-bus.json): drop [B, D] = B 에 내리는 차는 다 D 까지 간다 → D 덩이에 「경유 B」, B 자리에는 참조 줄.
 # board [A, B] = B 에서 타는 차는 다 A 에서 온다 (TAGO 는 B 에도 A 의 발차 시각을 붙인다) → A 덩이에 「승차 B」, B 발 목록에는 참조 줄
 SAME = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'same-bus.json')))
