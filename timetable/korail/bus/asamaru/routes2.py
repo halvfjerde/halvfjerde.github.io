@@ -821,7 +821,9 @@ def merge_drop(d, xs):
             k = sum(1 for t in mine if t in blocks[y][0])
             if k == len(mine) and mine: vias.append(y)
             elif k: part.append(y)
-        if len({frozenset(t for t in mine if t in blocks[y][0]) for y in part}) > 1 or (part and 'vnote' in d[x]): return False   # ◇ 는 한 묶음(같은 편들)까지
+        same_ = lambda: len(part) == 1 and d[x].get('vnote', '').startswith('◇ 승차 %s' % nm(part[0])) and \
+            {t[0] for t in d[x]['times'] if '◇' in t[3:]} == {t for t in mine if t in blocks[part[0]][0]}      # 같은 ◇ 편이 그 정류장에서 타기도(오는 길 승차를 먼저 합친 것)
+        if len({frozenset(t for t in mine if t in blocks[y][0]) for y in part}) > 1 or (part and 'vnote' in d[x] and not same_()): return False   # ◇ 는 한 묶음(같은 편들)까지
         plan[x] = (mine, vias, part)
     for x in xs:
         mine, vias, part = plan[x]
@@ -836,10 +838,12 @@ def merge_drop(d, xs):
             X['via'] = sorted(vv.values(), key=lambda v: (xs.index(v[0]) if v[0] in xs else -1, v[1]))      # 차례대로
         if part:
             y = part[0]
+            bv_ = X.get('vnote', '')
             for t in X['times']:
-                if t[0] in blocks[y][0]: t.append('◇')
+                if t[0] in blocks[y][0] and '◇' not in t[3:]: t.append('◇')
             X['_part'] = [[z, blocks[z][1], d[z].get('fare')] for z in part]
             X['vnote'] = '◇ 경유 ' + '・'.join('%s %s' % (nm(z), hmd(blocks[z][1])) for z in part)
+            if bv_.startswith('◇ 승차 %s' % nm(y)): X['vnote'] += '・승차' + bv_[len('◇ 승차 %s' % nm(y)):]      # 「◇ 경유 황간 30분・승차 +30분」
         also = collections.Counter(far[t] for t in blocks[x][0] if far[t] != x)
         if also: X['vnote2'] = '이 밖에 ' + ', '.join('%s 행 %d편' % (nm(z), n) for z, n in sorted(also.items(), key=lambda kv: blocks[kv[0]][1])) + '도 섬'
     return True
@@ -908,12 +912,16 @@ nl = 0
 LCH1 = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'list-chains-oneway.json'))) if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'list-chains-oneway.json')) else []
 for seq0 in LCH + LCH1:
     for seq in ((seq0,) if seq0 in LCH1 else (seq0, seq0[::-1])):      # 한 방향만(list-chains-oneway.json): 오는 길은 TAGO 에 타는 곳이 없어 시각으로 이을 수 없는 것
+        rev_ = seq is not seq0
+        if rev_:                                         # 오는 길은 승차를 먼저: 당진 → 기지시(+25분) → 서울호남 이 「당진→기지시」 동네 편 한둘과 우연히 맞아 ◇ 경유가 되지 않게
+            for k, D in enumerate(seq): nl += merge_board(D, seq[:k])
         for i, o in enumerate(seq):
             if o not in OR: continue
             d = {X['to']: X for X in OR[o]['dests'] if 'times' in X}
             xs = [x for x in seq[i + 1:] if x in d]
             if len(xs) >= 2 and merge_drop(d, xs): nl += 1
-        for k, D in enumerate(seq): nl += merge_board(D, seq[:k])
+        if not rev_:
+            for k, D in enumerate(seq): nl += merge_board(D, seq[:k])
 for O in b['origins']:                                  # ◇ 경유가 남은 편 모두에 붙었으면(다른 묶음이 편을 가져간 뒤) 「경유」로
     for X in O['dests']:
         if X.get('_part') and all('◇' in t for t in X['times']):
