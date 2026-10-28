@@ -198,7 +198,7 @@ for M_ in (json.load(open(_MT)) if os.path.exists(_MT) else []):
     if X_ is None: X_ = {'to': M_['to'], 'dur': M_['dur'], 'fare': M_.get('fare'), 'times': []}; O_['dests'].append(X_)
     _h = lambda m: '%d%02d' % (m // 60 % 24, m % 60)
     have_ = {t[0] for t in X_['times']}
-    X_['times'] += [[t, _h(int(t[:-2]) * 60 + int(t[-2:]) + M_['dur']), [M_['grade']] * 7] for t in M_['times'] if t not in have_]
+    X_['times'] += [[t, _h(int(t[:-2]) * 60 + int(t[-2:]) + M_['dur']), [M_['grade']] * 7] + (['시'] if M_.get('sub') else []) for t in M_['times'] if t not in have_]
     X_['times'].sort(key=lambda t: int(t[0][:-2]) * 60 + int(t[0][-2:]))
     O_['dests'].sort(key=lambda X: X['to'])
 origins.sort(key=lambda O: O['from'])

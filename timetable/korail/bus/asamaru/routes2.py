@@ -1078,6 +1078,12 @@ b['names'] = SHORT
 b['tableRefs'] = sorted([A, D, title_of[id(T)], P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
 b['tableRefs'] += sorted(map(list, {tuple(x[:3]) + (x[3], tuple(x[4]) if x[4] else None) for x in SKIPREF}))
 b['tableRefs'] += sorted([A, D, title_of[i_], du_, None] for A, D, i_, du_ in set(EXREF) if i_ in title_of)                  # TAGO 에 없는 끝 정류장 (요금 모름)
+for M_ in json.load(open(os.path.join(HERE2_, 'manual-trips.json'))):     # 시각 모르는 경유지(시각표에 이름만): 「경유 꽃동산・장수」
+    for O in b['origins']:
+        for X in O['dests']:
+            if O['from'] == M_['from'] and X['to'] == M_['to'] and 'times' in X and M_.get('via_names'):
+                vv_ = {v[0] for v in X.get('via', [])}
+                X['via'] = X.get('via', []) + [[n_, None, None] for n_ in M_['via_names'] if n_ not in vv_]
 for O in b['origins']:
     for X in O['dests']: X.pop('_mk1', None); X.pop('_mk2', None)
 json.dump(b, open(sys.argv[3], 'w'), ensure_ascii=False, indent=0)
