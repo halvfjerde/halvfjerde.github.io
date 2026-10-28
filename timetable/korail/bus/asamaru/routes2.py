@@ -808,7 +808,12 @@ def cells_of(c, st, up=False):
         if any(s_ == nv_['stop'] and nv_['from_side'] in c and nv_['to'] in c and c[nv_['from_side']][0] == 'd' for nv_ in NV_): return 'x'    # 그 방향은 거치지 않는 곳 (not-via.json): ‥
         if c.get('_sub'): return 'c'                                  # 시외는 TAGO 가 끝과 끝만 팔아 사이 정류장은 모름 (통과 아님): 빈칸
         return '↿' if up else 'v'                                     # 통과·지나지 않음: レ
-    return [cell(k, s_) for k, s_ in enumerate(st)]
+    out_ = [cell(k, s_) for k, s_ in enumerate(st)]
+    # 내리는 곳 여럿에 TAGO 가 같은 착을 붙인 것(수원 → 강원대・삼척해변・삼척 1040): 끝 정류장 말고는 하차 전용이라 착을 모른다 → 마지막만 시각, 앞은 빈칸
+    for k in range(len(st) - 1):
+        a_, b_ = st[k], st[k + 1]
+        if a_ in c and b_ in c and c[a_][0] == 'a' and c[b_][0] == 'a' and c[a_][1] == c[b_][1]: out_[k] = 'c'
+    return out_
 def line(c, st, up=False):
     g0, dl_, rem_ = foot(c)
     KB = {'우': '우', '일': '일', '프': '프', '심': '우', '심프': '프', '심일': '일'}          # 목록처럼 한 글자 등급
