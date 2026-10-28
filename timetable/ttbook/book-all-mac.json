@@ -57,7 +57,8 @@
   "태백선",
   "목포보성선",
   "교외선",
-  "관광열차"
+  "관광열차",
+  "고속버스"
  ],
  "pageTitle": true,
  "notes": "header",
@@ -210,5 +211,8 @@
   ]
  ],
  "airCodes": "iata2icao.json",
- "bus": "bus.json"
+ "bus": "bus.json",
+ "otherModes": [
+  "고속버스"
+ ]
 }

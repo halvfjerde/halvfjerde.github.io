@@ -2908,6 +2908,7 @@ class Book:
         def fill_blank(c):
             """펼침면을 왼쪽 면에서 시작하느라 통째로 비게 되는 오른쪽 면: 뒤 묶음의 작은 표 한 벌(하행·상행 함께, 한 번에 다 실리는 것)을 앞당겨 채운다"""
             for bunch2 in bunches[cur.get('bi', 0) + 1:]:
+                if bunch2 and bunch2[0].line in self.cfg.get('otherModes', []): continue     # 고속버스 노선표는 철도 쪽 빈 면에 끌어오지 않는다
                 i = 0
                 while i < len(bunch2):
                     unit = [bunch2[i]]
@@ -2956,6 +2957,8 @@ class Book:
         for ln in sorted(dict.fromkeys(T.line for T in tables if hsr(T)), key=lambda x: bo.index(x) if x in bo else len(bo)):
             bunches.append([T for T in tables if hsr(T) and T.line == ln])
         if last: bunches += tail_
+        oth_ = [b for b in bunches if b and b[0].line in self.cfg.get('otherModes', [])]       # 철도 밖(고속버스)은 맨 끝에
+        bunches = [b for b in bunches if not (b and b[0].line in self.cfg.get('otherModes', []))] + oth_
         # 띠 자리: bandPos top | left | auto (auto: 왼쪽 세로 띠로 해야 한 쪽에 두 단이 들어가는 표만 왼쪽으로)
         mode = self.cfg.get('bandPos', 'top')
         def per_page(h):
@@ -3247,8 +3250,13 @@ class Book:
             else:
                 for T, (a, b, c_, d_, e_) in zip((Td, Tu, Sd, Su), old): T.custom_jobs, T.stacked, T.side_with, T.band_left, T.fold = a, b, c_, d_, e_
         rkey = lambda T: (T.line, self.is_ktx(T), route(T))
+        OTH_ = self.cfg.get('otherModes', [])
         for bi, bunch in enumerate(bunches):
             cur['bi'] = bi
+            if bunch and bunch[0].line in OTH_ and not (bi and bunches[bi - 1] and bunches[bi - 1][0].line in OTH_):
+                c = cur['c']                            # 고속버스 노선표는 새 쪽에서
+                while page(c)['pieces']: c += 1
+                cur['c'] = c
             pend = [collections.deque([] if id(T) in prefilled else self.jobs_of(T)) for T in bunch]
             init = [len(q) for q in pend]
             whole = [n <= 1 for n in init]          # 한 번에 다 실리는 표만 당겨 올 수 있다 (짝에 묶여 일감이 없는 표 포함)
@@ -3434,8 +3442,12 @@ class Book:
                 for k, q in enumerate(run):
                     q['vrun'] = (k, sum(r['h'] for r in run) - (len(run) - 1) * fw, len(run))
                     q['vrun_part'] = '・'.join(dict.fromkeys(r['part'] for r in run if r.get('part')))    # 한 칸에 걸친 몇째들: (첫째·둘째)
-        self.pages = pages
+        # 철도 밖의 노선(고속버스 노선표)은 항공 뒤로: 철도 → 항공 → 고속버스(노선표 → 터미널별)
+        OTHER = self.cfg.get('otherModes', [])
+        is_o = lambda pg: pg['pieces'] and all(pc['T'].line in OTHER for pc in pg['pieces'])
+        self.pages = [pg for pg in pages if not is_o(pg)]
         self.plan_air()
+        self.pages += [pg for pg in pages if is_o(pg)]
         self.plan_bus()
         self.plan_back()
 
@@ -3624,6 +3636,17 @@ class Book:
         f = self.cfg.get('bus')
         if not f: return
         data = json.load(open(os.path.join(self.base, f), encoding='utf-8'))
+        # 노선표로 옮긴 구간: 출발 터미널 목록에 참조 줄만 (「센트럴시티(서울) → 익산 ― 센트럴시티(서울) 61」)
+        self.bus_tpage = {}
+        for pi, pg in enumerate(self.pages):
+            for pc in pg['pieces']:
+                if pc['T'].title is not None: self.bus_tpage.setdefault(pc['T'].title.text().strip(), pi)
+        org = {O['from']: O for O in data['origins']}
+        for A, D, tt in data.get('tableRefs', []):
+            if A not in org: org[A] = {'from': A, 'dests': []}; data['origins'].append(org[A])
+            org[A]['dests'].append({'to': D, 'seeTable': tt})
+        data['origins'].sort(key=lambda O: O['from'])
+        for O in data['origins']: O['dests'].sort(key=lambda X: X['to'])
         R, fs = self.R, self.fs
         pad = 0.5 * fs
         TS, GW, DW = 2.7 * fs, 1.2 * fs, 0.85 * fs
@@ -3744,6 +3767,9 @@ class Book:
                     y += GP
                     tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, self.inl.run(X['to'], Ctx('GB', 0.9)), 'l', 'm'))
                     if 'see' in X: rt = '%s 행' % X['see']
+                    elif 'seeTable' in X:
+                        pg_ = self.bus_tpage.get(X['seeTable'])
+                        rt = '노선표%s' % (' %d' % (pg_ + first) if pg_ is not None else '')
                     else:
                         pg_ = self.bus_opage.get(X['seeFrom'])
                         rt = '%s 발%s' % (X['seeFrom'], ' %d' % (pg_ + first) if pg_ is not None else '')
@@ -3900,10 +3926,16 @@ class Book:
         OTHER = self.cfg.get('otherModes', ['고속버스'])     # 철도 밖의 큰 갈래 (노선 이름 = 갈래 이름)
         rail = [(nm, a, b, T) for nm, (a, b, T) in lp.items() if nm not in OTHER]
         seq = [('h', '철도', min(x[1] for x in rail), max(x[2] for x in rail), None)] + [('i',) + x for x in rail]
+        bi_ = [i for i, pg in enumerate(self.pages) if 'bus' in pg]
         for om in OTHER:
-            if om in lp: seq += [('g',), ('h', om, lp[om][0], lp[om][1], None)]
+            if om in lp and not (om == '고속버스' and bi_): seq += [('g',), ('h', om, lp[om][0], lp[om][1], None)]
         for key_, lab_ in (('air', '항공'), ('bus', '고속버스')):
             ai_ = [i for i, pg in enumerate(self.pages) if key_ in pg]
+            if key_ == 'bus' and ai_ and '고속버스' in lp:          # 고속버스: 노선표 + 터미널별 목록을 한 갈래로
+                a_, b_ = lp['고속버스'][0], ai_[-1] + first
+                seq += [('g',), ('h', lab_, a_, b_, None), ('i', '노선별', lp['고속버스'][0], lp['고속버스'][1], None),
+                        ('i', '터미널별', ai_[0] + first, ai_[-1] + first, None)]
+                continue
             if ai_: seq += [('g',), ('h', lab_, ai_[0] + first, ai_[-1] + first, None)]
             if key_ == 'air' and len(getattr(self, 'air_secs', [])) > 1:          # 항공 밑에 장마다
                 for si_, sc_ in enumerate(self.air_secs):
