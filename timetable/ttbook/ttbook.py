@@ -3757,7 +3757,7 @@ class Book:
             """덩이 머리 밑 작은 줄: 「경유 서대구 3:10 19,600∼」, 「승차 평택굿모닝병원・평택대」"""
             out = []
             durs = collections.Counter([v[1] for v in X.get('via', [])] + [X['dur']])      # 소요가 같게 적힌 곳은 소요를 빼고 이름만
-            for lab, toks in (('경유', [v[0] + ' ' + hm_(v[1]) for v in X.get('via', [])]),
+            for lab, toks in (('경유', [v[0] + ('' if v[1] == X['dur'] else ' ' + hm_(v[1])) for v in X.get('via', [])]),      # 소요가 끝과 같게 적힌 곳(TAGO)은 이름만
                               ('승차', X.get('board', []))):
                 if not toks: continue
                 cur = lab

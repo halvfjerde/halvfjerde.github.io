@@ -140,7 +140,8 @@ for seq in FORCE:
                 if (A, D) in P and (B, D) in P and (D, A, B) not in have:
                     ta, tb = P[(A, D)]['t'], P[(B, D)]['t']
                     cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb) for d in range(0, 181)}
-                    d = max(cnt, key=lambda d: cnt[d])
+                    dd_ = P[(A, D)]['dur'] - P[(B, D)]['dur']
+                    d = max(cnt, key=lambda d: (cnt[d], -abs(d - dd_)))          # 같으면 소요 차에 가까운 δ
                     if cnt[d] >= 1: LB.append((D, A, B, d, cnt[d], 0.0)); have.add((D, A, B))
             for D2 in seq[i + 1:]:                           # 내리는 곳: A 에서 B(먼저) 거쳐 D2
                 if D2 != B and seq.index(D2) > seq.index(B) and (A, B) in P and (A, D2) in P and (A, B, D2) not in haved:
@@ -215,7 +216,8 @@ for i in range(len(trips)): groups[g(i)].append(trips[i])
 
 tables, owned = [], set()
 for grp in groups.values():
-    L = collections.Counter(last(tr) for tr in grp).most_common(1)[0][0]          # 끝 행선지가 여럿이면(확인한 노선) 가장 많은 것
+    span = lambda tr: (tr['drop'][last(tr)] - min(tr['board'].values())) % 1440
+    L = last(max(grp, key=span))                      # 끝 행선지가 여럿이면(확인한 노선) 가장 멀리 가는 것
     # 정류장 차례: 끝 행선지 착까지 남은 시간이 긴 차례 (타는 곳), 그다음 내리는 곳은 착이 이른 차례
     rem = collections.defaultdict(list)
     for tr in grp:
@@ -395,6 +397,25 @@ for O in b['origins']:
             X['vnote'] = note
             for t in X['times']:
                 if m_(t[0]) in ts: t.append('◇')
+# 같은 차 (사람이 확인, same-bus.json): drop [B, D] = B 에 내리는 차는 다 D 까지 간다 → D 덩이에 「경유 B」, B 자리에는 참조 줄.
+# board [A, B] = B 에서 타는 차는 다 A 에서 온다 (TAGO 는 B 에도 A 의 발차 시각을 붙인다) → A 덩이에 「승차 B」, B 발 목록에는 참조 줄
+SAME = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'same-bus.json')))
+ts_ = lambda X: {t[0] for t in X.get('times', [])}
+for B_, D in SAME['drop']:
+    for O in b['origins']:
+        d = {X['to']: X for X in O['dests']}
+        if B_ in d and D in d and 'times' in d[B_] and 'times' in d[D] and ts_(d[B_]) <= ts_(d[D]):
+            XB = d[B_]; d[D].setdefault('via', []).append([B_, XB['dur'], XB.get('fare')])
+            XB.clear(); XB.update({'to': B_, 'see': D})
+for A, B_ in SAME['board']:
+    oa = next((O for O in b['origins'] if O['from'] == A), None); ob = next((O for O in b['origins'] if O['from'] == B_), None)
+    if not oa or not ob: continue
+    da = {X['to']: X for X in oa['dests']}
+    for X in ob['dests']:
+        Y = da.get(X['to'])
+        if Y and 'times' in X and 'times' in Y and ts_(X) <= ts_(Y):
+            Y.setdefault('board', []).append(B_)
+            to_ = X['to']; X.clear(); X.update({'to': to_, 'seeFrom': A})
 b['routeOwned'] = sorted('%s→%s' % p for p in own)
 b['names'] = SHORT
 b['tableRefs'] = sorted([A, D, title_of[id(T)], P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
