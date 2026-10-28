@@ -1887,7 +1887,7 @@ class Book:
         return out
 
     def pdf_ops(self, rects):
-        ops, extra = [], []
+        ops, extra, dots = [], [], {}
         H = self.H
         def rect(x, y, w, h):          # 위→아래 좌표
             ops.append('%.3f %.3f %.3f %.3f re' % (x, H - y - h, w, h))
@@ -1915,11 +1915,14 @@ class Book:
                 _, x0, y0, x1, y1, t = r
                 rect(x0, y0, x1 - x0, t); rect(x0, y1 - t, x1 - x0, t)
                 rect(x0, y0, t, y1 - y0); rect(x1 - t, y0, t, y1 - y0)
+            elif r[0] == 'dot':                                # 둥근 점: 길이 0 인 둥근 끝 선
+                dots.setdefault(r[3], []).append('%.2f %.2f m %.2f %.2f l' % (r[1], H - r[2], r[1], H - r[2]))
             elif r[0] in ('line', 'fill', 'closed'):          # 꺾은선(굵기) / 칠한 다각형 / 속 빈 다각형(굵기)
                 pts = ' '.join('%.3f %.3f %s' % (x, H - y, 'm' if i == 0 else 'l') for i, (x, y) in enumerate(r[1]))
                 if r[0] == 'line': extra.append('q %.3f w 0 J 0 j 0 G %s S Q' % (r[2], pts))
                 elif r[0] == 'closed': extra.append('q %.3f w 0 J 0 j 0 G 1 g %s h b Q' % (r[2], pts))
                 else: extra.append('q 0 g %s h f Q' % pts)
+        for d, ps in dots.items(): extra.append('q %.3f w 1 J 0 G %s S Q' % (d, ' '.join(ps)))
         return '0 g ' + ' '.join(ops) + ' f ' + ' '.join(extra)
 
     # ── 글꼴 정의: 이름이 아니라 찾아 둔 파일로 (TeX 쪽 이름 찾기에 기대지 않는다) ──
@@ -3594,103 +3597,111 @@ class Book:
 
     # ── 고속버스: 출발 터미널마다(가나다) 행선지마다 소요·요금과 발차 시각을 죽. 두 단으로 흘려 짠다 ──
     def plan_bus(self):
+        """고속버스: 출발 터미널마다 행선지마다 발차를 한 줄씩. [발 | 착 | 등급 | 월 화 수 목 금 토 일].
+        요일 칸: 다니는 날에 점. 날에 따라 등급이 바뀌는 편은 점 대신 그날 등급 글자를 넣고 등급 칸은 비운다."""
         self.bus = []
         f = self.cfg.get('bus')
         if not f: return
         data = json.load(open(os.path.join(self.base, f), encoding='utf-8'))
         R, fs = self.R, self.fs
-        NC = 2
-        colw = self.cw / NC
         pad = 0.5 * fs
-        TH = 2 * R
-        LW = 6.2 * fs                                       # 행선지 칸 (이름 / 소요·요금)
-        TS, MK = 2.3 * fs, 1.3 * fs                         # 시각 칸, 등급·요일 표지 칸
-        per = max(1, int((colw - LW - 2 * pad) / (TS + MK)))
-        NW = colw - LW - 2 * pad                            # 주(요일 표지 풀이)의 글줄 폭
-        wn = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.72)), len(t)) * fs
-        HS = 0.82
-        def mkw(tg):
-            g = tg[1]; dm = tg[2] if len(tg) > 2 else ''
-            w = 0.0
-            if g: w += self.inl.wc.get(self.inl.run(g, Ctx('M', 0.6)), len(g)) * fs
-            if dm: w += self.inl.wc.get(self.inl.run(dm, Ctx('M', 0.7).but(hscale=HS)), len(dm)) * fs
-            return w
-        def note_lines(notes):
-            out, cur = [], ''
-            for m_, lab in notes:
-                it = '%s %s' % (m_, lab)
-                if cur and wn(cur + '　' + it) > NW: out.append(cur); cur = it
-                else: cur = (cur + '　' + it) if cur else it
-            if cur: out.append(cur)
-            return out
-        cols, col, y = [], [], 0.0
-        def newcol():
-            nonlocal col, y
-            cols.append(col); col, y = [], 0.0
+        TS, GW, DW = 2.7 * fs, 1.2 * fs, 0.85 * fs
+        NC = max(1, int(self.cw / (2 * TS + GW + 7 * DW + 0.9 * fs)))
+        colw = self.cw / NC
+        DW = (colw - 0.7 * fs - 2 * TS - GW) / 7                # 남는 폭은 요일 칸에
+        TH, CH = 1.5 * R, 0.85 * R                          # 출발 터미널 머리, 칸 머리
+        items = []                                          # (종류, 높이, 내용)
         for O in data['origins']:
-            ents = []
+            items.append(('o', O['from']))
             for X in O['dests']:
-                X['_nl'] = note_lines(X.get('notes', []))
-                mw = max([mkw(tg) for tg in X['times']] + [0])
-                X['_mk'] = (mw + 0.15 * fs) if mw else 0.25 * fs        # 표지 칸은 행선지마다 가장 넓은 표지에 맞춤
-                X['_per'] = max(1, int((NW + X['_mk']) / (TS + X['_mk'])))
-                n = max(2, -(-len(X['times']) // X['_per']) + len(X['_nl']))
-                ents.append((X, n))
-            i = 0
-            while i < len(ents):
-                room = self.ch - y - TH - pad
-                k, h = 0, 0.0
-                while i + k < len(ents) and h + ents[i + k][1] * R <= room + 1e-6:
-                    h += ents[i + k][1] * R; k += 1
-                if k == 0:
-                    if col: newcol(); continue
-                    k = 1; h = ents[i][1] * R                    # 한 단보다 긴 행선지 (드묾)
-                col.append({'O': O['from'], 'y': y, 'ents': ents[i:i + k]})
-                y += TH + h + pad
-                i += k
-                if i < len(ents): newcol()
-        if col: newcol()
+                items.append(('d', X))
+                for tg in X['times']: items.append(('t', tg))
+        cols, col, y = [], [], 0.0
+        cur_o = None
+        def head(o, cont):
+            nonlocal y
+            col.append(('o', y, o)); y += TH
+            col.append(('c', y, None)); y += CH
+        i = 0
+        cap = self.ch
+        while i < len(items):
+            k, v = items[i]
+            if k == 'o':
+                cur_o = v
+                if col and y + TH + CH + 3 * R > cap: cols.append(col); col, y = [], 0.0
+                head(v, False); i += 1; cur_x = None; continue
+            if not col: head(cur_o, True)
+            if k == 'd':
+                cur_x = v
+                need = R * (1 + min(3, len(v['times'])))       # 머리 밑에 적어도 세 줄
+                if y + need > cap + 1e-6: cols.append(col); col, y = [], 0.0; continue
+                col.append(('d', y, v, False)); y += R; i += 1; continue
+            if y + R > cap + 1e-6:
+                cols.append(col); col, y = [], 0.0
+                head(cur_o, True); col.append(('d', y, cur_x, True)); y += R
+            col.append(('t', y, v)); y += R; i += 1
+        if col: cols.append(col)
         pages = [cols[k:k + NC] for k in range(0, len(cols), NC)]
-        self._bus = (colw, TH, pad, LW, TS, MK, per)
+        self._bus = (colw, pad, TS, GW, DW, TH, CH)
         for i, p in enumerate(pages):
             self.bus.append(p); self.pages.append({'pieces': [], 'lines': [], 'bus': i})
 
     def bus_page(self, k, x0, recto):
-        fs, H, R = self.fs, self.H, self.R
-        colw, TH, pad, LW, TS, MK, per = self._bus
+        fs, R = self.fs, self.R
+        colw, pad, TS, GW, DW, TH, CH = self._bus
         tex, rects = [], []
         y0 = self.mt
         HS = 0.82
+        WD = '월화수목금토일'
+        rd = 0.16 * fs
+        def dot(cx, cy): rects.append(('dot', cx, cy, 2 * rd))
         for ci, col in enumerate(self.bus[k]):
-            xx = x0 + ci * colw
-            for pc in col:
-                Y = y0 + pc['y']
-                tex.append(self.put_box(xx + pad, Y, colw - 2 * pad, TH, self.inl.run('%s 발' % pc['O'], Ctx('GB', 1.15)), 'l', 'm'))
-                yy = Y + TH
-                rects.append(('h', xx, xx + colw, yy, 2))
-                for j, (X, n) in enumerate(pc['ents']):
-                    if j: rects.append(('h', xx, xx + colw, yy, 1))
-                    nt = self.inl.run(X['to'], Ctx('GB', 0.9))
-                    w_ = self.inl.wc.get(nt, 1) * fs
-                    if w_ > LW - pad: nt = self.inl.run(X['to'], Ctx('GB', 0.9).but(hscale=(LW - pad) / w_))
-                    tex.append(self.put_box(xx + pad, yy, LW, R, nt, 'l', 'm'))
+            xx = x0 + ci * colw + (0.2 * fs if ci else 0)
+            ww = colw - 0.4 * fs
+            xA = xx + 0.15 * fs; xB = xA + TS; xG = xB + TS; xD = xG + GW
+            seg = []                                   # 세로줄을 그을 시각 줄 구간
+            st = None
+            for it in col:
+                kd, y = it[0], y0 + it[1]
+                if kd != 't' and st is not None: seg.append((st, y)); st = None
+                if kd == 'o':
+                    if it[1] > 0: rects.append(('h', xx, xx + ww, y, 2))
+                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, TH, self.inl.run('%s 발' % it[2], Ctx('GB', 1.15)), 'l', 'm'))
+                    rects.append(('h', xx, xx + ww, y + TH, 2))
+                elif kd == 'c':
+                    c = Ctx('G', 0.7)
+                    tex.append(self.put_box(xA, y, TS, CH, self.inl.run('발', c), 'c', 'm'))
+                    tex.append(self.put_box(xB, y, TS, CH, self.inl.run('착', c), 'c', 'm'))
+                    tex.append(self.put_box(xG, y, GW, CH, self.inl.run('등급', c.but(hscale=0.7)), 'c', 'm'))
+                    for d in range(7): tex.append(self.put_box(xD + d * DW, y, DW, CH, self.inl.run(WD[d], c), 'c', 'm'))
+                    rects.append(('h', xx, xx + ww, y + CH, 1))
+                    st = y
+                elif kd == 'd':
+                    X = it[2]
+                    if it[1] > 0 and col[col.index(it) - 1][0] == 't': rects.append(('h', xx, xx + ww, y, 1))
+                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, self.inl.run(X['to'], Ctx('GB', 0.9)), 'l', 'm'))
                     du = '%d:%02d' % (X['dur'] // 60, X['dur'] % 60)
                     fa = ('{:,}'.format(X['fare'][0]) + ('∼' if X['fare'][1] != X['fare'][0] else '')) if X.get('fare') else ''
-                    tex.append(self.put_box(xx + pad, yy + R, LW, R, self.inl.run(du + ' ' + fa, Ctx('M', 0.72).but(hscale=HS)), 'l', 'm'))
-                    for m_, tg in enumerate(X['times']):
-                        t, g = tg[0], tg[1]; dm = tg[2] if len(tg) > 2 else ''
-                        r_, c_ = divmod(m_, X['_per'])
-                        tx = xx + LW + pad + c_ * (TS + X['_mk'])
-                        tex.append(self.put_box(tx, yy + r_ * R, TS, R, self.inl.run(t, Ctx('DM', 1.0)), 'r', 'm'))
-                        mk_ = (self.inl.run(g, Ctx('M', 0.6)) if g else '') + (self.inl.run(dm, Ctx('M', 0.7).but(hscale=HS)) if dm else '')
-                        if mk_: tex.append(self.put_box(tx + TS + 0.1 * fs, yy + r_ * R, X['_mk'], R, mk_, 'l', 'm'))
-                    tr_ = -(-len(X['times']) // X['_per'])
-                    for li, ln in enumerate(X.get('_nl', [])):      # 요일 표지 풀이: 시각들 밑에
-                        tex.append(self.put_box(xx + LW + pad, yy + (tr_ + li) * R, colw - LW - 2 * pad, R, self.inl.run(ln, Ctx('M', 0.72)), 'l', 'm'))
-                    yy += n * R
-                rects.append(('v', xx + LW, Y + TH, yy, 1))
-                yy += pad
-                rects.append(('box', xx, Y, xx + colw, yy, self.rw[1]))
+                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, self.inl.run(du + '　' + fa, Ctx('M', 0.72).but(hscale=HS)), 'r', 'm'))
+                    st = y + R
+                else:
+                    dep, arr, w = it[2]
+                    tex.append(self.put_box(xA, y, TS - 0.25 * fs, R, self.inl.run(dep, Ctx('DM', 1.0)), 'r', 'm'))
+                    tex.append(self.put_box(xB, y, TS - 0.25 * fs, R, self.inl.run(arr, Ctx('DM', 1.0)), 'r', 'm'))
+                    gs = {g for g in w if g}
+                    if len(gs) == 1:
+                        g = next(iter(gs))
+                        if g != '우': tex.append(self.put_box(xG, y, GW, R, self.inl.run(g, Ctx('M', 0.8).but(hscale=HS)), 'c', 'm'))
+                        for d in range(7):
+                            if w[d]: dot(xD + (d + 0.5) * DW, y + R / 2)
+                    else:
+                        for d in range(7):
+                            if w[d]: tex.append(self.put_box(xD + d * DW, y, DW, R, self.inl.run(w[d], Ctx('M', 0.75).but(hscale=0.7 if len(w[d]) > 1 else 0.9)), 'c', 'm'))
+            yE = y0 + max(it[1] + (TH if it[0] == 'o' else CH if it[0] == 'c' else R) for it in col)
+            if st is not None: seg.append((st, yE))
+            for a, b in seg:
+                for xv in (xB, xG, xD): rects.append(('v', xv, a, b, 1))
+            rects.append(('box', xx, y0, xx + ww, yE, self.rw[1]))
         tex += self.page_side_title(recto, [('', '고속버스')])
         return tex, self.pdf_ops(rects) if rects else ''
 
