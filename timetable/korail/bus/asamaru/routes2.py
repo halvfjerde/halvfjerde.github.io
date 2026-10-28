@@ -151,7 +151,8 @@ for seq in FORCE_LIN:
             for D in seq[seq.index(B) + 1:]:                 # 타는 곳: A 다음 B, 둘 다 D 로
                 if (A, D) in P and (B, D) in P and (D, A, B) not in have and (A, B) not in ALTP:
                     ta, tb = P[(A, D)]['t'], P[(B, D)]['t']
-                    cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb) for d in range(0, 421)}
+                    arr_ = {t: t + P[(A, B)]['dur'] for t in ta if (A, B) in P and t in P[(A, B)]['t']}    # 같은 차가 B 에 닿는 때: 그보다 먼저 B 에서 떠날 수는 없다
+                    cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb and (t not in arr_ or arr_[t] - 10 <= t + d <= arr_[t] + 30)) for d in range(0, 421)}   # 닿고 30분 넘게 서 있지도 않는다
                     dd_ = P[(A, D)]['dur'] - P[(B, D)]['dur']
                     d = max(cnt, key=lambda d: (cnt[d], -abs(d - dd_)))          # 같으면 소요 차에 가까운 δ
                     # B→D 가 촘촘하면(20편 넘게: 전주→광주, 원주문막→서울경부 따위) 아무 δ 로나 몇 편은 맞는다 → A 의 편이 (거의) 모두 같은 δ 로 맞을 때만
@@ -169,13 +170,51 @@ def f(x):
     while par[x] != x: par[x] = par[par[x]]; x = par[x]
     return x
 def u(x, y): par[f(x)] = f(y)
+# 사람이 확인한 노선(force-links)의 정류장 셋(타는 곳 A·B, 행선지 D / 출발 A, 내리는 곳 B·D2)으로 이은 마디는 그 노선의 것:
+# 그 마디에는 통계로만 찾은 다른 단서를 잇지 않는다 (배방 605 ← 공주 600 따위 우연)
+FLB = {(D, A, B) for q in FORCE_LIN for i_, A in enumerate(q) for B in q[i_ + 1:] for D in q[q.index(B) + 1:]}
+FLD = {(A, B, D2) for q in FORCE_LIN for i_, A in enumerate(q) for B in q[i_ + 1:] for D2 in q[q.index(B) + 1:]}
+# 그 노선 단서만으로 이은 덩이 가운데 노선의 첫 자리(갈래면 그 정류장들)에서 떠나는 것만 지킨다 (기지시→서산 은 부산 차도 대전복합 차도 탄다)
+fp_ = {}
+def ff_(x):
+    fp_.setdefault(x, x)
+    while fp_[x] != x: fp_[x] = fp_[fp_[x]]; x = fp_[x]
+    return x
+for D, A, B, d, n, pv in LB:
+    if (D, A, B) in FLB:
+        tb = P[(B, D)]['t']
+        for t in P[(A, D)]['t']:
+            if (t + d) % 1440 in tb: fp_[ff_((A, t, D))] = ff_((B, (t + d) % 1440, D))
+for A, D1, D2, n, pv in LD:
+    if (A, D1, D2) in FLD:
+        for t in P[(A, D1)]['t']:
+            if t in P[(A, D2)]['t']: fp_[ff_((A, t, D1))] = ff_((A, t, D2))
+fcomp_ = collections.defaultdict(list)
+for x in list(fp_): fcomp_[ff_(x)].append(x)
+def head_(q):
+    for x in q:
+        xs_ = [y for y in (x if isinstance(x, list) else [x]) if any(y in p_ for p_ in P)]
+        if xs_: return set(xs_)
+    return set()
+FHEAD = [(set(flat_(q)), head_(q)) for q in FORCE]
+FN = set()
+for ns_ in fcomp_.values():
+    st_ = {x[0] for x in ns_} | {x[2] for x in ns_}
+    t0_ = min(x[1] for x in ns_)
+    org_ = {x[0] for x in ns_ if x[1] == t0_}                 # 가장 먼저 떠나는 곳
+    if any(st_ <= qs and org_ & hd for qs, hd in FHEAD): FN |= set(ns_)
 for D, A, B, d, n, pv in LB:
     tb = P[(B, D)]['t']
     for t in P[(A, D)]['t']:
-        if (t + d) % 1440 in tb: u((A, t, D), (B, (t + d) % 1440, D))
+        if (t + d) % 1440 in tb:
+            if (A, B) in P and t in P[(A, B)]['t'] and not (P[(A, B)]['dur'] - 10 <= d <= P[(A, B)]['dur'] + 30): continue      # B 에 닿기 전(또는 한참 뒤) B 발: 다른 차
+            x_, y_ = (A, t, D), (B, (t + d) % 1440, D)
+            if (D, A, B) not in FLB and (x_ in FN or y_ in FN): continue
+            u(x_, y_)
 for A, D1, D2, n, pv in LD:
     t2 = P[(A, D2)]['t']
     for t in P[(A, D1)]['t']:
+        if (A, D1, D2) not in FLD and ((A, t, D1) in FN or (A, t, D2) in FN): continue
         if t in t2: u((A, t, D1), (A, t, D2))
 comp = collections.defaultdict(list)
 for x in list(par): comp[f(x)].append(x)
@@ -209,12 +248,23 @@ def g(i):
     while tp[i] != i: tp[i] = tp[tp[i]]; i = tp[i]
     return i
 seen = {}
+KS_ = {x for p_ in P for x in p_}                       # 자료에 있는 정류장 (아산온양처럼 덧붙인 끝 정류장은 빼고 노선의 끝을 본다)
 def fkey(tr):
     """사람이 확인한 노선(force-links)의 정류장만 지나는 차: 그 노선(방향)으로 한 표에 (끝 정류장이 달라도)"""
     st = set(tr['board']) | set(tr['drop'])
-    if all(len(P[(A, D)]['t']) > 20 for A, t, D in tr['nodes']): return None     # 촘촘한 구간끼리만 맞물린 차(광주→전주·호남제일 따위)는 그 노선의 차로 보지 않는다
+    dense_ = all(len(P[(A, D)]['t']) > 20 for A, t, D in tr['nodes'])     # 촘촘한 구간끼리만 맞물린 차(광주→전주·호남제일 따위)는 그 노선의 차로 보지 않는다
     first = min(tr['board'], key=lambda A: (tr['board'][A] - min(tr['board'].values())) % 1440)
     ks = [i for i, seq in enumerate(FORCE) if st <= set(flat_(seq))]
+    if all(x in SUBN for x in tr['nodes']):              # 시외로만 팔린 차는 그 노선의 첫 정류장에서 떠날 때만 (목포→해남→완도, 여천→광양→동광양 같은 동네 시외는 빼고)
+        def starts_(q):                                  # 노선의 첫 자리(갈래면 그 정류장들) — 자료에 있는 것부터
+            for x in q:
+                xs_ = [y for y in (x if isinstance(x, list) else [x]) if y in KS_]
+                if xs_: return set(xs_)
+            return set()
+        ks = [i for i in ks if first in starts_(FORCE[i])]
+    if dense_:                                          # 다만 노선의 두 끝을 다 지나는 차(서울경부 ― 안성풍림 ― 안성공도 ― 안성: 모든 구간이 촘촘)는 그 노선으로
+        ends_ = lambda q: [x for x in flat_(q) if x in KS_]
+        ks = [i for i in ks if ends_(FORCE[i]) and ends_(FORCE[i])[0] in st and ends_(FORCE[i])[-1] in st]
     agree = lambda q: sum(1 for A in tr['board'] for D in tr['drop'] if A != D and fpos(q, A) < fpos(q, D))      # 타는 곳이 내리는 곳보다 앞인 방향 (TAGO 가 같은 시각을 붙여 첫 정류장이 헷갈려도)
     return min(ks, key=lambda i: (-agree(FORCE[i]), fpos(FORCE[i], first))) if ks else None
 for i, tr in enumerate(trips):
@@ -225,13 +275,16 @@ for i, tr in enumerate(trips):
         else: seen[k] = i
     L = last(tr)
     for A in tr['board']:
-        k = (L, A)
+        k = (L, A, fk is not None)                      # 사람이 확인한 노선의 차는 그 밖의 차와 (끝·타는 곳이 같아도) 섞지 않는다
         if k in seen: tp[g(i)] = g(seen[k])
         else: seen[k] = i
 groups = collections.defaultdict(list)
 for i in range(len(trips)): groups[g(i)].append(trips[i])
 
 tables, owned = [], set()
+SKIPOWN = set()
+N2T = {x: tr for tr in trips for x in tr['nodes']}
+ABSORB = set()                                          # 사람이 확인한 노선 표가 가져간 다른 묶음의 차
 for grp in groups.values():
     span = lambda tr: (tr['drop'][last(tr)] - min(tr['board'].values())) % 1440
     L = last(max(grp, key=span))                      # 끝 행선지가 여럿이면(확인한 노선) 가장 멀리 가는 것
@@ -258,7 +311,7 @@ for grp in groups.values():
     if len(fks) == 1 and None not in fks:               # 사람이 확인한 노선: 그 차례대로 (TAGO 가 같은 시각을 붙인 곳도 차례가 맞게)
         sq0_ = FORCE[fks.pop()]; sq_ = flat_(sq0_)
         stops = sorted({s_ for tr in grp for s_ in list(tr['board']) + list(tr['drop'])}, key=lambda s_: sq_.index(s_) if s_ in sq_ else len(sq_))   # 끝까지 가지 않는 차의 정류장도
-        brs_ = {s_: j for x in sq0_ if isinstance(x, list) for j, s_ in enumerate(x) if s_ in stops}    # 갈래 정류장 → 갈래 번호
+        brs_ = {s_: j for x in sq0_ if isinstance(x, list) for j, s_ in enumerate(sorted(x)) if s_ in stops}    # 갈래 정류장 → 갈래 번호 (이름 차례로: 두 방향 표를 한 표로 합쳐도 같게)
         # [..., "창원", ["진해", "김해"]]: (창원, 진해) 와 (김해) 로 갈린다 — 줄기 쪽 첫 갈래(진해)와 갈리는 정류장(창원)을 한 덩이로, 덩이마다 위아래 선
         brl_ = dict(brs_)                               # 선 긋기: 갈래마다 한 덩이, 갈리는 정류장(창원)은 줄기에 붙는 갈래(진해) 덩이에 → 그 아래(마산)부터 줄기
         for k_, x in enumerate(sq0_):
@@ -274,17 +327,31 @@ for grp in groups.values():
     owned |= pairs
     cols = []
     for tr in grp:
-        cols.append({s: ('d', tr['board'][s]) if s in tr['board'] else ('a', tr['drop'][s]) for s in stops if s in tr['board'] or s in tr['drop']} | {'_w': tr['w'], '_sub': tr['sub']})
+        cols.append({s: ('d', tr['board'][s]) if s in tr['board'] else ('a', tr['drop'][s]) for s in stops if s in tr['board'] or s in tr['drop']} | {'_w': tr['w'], '_sub': tr['sub'], '_tid': id(tr)})
     used = {(A, t, D) for tr in grp for A, t, D in tr['nodes']}
+    skip_ = set()
+    def se_of(q):
+        el_ = lambda x: {y for y in (x if isinstance(x, list) else [x]) if y in KS_}
+        qs = [el_(x) for x in q if el_(x)]
+        return (qs[0], qs[-1]) if qs else (set(), set())
+    se_ = se_of(sq0_) if isforce else (set(), set())
     for A, D in sorted(pairs):                         # 그 구간의 다른 차(정류장을 거치지 않는 차)도 이 표에
         for t, w in P[(A, D)]['t'].items():
             x = (A, t, D)
-            if x in used or (x in par and len(comp.get(f(x), [])) > 1): continue      # 다른 표의 차
+            if x in used: continue
+            if x in par and len(comp.get(f(x), [])) > 1:      # 다른 표의 차 — 다만 사람이 확인한 노선 표면 그 노선 정류장만 지나는 차는 여기 싣는다 (대전청사 발 전주 행: 대전복합을 거치지 않아 노선 차로 못 본 것)
+                tr2 = N2T.get(x)
+                if isforce and tr2 is not None and id(tr2) not in ABSORB and (set(tr2['board']) | set(tr2['drop'])) <= set(stops):
+                    cols.append({s: ('d', tr2['board'][s]) if s in tr2['board'] else ('a', tr2['drop'][s]) for s in stops if s in tr2['board'] or s in tr2['drop']} | {'_w': tr2['w'], '_sub': tr2['sub'], '_tid': id(tr2)})
+                    used |= set(tr2['nodes']); ABSORB.add(id(tr2))
+                continue
+            if isforce and x in SUBN and not (A in se_[0] and D in se_[1]): skip_.add((A, D)); continue    # 사람이 확인한 노선 표에는 노선 중간 구간의 시외(목포→해남 따위 동네 시외)를 싣지 않는다 (처음부터 끝까지 가는 시외는 싣는다: 고창 → 인천공항)
             cols.append({A: ('d', t), D: ('a', (t + P[(A, D)]['dur']) % 1440), '_w': w, '_sub': x in SUBN})
     def key(c):
         for k_, s in enumerate(stops):
             if s in c: return (c[s][1] - 0) % 1440 + (0 if c[s][1] >= 240 else 1440), k_
     cols.sort(key=key)
+    if skip_: pairs -= skip_; owned -= skip_; SKIPOWN.update(skip_)     # 그 구간은 목록에 (표에 실린 편은 빼고)
     for c in cols:                                     # 갈래 끝 노선: 차마다 제 갈래
         js_ = {brs_[s_] for s_ in c if s_ in brs_}
         if len(js_) == 1: c['_br'] = js_.pop()
@@ -338,8 +405,13 @@ def real_board(T):
 cand = sorted([T for T in tables if real_board(T)], key=lambda T: (-len(T['stops']), len(T['cols'])))
 isF = lambda T: T.get('force')
 pick, tot = [T for T in tables if isF(T)], 0             # 사람이 확인한 노선(force-links)은 늘 싣고, 아래 몫에는 세지 않는다
+# 자동으로 고르는 표는 지금까지 실어 온 것(auto-pick.json: 정류장 묶음)으로 묶어 둔다 — 다른 표가 바뀔 때마다 몫이 흔들려 표가 들고 나지 않게
+APF_ = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'auto-pick.json')
+APIN = {frozenset(x) for x in json.load(open(APF_))} if os.path.exists(APF_) else None
+pinok = lambda T: APIN is None or frozenset(T['stops']) in APIN
 for T in cand:
     if T in pick: continue
+    if not pinok(T): continue
     if len(T['cols']) <= int(os.environ.get('MAXC', '16')) and tot + len(T['cols']) <= CAP: pick.append(T); tot += len(T['cols'])
 # 주요·긴 노선: 정류장이 넷 넘는 표를 차 수가 많은 차례로 CAP2 안에서 (한 쪽 폭에 안 들면 접어 아래로)
 CAP2 = int(os.environ.get('CAP2', '80'))
@@ -348,9 +420,11 @@ W1 = int(os.environ.get('W1', '20'))                # 한 쪽 폭에 드는 편 
 fits = lambda n: n <= W1 or n % W1 == 0 or n % W1 >= W1 // 2      # 접었을 때 끝 띠가 너무 짧지 않게
 for T in sorted([T for T in tables if T not in pick and len(T['stops']) >= 4 and fits(len(T['cols']))],
                 key=lambda T: (-len(T['cols']) * len(T['stops']))):       # 주요(차가 많고) 긴(정류장이 많은) 노선부터
-    if tot2 + len(T['cols']) <= CAP2: pick.append(T); tot2 += len(T['cols'])
+    if pinok(T) and tot2 + len(T['cols']) <= CAP2: pick.append(T); tot2 += len(T['cols'])
 for T in tables:                                        # 사람이 확인한 노선(force-links)은 늘 싣는다
     if T not in pick and isF(T): pick.append(T)
+for T in tables:
+    if not T.get('force'): T['cols'] = [c for c in T['cols'] if c.get('_tid') not in ABSORB]
 print('candidates', len(cand), 'picked', len(pick), 'cols', tot, '+', tot2, file=sys.stderr)
 # 상하 병기: 반대 방향 표(겹치는 정류장이 둘 넘고 차례가 거꾸로인 것)가 있으면 웬만하면 한 표로 (고르지 않았어도 반대 방향은 곁들인다).
 # 정류장은 두 방향을 합친 것 (방향마다 서는 곳이 다르기도 하다)
@@ -420,11 +494,12 @@ while True:
     cnt_ = collections.defaultdict(list)
     for p in pool:
         seq = p[0]['stops']
+        fz_ = bool(p[0].get('force') or (p[1] and p[1].get('force')))     # 사람이 확인한 노선 표는 자동으로 고른 표와 섞지 않는다
         for tr_ in set(trunk_of(seq)):
-            if 2 * len(tr_) >= len(seq): cnt_[tr_].append(p)
-    best_ = max(((tr_, ps) for tr_, ps in cnt_.items() if len(ps) >= 2), key=lambda kv: (len(kv[1]), len(kv[0])), default=None)
+            if 2 * len(tr_) >= len(seq): cnt_[(tr_, fz_)].append(p)
+    best_ = max(((tr_, ps) for tr_, ps in cnt_.items() if len(ps) >= 2), key=lambda kv: (len(kv[1]), len(kv[0][0])), default=None)
     if not best_: break
-    tr_, ps = best_
+    (tr_, _), ps = best_
     tr_ = list(tr_)
     mem = []
     for p in ps:
@@ -463,25 +538,33 @@ for k_, (T, U) in enumerate(both):                     # 서울이 있으면 서
 EXTRA = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'extra-stops.json'))) if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'extra-stops.json')) else []
 EXREF = []
 for E_ in EXTRA:
-    if E_.get('lists'): continue                         # 목록용은 아래에서
+    if E_.get('lists') and not E_.get('tables'): continue     # 목록에만 쓰는 것은 아래에서
     af_, sp_, mn_ = E_['after'], E_['stop'], E_['min']
     for T_, U_ in both:
         st_ = T_['stops']
-        if af_ not in (st_[0], st_[-1]) or sp_ in st_: continue
-        if st_[-1] == af_: st_.append(sp_)
-        else: st_.insert(0, sp_)
-        if U_ and U_['stops'] is not st_: U_['stops'] = [sp_] + U_['stops'] if U_['stops'][0] == af_ else U_['stops'] + [sp_]
-        for X_ in (T_, U_):
+        if af_ not in st_: continue
+        i_ = st_.index(af_)
+        if sp_ not in st_:                               # 끝에 이어 붙인다
+            if i_ == len(st_) - 1: st_.append(sp_)
+            elif i_ == 0: st_.insert(0, sp_)
+            else: continue
+            if U_ and U_['stops'] is not st_: U_['stops'] = [sp_] + U_['stops'] if U_['stops'][0] == af_ else U_['stops'] + [sp_]
+        j_ = st_.index(sp_); i_ = st_.index(af_)
+        if abs(j_ - i_) != 1: continue                   # 이미 있으면(반대 방향 자료로) after 바로 옆일 때만
+        for X_, up_ in ((T_, False), (U_, True)):
             if not X_: continue
+            sp_after = (j_ > i_) != up_                   # 이 방향으로 달릴 때 stop 이 after 뒤
             for c in X_['cols']:
-                if af_ not in c: continue
+                if af_ not in c or sp_ in c: continue
                 k_, t_ = c[af_]
-                if k_ == 'a': c[sp_] = ('a', (t_ + mn_) % 1440)
-                elif all((c[s_][1] - t_) % 1440 < 720 for s_ in c if not s_.startswith('_')):       # 그 차가 after 에서 떠난다 → stop 에서 mn 분 앞에
+                ss_ = [s_ for s_ in (st_[::-1] if up_ else st_) if s_ in c]
+                if k_ == 'a' and sp_after and ss_[-1] == af_: c[sp_] = ('a', (t_ + mn_) % 1440)
+                elif k_ == 'd' and not sp_after and ss_[0] == af_:      # 그 차가 after 에서 떠난다 → stop 에서 mn 분 앞에
                     c[sp_] = ('d', (t_ - mn_) % 1440); X_['board'] = set(X_['board']) | {sp_}
             for A, D in list(X_['pairs']):
-                if D == af_: EXREF.append((A, sp_, id(X_), P[(A, D)]['dur'] + mn_))
-                if A == af_: EXREF.append((sp_, D, id(X_), P[(A, D)]['dur'] + mn_))
+                if (A, sp_) in P or (sp_, D) in P: continue
+                if D == af_ and sp_after: EXREF.append((A, sp_, id(X_), P[(A, D)]['dur'] + mn_))
+                if A == af_ and not sp_after: EXREF.append((sp_, D, id(X_), P[(A, D)]['dur'] + mn_))
 BOFF_ = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'board-offsets.json')))
 for T_, U_ in both:                                    # 노선표: TAGO 가 같은 시각을 붙인 타는 곳은 아는 분수만큼 뒤로
     for X_ in (T_, U_):
@@ -640,9 +723,23 @@ for A, B_, D in PART:
 own = {p for T in tables for p in T['pairs']}
 _cov = {(A, c[A][1], D) for T in tables for c in T['cols'] for A in c if not A.startswith('_') and c[A][0] == 'd' for D in c if not D.startswith('_') and D != A}
 _bo = {tuple(k.split('|')): v for k, v in json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'board-offsets.json'))).items()}
-LOST = sorted((A, hm(t), D) for A, D in own for t in P[(A, D)]['t'] if (A, t, D) not in _cov and not any(B == A and (A, (t + v) % 1440, D) in _cov for (_, B), v in _bo.items()))
+_altS = [set(R_['seq']) for R_ in (json.load(open(ALTF)) if os.path.exists(ALTF) else [])]
+LOST = sorted((A, hm(t), D) for A, D in own if not any({A, D} <= q_ for q_ in _altS) for t in P[(A, D)]['t'] if (A, t, D) not in _cov and not any(B == A and (A, (t + v) % 1440, D) in _cov for (_, B), v in _bo.items()))
 if LOST: print('표가 가진 구간인데 표에 없는 편', len(LOST), LOST[:12], file=sys.stderr)
 for O in b['origins']: O['dests'] = [X for X in O['dests'] if (O['from'], X['to']) not in own]
+b['origins'] = [O for O in b['origins'] if O['dests']]
+# 표가 갖지 않은 구간(SKIPOWN: 사람이 확인한 노선 표에 그 밖의 시외를 싣지 않은 것): 목록 덩이에서 표에 실린 편은 빼고 「이 밖에 노선표」
+SKIPREF = []
+for O in b['origins']:
+    for X in O['dests']:
+        k = (O['from'], X['to'])
+        if k not in SKIPOWN or 'times' not in X: continue
+        it_ = intab(*k)
+        if not it_: continue
+        tts_ = {next((title_of.get(id(T)) for T in tables if any(k[0] in c and k[1] in c and c[k[0]] == ('d', t_) for c in T['cols'])), None) for t_ in it_}
+        X['times'] = [t for t in X['times'] if m_(t[0]) not in it_]
+        SKIPREF += [[k[0], k[1], tt, X['dur'], X.get('fare')] for tt in tts_ if tt]
+for O in b['origins']: O['dests'] = [X for X in O['dests'] if 'times' not in X or X['times']]
 b['origins'] = [O for O in b['origins'] if O['dests']]
 # 목록에도 TAGO 에 없는 끝 정류장 (extra-stops.json 의 lists: 그 출발지·행선지와 오가는 것만): after 행을 본떠 stop 행(착 +min), after 발을 본떠 stop 발(발 −min)
 for E_ in EXTRA:
@@ -760,18 +857,21 @@ def merge_board(D, os_, strict=False):
             Y = blk.get(A)
             if not Y or 'times' not in Y: continue
             tA = [m_(t[0]) for t in Y['times']]; tB = {m_(t[0]) for t in X['times']}
+            # 그 차가 B 에 닿기 전에 B 에서 떠날 수는 없다: A 발 같은 시각의 A→B 편(같은 차가 B 에 내려 준다)이 있으면 그 착 −10분 뒤에만
+            arrB = {t: (t + P[(A, o)]['dur']) for t in tA if (A, o) in P and t in P[(A, o)]['t']}
             dd = Y['dur'] - X['dur']
             for e in range(0, 421):
                 far_ = abs(e - dd) > max(15, 0.2 * abs(dd))
                 if far_ and (strict or e > 180): continue
-                k = sum(1 for t in tA if (t + e) % 1440 in tB)
+                k = sum(1 for t in tA if (t + e) % 1440 in tB and (t not in arrB or t + e >= arrB[t] - 10))
                 if far_ and (k < len(tA) or k < 2): continue    # 사람이 준 노선: TAGO 소요(노선마다 하나라 같게 적히기도)와 달라도 편이 모두 같은 δ 로 맞으면 (청양 → 정산 +20분)
                 key_ = (k == len(tA), k, -abs(e - dd))
                 if k and (best is None or key_ > best[0]): best = (key_, k, e, A, tA)
         if not best: continue
         _, k, e, A, tA = best; Y = blk[A]
+        arrB = {t: (t + P[(A, o)]['dur']) for t in tA if (A, o) in P and t in P[(A, o)]['t']}
         if strict and k < min(len(tA), len(X['times'])): continue      # 사람이 보지 않은 묶음: 한쪽 편이 모두 맞을 때만
-        got = {(t + e) % 1440 for t in tA if (t + e) % 1440 in {m_(t[0]) for t in X['times']}}
+        got = {(t + e) % 1440 for t in tA if (t + e) % 1440 in {m_(t[0]) for t in X['times']} and (t not in arrB or t + e >= arrB[t] - 10)}
         if not e: e_ = BOFF.get('%s|%s' % (A, o), 0)
         else: e_ = e
         es = ('+' + hmd(e_)) if e_ else ''
@@ -858,6 +958,7 @@ b['reviewChains'] = [[o] + xs for o, xs in REVIEW]
 b['routeOwned'] = sorted('%s→%s' % p for p in own)
 b['names'] = SHORT
 b['tableRefs'] = sorted([A, D, title_of[id(T)], P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
+b['tableRefs'] += sorted(map(list, {tuple(x[:3]) + (x[3], tuple(x[4]) if x[4] else None) for x in SKIPREF}))
 b['tableRefs'] += sorted([A, D, title_of[i_], du_, None] for A, D, i_, du_ in set(EXREF) if i_ in title_of)                  # TAGO 에 없는 끝 정류장 (요금 모름)
 json.dump(b, open(sys.argv[3], 'w'), ensure_ascii=False, indent=0)
 # 사람이 확인할 목록 (마크다운)

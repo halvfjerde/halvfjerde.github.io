@@ -1325,9 +1325,12 @@ class Book:
             R = (self.inl.flat(ln), self.inl.line_w(ln) * fs, line_height(ln))
         else:
             R = seg(parts[2], Ctx('M', 1.0, color))      # 오른쪽 주(운행일 등): 숫자까지 명조로
-        if L[0] and not C[0] and not R[0]: L, C = ('', 0.0, 0.0), L      # 이름만 있는 띠(관광열차): 가운데에
+        cnode = parts[1]
+        if L[0] and not C[0] and not R[0]: L, C, cnode = ('', 0.0, 0.0), L, parts[0]      # 이름만 있는 띠(관광열차·고속버스): 가운데에
         gap = 1.0 * fs
-        if L[1] + C[1] + R[1] + 2 * gap <= W or not C[0]:
+        if not L[0] and not R[0] and C[0] and C[1] + 2 * gap > W and (W - 2 * gap) / C[1] >= 0.5:
+            C = seg(cnode, ctx.but(hscale=(W - 2 * gap) / C[1]))      # 이름만 있는 좁은 띠(나란히 선 고속버스 노선표): 두 줄로 나누지 않고 가로로 좁혀 한 줄에
+        if L[1] + C[1] + R[1] + 2 * gap <= W + 0.01 or not C[0]:
             plan = [(L[0], C[0], R[0], max(L[2], C[2], R[2], 1.25))]
         else:
             plan = []
@@ -1348,7 +1351,7 @@ class Book:
             for x_ in Ls[1:]: plan.append((x_[0], '', '', max(x_[2], 1.25)))
             # 줄이 바뀌면 가운데(구간)는 다른 한쪽이 있는 반대편으로 민다
             al = 'r' if (L[0] and not R[0]) else 'l' if (R[0] and not L[0]) else 'c'
-            cl = [seg(node) for node in self.split_center(parts[1], W, ctx)]
+            cl = [seg(node) for node in self.split_center(cnode, W, ctx)]
             if any(t[1] > W + 0.01 for t in cl) and (L[0] or R[0]): cl = []     # 아주 좁은 조각(이어지는 끝 몇 편): 구간은 빼고 노선·방향만
             for t in cl:
                 plan.append(('', t[0], '', max(t[2], 1.25), al))
