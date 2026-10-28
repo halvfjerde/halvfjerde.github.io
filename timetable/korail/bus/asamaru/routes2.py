@@ -159,6 +159,7 @@ for nodes in comp.values():
     w = P[(first, next(D for A, t, D in nodes if A == first))]['t'][board[first]]
     trips.append({'board': board, 'drop': {D: a for D, (a, _) in drop.items()}, 'w': w, 'nodes': nodes})
 
+SEQ = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stop-order.json')))   # 확인한 차례들
 # 표 묶음: 끝 행선지(가장 늦게 닿는 곳)가 같고 타는 곳이 겹치는 차끼리
 def last(tr): return max(tr['drop'], key=lambda D: (tr['drop'][D] - min(tr['board'].values())) % 1440)
 tp = list(range(len(trips)))
@@ -187,6 +188,14 @@ for grp in groups.values():
         for D, a in tr['drop'].items():
             if D not in tr['board']: rem[D].append((aL - a) % 1440 - 0.5)
     stops = sorted(rem, key=lambda s: -sum(rem[s]) / len(rem[s]))
+    for seq in SEQ:                                     # 사람이 확인한 정류장 차례 (어느 방향이든)
+        idx = [k for k, s_ in enumerate(stops) if s_ in seq]
+        if len(idx) < 2: continue
+        cur = [stops[k] for k in idx]
+        fw = sorted(cur, key=seq.index); bw = fw[::-1]
+        agree = lambda o: sum(1 for a in range(len(o)) for b_ in range(a + 1, len(o)) if cur.index(o[a]) < cur.index(o[b_]))
+        best = fw if agree(fw) >= agree(bw) else bw
+        for k, s_ in zip(idx, best): stops[k] = s_
     bset = {A for tr in grp for A in tr['board']}
     dset = {D for tr in grp for D in tr['drop']} - bset
     pairs = {(A, D) for tr in grp for A, t, D in tr['nodes']}
@@ -224,7 +233,15 @@ cand = sorted([T for T in tables if real_board(T)], key=lambda T: (-len(T['stops
 pick, tot = [], 0
 for T in cand:
     if len(T['cols']) <= int(os.environ.get('MAXC', '16')) and tot + len(T['cols']) <= CAP: pick.append(T); tot += len(T['cols'])
-print('candidates', len(cand), 'picked', len(pick), 'cols', tot, file=sys.stderr)
+# 주요·긴 노선: 정류장이 넷 넘는 표를 차 수가 많은 차례로 CAP2 안에서 (한 쪽 폭에 안 들면 접어 아래로)
+CAP2 = int(os.environ.get('CAP2', '80'))
+tot2 = 0
+W1 = int(os.environ.get('W1', '20'))                # 한 쪽 폭에 드는 편 수 (어림)
+fits = lambda n: n <= W1 or n % W1 == 0 or n % W1 >= W1 // 2      # 접었을 때 끝 띠가 너무 짧지 않게
+for T in sorted([T for T in tables if T not in pick and len(T['stops']) >= 4 and fits(len(T['cols']))],
+                key=lambda T: (-len(T['cols']) * len(T['stops']))):       # 주요(차가 많고) 긴(정류장이 많은) 노선부터
+    if tot2 + len(T['cols']) <= CAP2: pick.append(T); tot2 += len(T['cols'])
+print('candidates', len(cand), 'picked', len(pick), 'cols', tot, '+', tot2, file=sys.stderr)
 tables = pick
 out = ["{{시각표테마}}", "'''고속버스''' 노선표. 국토교통부 TAGO 고속버스정보(2026년 10월 24∼30일) 기준.", '', '== 고속버스 ==']
 tables.sort(key=lambda T: (T['stops'][0], T['stops'][-1]))
@@ -248,7 +265,7 @@ for T in tables:
     prev = None
     for i, s in enumerate(st):
         ad = '發' if s in T['board'] else '着'
-        out.append('%s%s %s' % ('**' if i in (0, len(st) - 1) else '', s, ad if ad != prev else '〃'))
+        out.append('%s%s %s' % ('*' if i in (0, len(st) - 1) else '', s, ad if ad != prev else '〃'))
         prev = ad
     out += ['', '[trains]']
     for c, (g0, dl_, rem_) in zip(T['cols'], fs_):
@@ -266,7 +283,7 @@ own = {p for T in tables for p in T['pairs']}
 for O in b['origins']: O['dests'] = [X for X in O['dests'] if (O['from'], X['to']) not in own]
 b['origins'] = [O for O in b['origins'] if O['dests']]
 b['routeOwned'] = sorted('%s→%s' % p for p in own)
-b['tableRefs'] = sorted([A, D, '%s ― %s' % (T['stops'][0], T['stops'][-1])] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
+b['tableRefs'] = sorted([A, D, '%s ― %s' % (T['stops'][0], T['stops'][-1]), P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
 json.dump(b, open(sys.argv[3], 'w'), ensure_ascii=False, indent=0)
 # 사람이 확인할 목록 (마크다운)
 rep = ['# 고속버스 노선표: 확인할 것', '', '정류장 차례·경유 여부는 TAGO 구간별 시각을 맞물려 짐작한 것. 아래는 근거가 약하거나 따로 확인되지 않은 것.', '']

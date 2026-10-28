@@ -78,7 +78,7 @@ def label_wk(days):
             else: txt.append(md(a) + '∼' + md(b, a))
         parts.append((wl + ' ' if wl else '') + '・'.join(txt))
     return ', '.join(parts)
-def label_skip(days):
+def label_skip(days, noW=False):
     """요일 W(그 요일 날의 절반 넘게 다님) 위에: 앞뒤를 자른 동안과 「…빼고」 동안, W 밖 요일에 더 다니는 날"""
     days = set(days)
     lo0, hi0 = min(days), max(days)
@@ -96,7 +96,7 @@ def label_skip(days):
             if cur: cur[1] = d
             else: cur = [d, d]
         elif cur: gaps.append(cur); cur = None
-    out = '' if len(W) == 7 else wdl(W)
+    out = '' if (len(W) == 7 or noW) else wdl(W)
     per = ''
     if lo == hi: per = md(lo)
     elif lo != B[0] and hi != B[-1]: per = md(lo) + '∼' + md(hi, lo)
@@ -105,12 +105,12 @@ def label_skip(days):
     out = (out + ' ' + per).strip()
     if gaps:
         g = '・'.join(md(a) if a == b else md(a) + '∼' + md(b, a) for a, b in gaps)
-        out = (out or '매일') + ', %s 빼고' % g
+        out = (out + ', ' if out else ('' if noW else '매일, ')) + '%s 빼고' % g
     extra = days - set(B)
     if extra:
         e = label_wk(extra)
-        out = (out or '매일') + ', ' + e
-    return out
+        out = (out + ', ' if out else ('' if noW else '매일, ')) + e
+    return (W, out) if noW else out
 def label(days):
     a = label_wk(days); b = label_skip(days)
     return a if b is None or len(a) <= len(b) else b
@@ -130,11 +130,17 @@ def rows_of(v):
             else: groups.append((mm(t), [(t, aa, ds)]))
         for _, gs in groups:
             t, aa, ds = gs[0]
-            lab = label(set().union(*(x[2] for x in gs)))
+            alld = set().union(*(x[2] for x in gs))
+            lab = label(alld)
+            ws_ = label_skip(alld, True)                 # 요일 칸을 쓰는 목록: 요일(W)은 칸에, 주에는 날짜만
+            if ws_ and lab == label_skip(alld): wm, labd = ''.join('1' if w in ws_[0] else '0' for w in range(7)), ws_[1]
+            else: wm, labd = '0000000', lab                # 요일 위에 얹어 적기 어려운 편: 요일 칸은 비우고 주에 다
+
             for t2, a2, d2 in gs[1:]:
                 same_dur = (mm(a2) - mm(t2)) % 1440 == (mm(aa) - mm(t)) % 1440
-                lab = (lab + ' ' if lab else '') + '(%s{%s}발%s)' % ((label(d2) + ' ') if label(d2) else '', hh_(t2), '' if same_dur else ' {%s}착' % hh_(a2))
-            rows.append((no, t, aa, lab.strip()))
+                vt = '(%s{%s}발%s)' % ((label(d2) + ' ') if label(d2) else '', hh_(t2), '' if same_dur else ' {%s}착' % hh_(a2))
+                lab = (lab + ' ' if lab else '') + vt; labd = (labd + ' ' if labd else '') + vt
+            rows.append((no, t, aa, lab.strip(), wm, labd.strip()))
     rows.sort(key=lambda r: (r[1], r[0]))
     return rows
 fare = collections.defaultdict(list)

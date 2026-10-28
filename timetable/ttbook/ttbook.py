@@ -3464,16 +3464,20 @@ class Book:
         if not f: return
         secs = [[f, '항공']] if isinstance(f, str) else f
         no0 = 0
+        wk = [tuple(x) for x in self.cfg.get('airWeekday', [])]        # 요일 칸을 다는 공항 쌍: 한 쪽 폭을 다 써서 (편이 많은 쌍)
         for si, sc in enumerate(secs):
             data = json.load(open(os.path.join(self.base, sc[0]), encoding='utf-8'))
             for P in data['pairs']: P['no'] = no0 + P['no']
             no0 = max([no0] + [P['no'] for P in data['pairs']])
-            self.plan_air_one(data, si, sc[1])
-            if len(sc) > 2: self.air_secs[-1]['sub'] = sc[2]             # 목차에 쓸 이름
+            self.air_secs.append({'title': sc[1]} | ({'sub': sc[2]} if len(sc) > 2 else {}))
+            isw = lambda P: (P['a'], P['b']) in wk or (P['b'], P['a']) in wk
+            dw = [P for P in data['pairs'] if isw(P)]
+            if dw: self.plan_air_one({'pairs': dw}, si, sc[1], wide=True)
+            self.plan_air_one({'pairs': [P for P in data['pairs'] if not isw(P)]}, si, sc[1])
 
-    def plan_air_one(self, data, si, title):
+    def plan_air_one(self, data, si, title, wide=False):
         R, fs = self.R, self.fs
-        NC = 2; gut = 0.0                                   # 단 사이도 띄우지 않고 맞붙인다
+        NC = 1 if wide else 2; gut = 0.0                    # 단 사이도 띄우지 않고 맞붙인다. 요일 칸 쌍은 한 단(쪽 폭)
         cf_ = self.cfg.get('airCodes')                      # 편명 앞 두 자(IATA) → 세 자 항공사 부호(ICAO): 「KAL 1122」
         codes = json.load(open(os.path.join(self.base, cf_), encoding='utf-8')) if cf_ else {}
         self._fno = lambda no: (codes.get(no[:2], ''), no)      # (세 자 항공사 이름, 편명 그대로)
@@ -3498,7 +3502,8 @@ class Book:
             items = [('r', k) for k in range(max(len(P['out']), len(P['in'])))]
             def side_notes(L):
                 g = collections.OrderedDict()
-                for no, t, a, lab in L:
+                for r_ in L:
+                    no, lab = r_[0], (r_[5] if wide else r_[3])
                     if lab: g.setdefault(re.sub(r'^\((.*)\)$', r'\1', lab) if lab.count('(') == 1 and lab.startswith('(') else lab, []).append(no)
                 return [ln for lab, nos in g.items() for ln in wrap('※%s %s' % ('・'.join(nos), lab))]
             nl, nr = side_notes(P['out']), side_notes(P['in'])
@@ -3539,16 +3544,17 @@ class Book:
         pages[-1] = [c for c, _ in flow(last0, hi)]
         nos_ = [self._fno(r[0])[1] for P in data['pairs'] for L in (P['out'], P['in']) for r in L]
         nw_ = max([self.inl.wc.get(self.inl.run(x, Ctx('M', 1.0)), len(x)) * fs for x in nos_] + [3 * fs])
-        self.air_secs.append({'title': title, 'nw': nw_, 'geom': (colw, gut, TH, SH, pad), 'NC': NC})
+        g_ = {'title': title, 'nw': nw_, 'geom': (colw, gut, TH, SH, pad), 'NC': NC, 'wide': wide}
         for p in pages:
-            self.pages.append({'pieces': [], 'lines': [], 'air': len(self.air), 'airSec': si}); self.air.append((si, p))
+            self.pages.append({'pieces': [], 'lines': [], 'air': len(self.air), 'airSec': si}); self.air.append((si, p, g_))
 
     def air_page(self, k, x0, recto):
         fs, H, R = self.fs, self.H, self.R
-        si, cols_ = self.air[k]
-        sec = self.air_secs[si]
+        si, cols_, sec = self.air[k]
         colw, gut, TH, SH, pad = sec['geom']
         air_nw = sec['nw']
+        wide = sec['wide']
+        WDN, DWd = '월화수목금토일', 0.95 * fs                 # 요일 칸
         tex, rects, ops = [], [], []
         y0 = self.mt
         hw = colw / 2
@@ -3598,14 +3604,22 @@ class Book:
                             continue
                         tex.append(self.put_box(hx + cN, yy, cT, SH, self.inl.run(o, lab), 'r', 'm'))
                         tex.append(self.put_box(hx + cN + cT + cA, yy, cT, SH, self.inl.run(d, lab), 'r', 'm'))
+                        if wide:
+                            xw = hx + cN + 2 * cT + cA + 0.8 * fs
+                            for d_ in range(7): tex.append(self.put_box(xw + d_ * DWd, yy, DWd, SH, self.inl.run(WDN[d_], Ctx('G', 0.7)), 'c', 'm'))
                     yy += SH
                     rects.append(('h', xx, xx + colw, yy, 1))
                     r0 = yy
                     for _, r_ in rows:
                         for side, L in enumerate((P['out'], P['in'])):
                             if r_ >= len(L): continue
-                            no, t, a, lab_ = L[r_]
+                            no, t, a, lab_ = L[r_][:4]
+                            if wide: lab_ = L[r_][5]
                             hx = xx + side * hw + pad
+                            if wide:
+                                xw = hx + cN + 2 * cT + cA + 0.8 * fs
+                                for d_, f_ in enumerate(L[r_][4]):
+                                    if f_ == '1': rects.append(('dot', xw + (d_ + 0.5) * DWd, yy + R / 2, 0.32 * fs))
                             if lab_: tex.append(self.put_box(hx, yy, cM, R, self.inl.run('※', Ctx('M', 0.8)), 'l', 'm'))
                             co_, nu_ = self._fno(no)
                             tex.append(self.put_box(hx + cM, yy, cC, R, self.inl.run(co_, Ctx('G', 0.85).but(hscale=HS)), 'l', 'm'))
@@ -3647,9 +3661,9 @@ class Book:
             for pc in pg['pieces']:
                 if pc['T'].title is not None: self.bus_tpage.setdefault(pc['T'].title.text().strip(), pi)
         org = {O['from']: O for O in data['origins']}
-        for A, D, tt in data.get('tableRefs', []):
+        for A, D, tt, *df in data.get('tableRefs', []):
             if A not in org: org[A] = {'from': A, 'dests': []}; data['origins'].append(org[A])
-            org[A]['dests'].append({'to': D, 'seeTable': tt})
+            org[A]['dests'].append({'to': D, 'seeTable': tt, 'dur': df[0] if df else None, 'fare': df[1] if len(df) > 1 else None})
         data['origins'].sort(key=lambda O: O['from'])
         for O in data['origins']: O['dests'].sort(key=lambda X: X['to'])
         R, fs = self.R, self.fs
@@ -3669,7 +3683,7 @@ class Book:
             """덩이 머리 밑 작은 줄: 「경유 서대구 3:10 19,600∼」, 「승차 평택굿모닝병원・평택대」"""
             out = []
             durs = collections.Counter([v[1] for v in X.get('via', [])] + [X['dur']])      # 소요가 같게 적힌 곳은 소요를 빼고 이름만
-            for lab, toks in (('경유', [v[0] + (' ' + hm_(v[1]) if durs[v[1]] == 1 else '') for v in X.get('via', [])]),
+            for lab, toks in (('경유', [v[0] + ' ' + hm_(v[1]) for v in X.get('via', [])]),
                               ('승차', X.get('board', []))):
                 if not toks: continue
                 cur = lab
@@ -3703,26 +3717,28 @@ class Book:
                 head(v, False); i += 1; cur_x = None; continue
             if not col: head(cur_o, True)
             if k == 'r':                                    # 참조 줄: 「서대구 → 동대구 행」「서울경부 → 평택 발 52」
-                if y + DH > cap + 1e-6: cols.append(col); col, y = [], 0.0; continue
-                col.append(('r', y, v)); y += DH; i += 1; continue
+                if y + DH + SR > cap + 1e-6: cols.append(col); col, y = [], 0.0; continue
+                col.append(('r', y, v, cur_o)); y += DH + SR; i += 1; continue
             if k == 'd':
                 cur_x = v
                 hd = DH + SR * len(v['_sub'])
                 need = hd + R * min(3, len(v['times']))        # 머리 밑에 적어도 세 줄
                 if y + need > cap + 1e-6: cols.append(col); col, y = [], 0.0; continue
-                col.append(('d', y, v, False, hd)); y += hd; i += 1; continue
+                col.append(('d', y, v, False, hd, cur_o)); y += hd; i += 1; continue
             if y + R > cap + 1e-6:
                 cols.append(col); col, y = [], 0.0
-                head(cur_o, True); col.append(('d', y, cur_x, True, DH)); y += DH
+                head(cur_o, True); col.append(('d', y, cur_x, True, DH, cur_o)); y += DH
             col.append(('t', y, v)); y += R; i += 1
         if col: cols.append(col)
         pages = [cols[k:k + NC] for k in range(0, len(cols), NC)]
         self._bus = (colw, pad, TS, GW, DW, TH, CH, GP, NC, SR)
         self.bus_opage = {}                                 # 출발 터미널 → 그 덩이가 시작하는 쪽 (self.pages 의 자리)
+        self.bus_dpage = {}                                 # (출발, 행선지) → 그 행선지 덩이가 실린 쪽
         for i, p in enumerate(pages):
             for c_ in p:
                 for it in c_:
                     if it[0] == 'o': self.bus_opage.setdefault(it[2], len(self.pages))
+                    if it[0] == 'd' and not it[3]: self.bus_dpage[(it[5], it[2]['to'])] = len(self.pages)
             self.bus.append(p); self.pages.append({'pieces': [], 'lines': [], 'bus': i})
 
     @staticmethod
@@ -3766,22 +3782,28 @@ class Book:
                     for d in range(7): tex.append(self.put_box(xD + d * DW, y, DW, CH, self.inl.run(WD[d], c), 'c', 'm'))
                     rects.append(('h', xx, xx + ww, y + CH, 1))
                     st = y
-                elif kd == 'r':
+                elif kd == 'r':                                # 참조 덩이: 머리(이름·소요·요금)는 여느 덩이처럼, 밑줄에 「→ 동대구 행 95」
                     X = it[2]
-                    if it[1] > 0 and col[col.index(it) - 1][0] == 't': rects.append(('h', xx, xx + ww, y, 1))
+                    if it[1] > 0 and col[col.index(it) - 1][0] in ('t', 'r'): rects.append(('h', xx, xx + ww, y, 1))
                     y += GP
+                    du = self.dur_text(X['dur']) if X.get('dur') else ''
+                    fa = ('{:,}원'.format(X['fare'][0]) + ('∼' if X['fare'][1] != X['fare'][0] else '')) if X.get('fare') else ''
                     tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, self.inl.run(X['to'], Ctx('GB', 0.9)), 'l', 'm'))
-                    if 'see' in X: rt = '%s 행' % X['see']
+                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, self.inl.run(du + '　' + fa, Ctx('M', 0.72).but(hscale=HS)), 'r', 'm'))
+                    y += R
+                    if 'see' in X:
+                        pg_ = self.bus_dpage.get((it[3], X['see']))
+                        rt = '%s 행%s' % (X['see'], ' %d' % (pg_ + first) if pg_ is not None else '')
                     elif 'seeTable' in X:
                         pg_ = self.bus_tpage.get(X['seeTable'])
                         rt = '노선표%s' % (' %d' % (pg_ + first) if pg_ is not None else '')
                     else:
                         pg_ = self.bus_opage.get(X['seeFrom'])
                         rt = '%s 발%s' % (X['seeFrom'], ' %d' % (pg_ + first) if pg_ is not None else '')
-                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, self.inl.run('→ ' + rt, Ctx('M', 0.85)), 'r', 'm'))
+                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, SR, self.inl.run('→ ' + rt, Ctx('M', 0.72).but(hscale=HS)), 'l', 'm'))
                 elif kd == 'd':
                     X = it[2]
-                    if it[1] > 0 and col[col.index(it) - 1][0] == 't': rects.append(('h', xx, xx + ww, y, 1))
+                    if it[1] > 0 and col[col.index(it) - 1][0] in ('t', 'r'): rects.append(('h', xx, xx + ww, y, 1))
                     y += GP
                     du = self.dur_text(X['dur'])
                     fa = ('{:,}원'.format(X['fare'][0]) + ('∼' if X['fare'][1] != X['fare'][0] else '')) if X.get('fare') else ''
@@ -3812,7 +3834,7 @@ class Book:
                         tex.append(self.put_box(xG, y, GW, R, self.inl.run('※', Ctx('M', 0.8)), 'c', 'm'))
                         for d in range(7):
                             if w[d]: tex.append(self.put_box(xD + d * DW, y, DW, R, self.inl.run(w[d], Ctx('M', 0.75).but(hscale=0.7 if len(w[d]) > 1 else 0.9)), 'c', 'm'))
-            yE = y0 + max(it[1] + (TH + GP if it[0] == 'o' else CH if it[0] == 'c' else it[4] if it[0] == 'd' else R + GP if it[0] == 'r' else R) for it in col)
+            yE = y0 + max(it[1] + (TH + GP if it[0] == 'o' else CH if it[0] == 'c' else it[4] if it[0] == 'd' else R + GP + SR if it[0] == 'r' else R) for it in col)
             if st is not None: seg.append((st, yE))
             for a, b in seg:
                 for xv in (xB, xG, xD): rects.append(('v', xv, a, b, 1))

@@ -24,7 +24,7 @@ for O in b['origins']:                                      # 1) 내리는 곳 �
         last = xs[-1]
         last['via'] = [[X['to'], X['dur'], X.get('fare')] for X in xs[:-1]]
         for X in xs[:-1]: drop[X['to']] = last['to']; n1 += 1
-    O['dests'] = [({'to': X['to'], 'see': drop[X['to']]} if X['to'] in drop else X) for X in O['dests']]
+    O['dests'] = [({'to': X['to'], 'see': drop[X['to']], 'dur': X['dur'], 'fare': X.get('fare')} if X['to'] in drop else X) for X in O['dests']]
 idx = collections.defaultdict(list)                         # 2) 타는 곳 여럿: (끝 행선지, 시각, 경유) 가 같은 덩이
 for O in b['origins']:
     for X in O['dests']:
@@ -40,6 +40,7 @@ for (to, _, _), vs in idx.items():
     hx['board'] = [o for o, _ in vs[1:]]
     hx['boardKnown'] = bool(ords)
     for o, X in vs[1:]:
-        X.clear(); X.update({'to': to, 'seeFrom': host}); n2 += 1
+        du_, fa_ = X['dur'], X.get('fare')
+        X.clear(); X.update({'to': to, 'seeFrom': host, 'dur': du_, 'fare': fa_}); n2 += 1
 json.dump(b, sys.stdout, ensure_ascii=False, indent=0)
 print('drop-merged', n1, 'board-merged', n2, file=sys.stderr)
