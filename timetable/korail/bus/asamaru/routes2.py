@@ -615,6 +615,8 @@ for T_, U_ in both:                                    # 노선표: TAGO 가 같
                 a_, b_ = k_.split('|')
                 if a_ in c and b_ in c and c[a_][0] == 'd' and c[b_][0] == 'd' and c[a_][1] == c[b_][1]:
                     c[b_] = ('d', (c[b_][1] + dv) % 1440)
+                if a_ in c and b_ in c and c[a_][0] == 'a' and c[b_][0] == 'a' and c[a_][1] == c[b_][1]:      # 내리는 곳도: 같은 착이면 그만큼 앞 (광주 → 진주개양・진주 가 다 120분)
+                    c[b_] = ('a', (c[b_][1] - dv) % 1440)
             # 고창 ― 인천공항 시외 편: TAGO 에 고창 발만 있어 정읍·김제 칸이 비는 것을 나무위키 시각(정읍 +40, 김제 +80)으로
             if '고창' in c and c['고창'][0] == 'd' and c.get('_sub') and any(s_.startswith('인천공항') for s_ in c) and '정읍' not in c and '김제' not in c and '정읍' in X_['stops']:
                 c['정읍'] = ('d', (c['고창'][1] + 40) % 1440); c['김제'] = ('d', (c['고창'][1] + 80) % 1440)
@@ -864,10 +866,14 @@ def merge_drop(d, xs):
             elif k: part.append(y)
         same_ = lambda: len(part) == 1 and d[x].get('vnote', '').startswith('◇ 승차 %s' % nm(part[0])) and \
             {t[0] for t in d[x]['times'] if '◇' in t[3:]} == {t for t in mine if t in blocks[part[0]][0]}      # 같은 ◇ 편이 그 정류장에서 타기도(오는 길 승차를 먼저 합친 것)
-        if len({frozenset(t for t in mine if t in blocks[y][0]) for y in part}) > 1 or (part and 'vnote' in d[x] and not same_()): return False   # ◇ 는 한 묶음(같은 편들)까지
-        plan[x] = (mine, vias, part)
+        sec_ = False                                      # 둘째 묶음 △: 이미 「◇ 경유 진주혁신」인 덩이에 「△ 경유 진주개양」 (두 묶음까지)
+        if len({frozenset(t for t in mine if t in blocks[y][0]) for y in part}) > 1: return False   # ◇ 는 한 묶음(같은 편들)까지
+        if part and 'vnote' in d[x] and not same_():
+            if len(part) == 1 and d[x]['vnote'].startswith('◇ 경유') and '\n' not in d[x]['vnote'] and nm(part[0]) not in d[x]['vnote']: sec_ = True
+            else: return False
+        plan[x] = (mine, vias, part, sec_)
     for x in xs:
-        mine, vias, part = plan[x]
+        mine, vias, part, sec_ = plan[x]
         X = d[x]
         if not mine:                                      # 남은 편이 없으면 참조 줄: 편이 여러 덩이로 갔으면 가장 가까운 덩이로 (그 덩이의 「이 밖에」 줄이 나머지를 알린다)
             tgt = min({far[t] for t in blocks[x][0]}, key=xs.index)
@@ -877,7 +883,12 @@ def merge_drop(d, xs):
             vv = {v[0]: v for v in X.get('via', [])}
             for y in vias: vv.setdefault(y, [y, blocks[y][1], d[y].get('fare')])
             X['via'] = sorted(vv.values(), key=lambda v: (xs.index(v[0]) if v[0] in xs else -1, v[1]))      # 차례대로
-        if part:
+        if part and sec_:
+            y = part[0]
+            for t in X['times']:
+                if t[0] in blocks[y][0] and '△' not in t[3:]: t.append('△')
+            X['vnote'] += '\n△ 경유 %s %s' % (nm(y), hmd(blocks[y][1]))
+        elif part:
             y = part[0]
             bv_ = X.get('vnote', '')
             for t in X['times']:
@@ -927,6 +938,10 @@ def merge_board(D, os_, strict=False):
             Y['vnote'] = '◇ 승차 %s%s' % (nm(o), ' ' + es if es else '')
         elif ' %s ' % nm(o) in Y['vnote'] + ' ' and {m_(t[0]) for t in Y['times'] if '◇' in t[3:]} == {t for t in tA if (t + e) % 1440 in got}:
             Y['vnote'] += '・승차 %s' % es if es else '・승차'      # 같은 ◇ 편이 그 정류장에 내리고 타기도: 「◇ 경유 황간 30분・승차 +30분」
+        elif Y['vnote'].startswith('◇ 승차') and '\n' not in Y['vnote'] and ' %s ' % nm(o) not in Y['vnote'] + ' ':      # 둘째 묶음 △ (진주 발: ◇ 승차 진주혁신, △ 승차 진주개양)
+            for t in Y['times']:
+                if (m_(t[0]) + e) % 1440 in got: t.append('△')
+            Y['vnote'] += '\n△ 승차 %s%s' % (nm(o), ' ' + es if es else '')
         else: continue
         rest_ = [t for t in X['times'] if m_(t[0]) not in got]
         if rest_: X['times'] = rest_; X['vnote3'] = '이 밖에 %s 발 %d편도 탐' % (nm(A), len(got))

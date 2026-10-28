@@ -3791,7 +3791,7 @@ class Book:
                     if wsm(cur + sep + t_) > ww_: out.append(cur + sep.strip()); cur = '　　' + t_
                     else: cur += sep + t_
                 out.append(cur)
-            if X.get('vnote'): out.append(X['vnote'])       # 일부 편만 서는 곳: 「◇ 원주문막 경유 (원주 발 15분 뒤)」
+            if X.get('vnote'): out.extend(X['vnote'].split('\n'))       # 일부 편만 서는 곳: 「◇ 원주문막 경유 (원주 발 15분 뒤)」, 둘째 묶음은 다음 줄에 「△ 경유 진주혁신」
             for vn_ in (X.get('vnote2'), X.get('vnote3')):   # 더 먼 행선지·앞 출발지 덩이에 실은 편: 「이 밖에 배방정류소 행 22편도 섬」「이 밖에 진해 발 3편도 탐」
                 if not vn_: continue
                 cur = ''
@@ -3953,7 +3953,7 @@ class Book:
                 else:
                     dep, arr, w = it[2][:3]
                     fl_ = it[2][3:]                       # 표지: 시외버스로 파는 편 †, 일부 편만 서는 곳을 거치는 편 ◇
-                    mk_ = ('†' if '시' in fl_ else '') + ('◇' if '◇' in fl_ else '')
+                    mk_ = ('†' if '시' in fl_ else '') + ('◇' if '◇' in fl_ else '') + ('△' if '△' in fl_ else '')
                     if mk_: tex.append(self.put_box(xM - (0.2 * fs if len(mk_) > 1 else 0), y, 0.55 * fs + (0.2 * fs if len(mk_) > 1 else 0), R, self.inl.run(mk_, Ctx('M', 0.75 if len(mk_) == 1 else 0.55)), 'c', 'm'))
                     tex.append(self.put_box(xA, y, TS - 0.25 * fs, R, self.inl.run(dep, Ctx('DM', 1.0)), 'r', 'm'))
                     tex.append(self.put_box(xB, y, TS - 0.25 * fs, R, self.inl.run(arr, Ctx('DM', 1.0)), 'r', 'm'))
