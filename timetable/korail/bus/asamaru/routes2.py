@@ -142,7 +142,7 @@ for seq in FORCE:
                     cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb) for d in range(0, 181)}
                     dd_ = P[(A, D)]['dur'] - P[(B, D)]['dur']
                     d = max(cnt, key=lambda d: (cnt[d], -abs(d - dd_)))          # 같으면 소요 차에 가까운 δ
-                    if cnt[d] >= 1: LB.append((D, A, B, d, cnt[d], 0.0)); have.add((D, A, B))
+                    if cnt[d] >= 1 and abs(d - dd_) <= max(15, 0.15 * abs(dd_)): LB.append((D, A, B, d, cnt[d], 0.0)); have.add((D, A, B))   # 소요 차와 아주 다른 δ 는 우연
             for D2 in seq[i + 1:]:                           # 내리는 곳: A 에서 B(먼저) 거쳐 D2
                 if D2 != B and seq.index(D2) > seq.index(B) and (A, B) in P and (A, D2) in P and (A, B, D2) not in haved:
                     n = len(set(P[(A, B)]['t']) & set(P[(A, D2)]['t']))
@@ -235,10 +235,16 @@ for grp in groups.values():
         agree = lambda o: sum(1 for a in range(len(o)) for b_ in range(a + 1, len(o)) if cur.index(o[a]) < cur.index(o[b_]))
         best = fw if agree(fw) >= agree(bw) else bw
         for k, s_ in zip(idx, best): stops[k] = s_
+    fks = {fkey(tr) for tr in grp}
+    if len(fks) == 1 and None not in fks:               # 사람이 확인한 노선: 그 차례대로 (TAGO 가 같은 시각을 붙인 곳도 차례가 맞게)
+        sq_ = FORCE[fks.pop()]
+        stops = sorted({s_ for tr in grp for s_ in list(tr['board']) + list(tr['drop'])}, key=lambda s_: sq_.index(s_) if s_ in sq_ else len(sq_))   # 끝까지 가지 않는 차의 정류장도
     bset = {A for tr in grp for A in tr['board']}
     dset = {D for tr in grp for D in tr['drop']} - bset
     pairs = {(A, D) for tr in grp for A, t, D in tr['nodes']}
-    pairs = {p for p in pairs if p not in owned and p not in SHARED}
+    nn = collections.Counter((A, D) for tr in grp for A, t, D in tr['nodes'])
+    dense = {p for p in pairs if len(P[p]['t']) > 3 * nn[p] + 5}      # 이 노선의 차는 몇 편뿐인 촘촘한 구간(광주→목포 따위): 표가 갖지 않고 목록에 둔다
+    pairs = {p for p in pairs if p not in owned and p not in SHARED and p not in dense}
     owned |= pairs
     cols = []
     for tr in grp:
@@ -269,8 +275,10 @@ def real_board(T):
     return sum(1 for s_ in T['board'] if any(c.get(s_, ('', 0))[0] == 'd' for c in T['cols'])) >= 2 and \
         any(len({c[s_][1] for s_ in T['board'] if s_ in c and c[s_][0] == 'd'}) >= 2 for c in T['cols'])
 cand = sorted([T for T in tables if real_board(T)], key=lambda T: (-len(T['stops']), len(T['cols'])))
-pick, tot = [], 0
+isF = lambda T: any(sum(1 for s_ in T['stops'] if s_ in seq) >= 3 for seq in FORCE)
+pick, tot = [T for T in tables if isF(T)], 0             # 사람이 확인한 노선(force-links)은 늘 싣고, 아래 몫에는 세지 않는다
 for T in cand:
+    if T in pick: continue
     if len(T['cols']) <= int(os.environ.get('MAXC', '16')) and tot + len(T['cols']) <= CAP: pick.append(T); tot += len(T['cols'])
 # 주요·긴 노선: 정류장이 넷 넘는 표를 차 수가 많은 차례로 CAP2 안에서 (한 쪽 폭에 안 들면 접어 아래로)
 CAP2 = int(os.environ.get('CAP2', '80'))
