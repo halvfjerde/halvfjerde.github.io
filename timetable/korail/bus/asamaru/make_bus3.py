@@ -113,6 +113,7 @@ for o in sorted(T):
         ds = [du for du, _ in info[o][x]]; fs = [c for _, c in info[o][x] if c]
         dur = int(statistics.median(ds))
         times, var_t = [], []
+        obs = {t: {wd[d_] for d_ in PD[(o, x, t)]} for t in T[o][x]}       # 편마다 다닌 요일 (자료 그대로)
         for t in sorted(T[o][x]):
             pd = PD[(o, x, t)]
             if not (set(pd) & LAST): FIRSTONLY.append((o, x, t, sorted({wd[d_] for d_ in pd})))      # 나중 주에 없는 편: 결행했을 수도 있어 싣고 목록에
@@ -120,7 +121,9 @@ for o in sorted(T):
             for d, g in pd.items(): byw[wd[d]].add(g)
             gvar = any(len(v) > 1 for v in byw.values())
             miss_ = set(range(7)) - set(byw)                # 다섯 요일 넘게 다니는데 빠진 요일이 주말꼴(금·토·일)이 아니면 임의 결행으로 보고 날마다
-            if len(byw) >= 5 and miss_ and not miss_ <= {4, 5, 6}:
+            # 같은 구간 한 시간 안에 빠진 요일에만 다니는 편이 있으면 요일별 배차(세종의 월요일 편 따위)로 보고 채우지 않는다
+            comp_ = any(u != t and abs(u - t) <= 60 and obs[u] and obs[u] <= miss_ for u in obs)
+            if len(byw) >= 5 and miss_ and not miss_ <= {4, 5, 6} and not comp_:
                 g_all = collections.Counter(g for v in byw.values() for g in v).most_common(1)[0][0]
                 for w_ in miss_: byw[w_] = {g_all}
                 FILLED.append((o, x, t, sorted(miss_)))
