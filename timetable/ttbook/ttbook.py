@@ -2663,7 +2663,7 @@ class Book:
                        'side': self.strip_side if fold else 'B'}
                 if gdef[0] == 'single':      # 좁은 표는 띠가 여러 줄이 될 수 있다
                     natB = self.fixed_w(T, job['side']) + used * self.P0
-                    job['narrow'] = natB < self.cw * 0.62 and not fold
+                    job['narrow'] = natB < self.cw * 0.62 and not fold and T.line not in self.cfg.get('foldLines', [])     # 고속버스 노선표는 나란히 놓지 않는다 (좁은 표의 제목이 빠진다)
                     job['nat'] = natB
                     job['bw'] = self.band_w(natB) if job['narrow'] else BWF
                 else:

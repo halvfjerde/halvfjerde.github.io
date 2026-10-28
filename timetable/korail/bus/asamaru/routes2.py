@@ -261,6 +261,8 @@ fits = lambda n: n <= W1 or n % W1 == 0 or n % W1 >= W1 // 2      # 접었을 �
 for T in sorted([T for T in tables if T not in pick and len(T['stops']) >= 4 and fits(len(T['cols']))],
                 key=lambda T: (-len(T['cols']) * len(T['stops']))):       # 주요(차가 많고) 긴(정류장이 많은) 노선부터
     if tot2 + len(T['cols']) <= CAP2: pick.append(T); tot2 += len(T['cols'])
+for T in tables:                                        # 사람이 확인한 노선(force-links)은 늘 싣는다
+    if T not in pick and any(sum(1 for s_ in T['stops'] if s_ in seq) >= 3 for seq in FORCE): pick.append(T)
 print('candidates', len(cand), 'picked', len(pick), 'cols', tot, '+', tot2, file=sys.stderr)
 # 편도 8편 이하: 반대 방향 표(정류장이 같은 것)와 상하 병기 한 표로 (고르지 않았어도 반대 방향은 곁들인다)
 ALL = tables
@@ -280,7 +282,26 @@ NM = dict(SHORT, **{'인천공항T1': '인천공항1터미널', '인천공항T2'
 nm = lambda x: NM.get(x, x)
 out = ["{{시각표테마}}", "'''고속버스''' 노선표. 국토교통부 TAGO 고속버스정보(2026년 10월 17∼30일) 기준.", '', '== 고속버스 ==']
 # 차례: 접어 싣는 큰 표(한 쪽 폭을 넘는 것)를 먼저 — 그 띠들이 한 쪽에 위아래로 모이게
-both.sort(key=lambda p: (-(len(p[0]['cols']) > W1), p[0]['stops'][0], p[0]['stops'][-1]))
+title_merge = {}
+apt = lambda T: any(s_.startswith('인천공항') for s_ in T['stops'])          # 공항 노선끼리 모은다
+# 공항으로 가는 작은 표(끝 정류장들이 같은 것)는 한 표로: 갈래마다 타는 곳을 위에서부터, 다른 갈래 칸은 ║
+grp_ = collections.defaultdict(list)
+for p in both:
+    T, U = p
+    if U is None and apt(T) and len(T['cols']) <= 8 and T['stops'][-1].startswith('인천공항'):
+        tail = tuple(s_ for s_ in T['stops'] if s_.startswith('인천공항'))
+        grp_[tail].append(p)
+for tail, ps in grp_.items():
+    if len(ps) < 2: continue
+    Ts = sorted([p[0] for p in ps], key=lambda T: T['stops'][0])
+    stops = [s_ for T in Ts for s_ in T['stops'] if s_ not in tail] + list(tail)
+    br = {s_: i for i, T in enumerate(Ts) for s_ in T['stops'] if s_ not in tail}
+    M = {'title': '%s ― %s' % ('・'.join(nm(T['stops'][0]) for T in Ts), nm(tail[-1])), 'stops': stops, 'board': set().union(*(T['board'] for T in Ts)), 'pairs': set().union(*(T['pairs'] for T in Ts)), 'last': tail[-1],
+         'cols': [dict(c, _br=i) for i, T in enumerate(Ts) for c in T['cols']], 'branch': br}
+    for p in ps: both.remove(p)
+    both.append((M, None))
+    for T in Ts: title_merge[id(T)] = M
+both.sort(key=lambda p: (-(len(p[0]['cols']) > W1), -apt(p[0]), p[0]['stops'][0], p[0]['stops'][-1]))
 def foot(c):
     w = c['_w']
     gs = collections.Counter(x for x in w if x)
@@ -288,9 +309,11 @@ def foot(c):
     diff = [d for d in range(7) if w[d] and w[d] != g0]
     rem_ = ('%s%s' % (''.join(WD[d] for d in diff), GR.get(w[diff[0]], w[diff[0]]))) if diff else '_'
     return g0, wdl([d for d in range(7) if w[d]]), rem_
+BR = {}
 def cells_of(c, st):
     idx = [k for k, s_ in enumerate(st) if s_ in c]
-    return [hm(c[s_][1]) if s_ in c else ('v' if idx[0] < k < idx[-1] else 'x') for k, s_ in enumerate(st)]
+    def other(s_): return s_ in BR and '_br' in c and BR[s_] != c['_br']        # 다른 갈래의 정류장
+    return [hm(c[s_][1]) if s_ in c else ('i' if other(s_) and idx[0] < k < idx[-1] else 'x' if other(s_) else ('v' if idx[0] < k < idx[-1] else 'x')) for k, s_ in enumerate(st)]
 def line(c, st):
     g0, dl_, rem_ = foot(c)
     kind = '"◆"' if g0 == '◆' else 'S{%s}' % GR.get(g0, g0)          # 차마다 돌아가는 등급
@@ -305,7 +328,8 @@ for T, U in both:                                       # 한 쪽 폭을 넘는 
     for i, z in enumerate(sz): emit.append((T, None, '（%s）' % ORD[i], T['cols'][a_:a_ + z])); a_ += z
 for T, U, part, cols_ in emit:
     st = T['stops']
-    ttl = '%s ― %s' % (nm(st[0]), nm(st[-1]))
+    BR.clear(); BR.update(T.get('branch', {}))
+    ttl = T.get('title') or '%s ― %s' % (nm(st[0]), nm(st[-1]))
     out += ['=== %s%s ===' % (ttl, part), '{{#invoke:Timetable|main|data=', 'title "%s%s"' % (ttl, part), 'headl "b%s"' % ttl]
     out += (['cols ad st ad', 'both 1'] if U else ['cols st ad', 'rcols st']) + ['',
             '[rows]', 'kind 등급 style=va=b r=等級', '', '[footer]', 'days 운행일 r=運行日 style=va=t', 'rem 비고 r=備考 style=va=t', '', '[stations]']
@@ -326,7 +350,8 @@ for T, U, part, cols_ in emit:
         out += ['', '[trains up]'] + [line(c, rs) for c in U['cols']]
     out += ['', '[notes]', '}}', '']
 tables = [T for p in both for T in p if T]
-title_of = {id(X_): '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1])) for T, U in both for X_ in (T, U) if X_}      # 상하 병기면 상행도 하행 표 이름으로
+title_of = {id(X_): T.get('title') or '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1])) for T, U in both for X_ in (T, U) if X_}      # 상하 병기면 상행도 하행 표 이름으로
+for k_, M_ in title_merge.items(): title_of[k_] = title_of[id(M_)]
 open(sys.argv[2], 'w').write('\n'.join(out))
 own = {p for T in tables for p in T['pairs']}
 for O in b['origins']: O['dests'] = [X for X in O['dests'] if (O['from'], X['to']) not in own]
