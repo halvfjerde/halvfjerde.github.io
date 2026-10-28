@@ -281,6 +281,8 @@ for i, tr in enumerate(trips):
 groups = collections.defaultdict(list)
 for i in range(len(trips)): groups[g(i)].append(trips[i])
 
+BJF_ = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'branch-join.json')
+BJOIN = json.load(open(BJF_)) if os.path.exists(BJF_) else []
 tables, owned = [], set()
 SKIPOWN = set()
 N2T = {x: tr for tr in trips for x in tr['nodes']}
@@ -313,11 +315,9 @@ for grp in groups.values():
         stops = sorted({s_ for tr in grp for s_ in list(tr['board']) + list(tr['drop'])}, key=lambda s_: sq_.index(s_) if s_ in sq_ else len(sq_))   # 끝까지 가지 않는 차의 정류장도
         brs_ = {s_: j for x in sq0_ if isinstance(x, list) for j, s_ in enumerate(sorted(x)) if s_ in stops}    # 갈래 정류장 → 갈래 번호 (이름 차례로: 두 방향 표를 한 표로 합쳐도 같게)
         # [..., "창원", ["진해", "김해"]]: (창원, 진해) 와 (김해) 로 갈린다 — 줄기 쪽 첫 갈래(진해)와 갈리는 정류장(창원)을 한 덩이로, 덩이마다 위아래 선
-        brl_ = dict(brs_)                               # 선 긋기: 갈래마다 한 덩이, 갈리는 정류장(창원)은 줄기에 붙는 갈래(진해) 덩이에 → 그 아래(마산)부터 줄기
-        for k_, x in enumerate(sq0_):
-            if isinstance(x, list) and len(sq0_) > 1 and k_ in (0, len(sq0_) - 1):
-                jn_, mn_ = (sq0_[k_ - 1], x[0]) if k_ == len(sq0_) - 1 else (sq0_[1], x[-1])
-                if isinstance(jn_, str) and jn_ in stops and mn_ in brs_: brl_[jn_] = brs_[mn_]
+        brl_ = dict(brs_)                               # 선 긋기: 갈래마다 한 덩이, 갈리는 정류장은 줄기에 (서산・당진・기지시 | 대전복합 | 청주공항 …)
+        for jn_, bs_ in BJOIN:                          # 다만 branch-join.json 에 적은 것은 그 갈래 덩이에: ["창원", "진해"] → (창원, 진해) | (김해)
+            if jn_ in stops and bs_ in brs_: brl_[jn_] = brs_[bs_]
     bset = {A for tr in grp for A in tr['board']}
     dset = {D for tr in grp for D in tr['drop']} - bset
     pairs = {(A, D) for tr in grp for A, t, D in tr['nodes']}
