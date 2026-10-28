@@ -3689,6 +3689,15 @@ class Book:
         for A, D, tt, *df in data.get('tableRefs', []):
             if A not in org: org[A] = {'from': A, 'dests': []}; data['origins'].append(org[A])
             org[A]['dests'].append({'to': D, 'seeTable': tt, 'dur': df[0] if df else None, 'fare': df[1] if len(df) > 1 else None})
+        sn = data.get('names', {}); sh_ = lambda x: sn.get(x, x)      # 짧은 터미널 이름 (센트럴시티(서울) → 서울호남)
+        for O in data['origins']:
+            O['from'] = sh_(O['from'])
+            for X in O['dests']:
+                X['to'] = sh_(X['to'])
+                for k_ in ('see', 'seeFrom'):
+                    if k_ in X: X[k_] = sh_(X[k_])
+                if 'via' in X: X['via'] = [[sh_(v[0])] + v[1:] for v in X['via']]
+                if 'board' in X: X['board'] = [sh_(v) for v in X['board']]
         data['origins'].sort(key=lambda O: O['from'])
         for O in data['origins']: O['dests'].sort(key=lambda X: X['to'])
         R, fs = self.R, self.fs
@@ -3701,6 +3710,7 @@ class Book:
         GP = 0.4 * R                                        # 행선지 이름 위 여백
         DH = R + GP
         SR = 0.85 * R                                       # 경유·승차 줄
+        BG = 0.25 * R                                       # 덩이 아래 여백 (착 줄·참조 줄과 아래 괘선 사이)
         ww_ = colw - 1.0 * fs
         wsm = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.72).but(hscale=0.82)), len(t)) * fs
         hm_ = self.dur_text
@@ -3748,8 +3758,8 @@ class Book:
                 head(v, False); i += 1; cur_x = None; continue
             if not col: head(cur_o, True)
             if k == 'r':                                    # 참조 줄: 「서대구 → 동대구 행」「서울경부 → 평택 발 52」
-                if y + DH + SR > cap + 1e-6: cols.append(col); col, y = [], 0.0; continue
-                col.append(('r', y, v, cur_o)); y += DH + SR; i += 1; continue
+                if y + DH + SR + BG > cap + 1e-6: cols.append(col); col, y = [], 0.0; continue
+                col.append(('r', y, v, cur_o)); y += DH + SR + BG; i += 1; continue
             if k == 'd':
                 cur_x = v
                 hd = DH + SR * len(v['_sub'])
@@ -3760,9 +3770,10 @@ class Book:
                 cols.append(col); col, y = [], 0.0
                 head(cur_o, True); col.append(('d', y, cur_x, True, DH, cur_o)); y += DH
             col.append(('t', y, v)); y += R; i += 1
+            if i >= len(items) or items[i][0] != 't': y += BG
         if col: cols.append(col)
         pages = [cols[k:k + NC] for k in range(0, len(cols), NC)]
-        self._bus = (colw, pad, TS, GW, DW, TH, CH, GP, NC, SR)
+        self._bus = (colw, pad, TS, GW, DW, TH, CH, GP, NC, SR, BG)
         self.bus_opage = {}                                 # 출발 터미널 → 그 덩이가 시작하는 쪽 (self.pages 의 자리)
         self.bus_dpage = {}                                 # (출발, 행선지) → 그 행선지 덩이가 실린 쪽
         for i, p in enumerate(pages):
@@ -3780,7 +3791,7 @@ class Book:
 
     def bus_page(self, k, x0, recto):
         fs, R = self.fs, self.R
-        colw, pad, TS, GW, DW, TH, CH, GP, NC, SR = self._bus
+        colw, pad, TS, GW, DW, TH, CH, GP, NC, SR, BG = self._bus
         first = self.cfg.get('firstFolio', 2)
         yB = y0_ = self.mt
         yB = y0_ + self.ch
@@ -3795,12 +3806,14 @@ class Book:
             ww = colw
             col = self.bus[k][ci] if ci < len(self.bus[k]) else []
             if not col: rects.append(('box', xx, y0, xx + ww, yB, self.rw[1])); continue
-            xA = xx + 0.15 * fs; xB = xA + TS; xG = xB + TS; xD = xG + GW
+            xA = xx + 0.15 * fs; xB = xA + TS; xG = xB + TS
+            xD = xG + GW + (xx + ww - (xG + GW) - 7 * DW) / 2      # 요일 칸은 남은 자리 가운데에
             seg = []                                   # 세로줄을 그을 시각 줄 구간
-            st = None
+            st = None; lastT = -1.0
             for it in col:
                 kd, y = it[0], y0 + it[1]
-                if kd != 't' and st is not None: seg.append((st, y)); st = None
+                if kd != 't' and st is not None: seg.append((st, lastT if lastT > st else y)); st = None
+                if kd == 't': lastT = y + R
                 if kd == 'o':
                     if it[1] > 0: rects.append(('h', xx, xx + ww, y, 2))
                     tex.append(self.put_box(xx + pad, y + GP, ww - 2 * pad, TH, self.inl.run('%s 발' % it[2], Ctx('GB', 1.15)), 'l', 'm'))
@@ -3822,16 +3835,12 @@ class Book:
                     tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, self.inl.run(X['to'], Ctx('GB', 0.9)), 'l', 'm'))
                     tex.append(self.put_box(xx + pad, y, ww - 2 * pad, R, self.inl.run(du + '　' + fa, Ctx('M', 0.72).but(hscale=HS)), 'r', 'm'))
                     y += R
-                    if 'see' in X:
-                        pg_ = self.bus_dpage.get((it[3], X['see']))
-                        rt = '%s 행%s' % (X['see'], ' %d' % (pg_ + first) if pg_ is not None else '')
-                    elif 'seeTable' in X:
-                        pg_ = self.bus_tpage.get(self._tkey(X['seeTable']))
-                        rt = '노선표%s' % (' %d' % (pg_ + first) if pg_ is not None else '')
-                    else:
-                        pg_ = self.bus_opage.get(X['seeFrom'])
-                        rt = '%s 발%s' % (X['seeFrom'], ' %d' % (pg_ + first) if pg_ is not None else '')
-                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, SR, self.inl.run('→ ' + rt, Ctx('M', 0.72).but(hscale=HS)), 'l', 'm'))
+                    if 'see' in X: pg_, rt = self.bus_dpage.get((it[3], X['see'])), '%s 행' % X['see']
+                    elif 'seeTable' in X: pg_, rt = self.bus_tpage.get(self._tkey(X['seeTable'])), '노선표'
+                    else: pg_, rt = self.bus_opage.get(X['seeFrom']), '%s 발' % X['seeFrom']
+                    rc = Ctx('M', 0.72).but(hscale=HS)
+                    bx = (r'\kern%.3fbp ' % (0.3 * fs) + self.page_badge(pg_ + first, 0.9, None, 0.72)) if pg_ is not None else ''    # 쪽 번호는 철도처럼 네모 안에
+                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, SR, self.inl.run('→ ' + rt, rc) + bx, 'l', 'm'))
                 elif kd == 'd':
                     X = it[2]
                     if it[1] > 0 and col[col.index(it) - 1][0] in ('t', 'r'): rects.append(('h', xx, xx + ww, y, 1))
@@ -3865,8 +3874,8 @@ class Book:
                         tex.append(self.put_box(xG, y, GW, R, self.inl.run('※', Ctx('M', 0.8)), 'c', 'm'))
                         for d in range(7):
                             if w[d]: tex.append(self.put_box(xD + d * DW, y, DW, R, self.inl.run(w[d], Ctx('M', 0.75).but(hscale=0.7 if len(w[d]) > 1 else 0.9)), 'c', 'm'))
-            yE = y0 + max(it[1] + (TH + GP if it[0] == 'o' else CH if it[0] == 'c' else it[4] if it[0] == 'd' else R + GP + SR if it[0] == 'r' else R) for it in col)
-            if st is not None: seg.append((st, yE))
+            yE = y0 + max(it[1] + (TH + GP if it[0] == 'o' else CH if it[0] == 'c' else it[4] if it[0] == 'd' else R + GP + SR + BG if it[0] == 'r' else R + BG) for it in col)
+            if st is not None: seg.append((st, lastT if lastT > st else yE))
             for a, b in seg:
                 for xv in (xB, xG, xD): rects.append(('v', xv, a, b, 1))
             rects.append(('box', xx, y0, xx + ww, yE, self.rw[1]))

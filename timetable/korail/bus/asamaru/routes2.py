@@ -253,7 +253,10 @@ for T in pick:
         both.append((T, U)); used_ |= {id(T), id(U)}
     else:
         both.append((T, None)); used_.add(id(T))
-NM = {'인천공항T1': '인천공항1터미널', '인천공항T2': '인천공항2터미널'}        # 노선표 굵은 글꼴에는 로마자가 없어 한글로
+SHORT = {'센트럴시티(서울)': '서울호남', '광주(유·스퀘어)': '광주', '대전청사(샘머리)': '대전청사', '세종터미널(연구)': '세종터미널', '청주(센트럴)': '청주',
+         '동천(호남)': '동천', '임자(진리)': '임자', '가톨릭관동대강릉': '가톨릭관동대', '아산탕정사무소': '아산탕정', '천안종합운동장': '천안운동장',
+         '평택굿모닝병원': '평택굿모닝', '원주의료진흥원': '원주의료원'}           # 책에 쓰는 짧은 터미널 이름
+NM = dict(SHORT, **{'인천공항T1': '인천공항1터미널', '인천공항T2': '인천공항2터미널'})        # 노선표 굵은 글꼴에는 로마자가 없어 한글로
 nm = lambda x: NM.get(x, x)
 out = ["{{시각표테마}}", "'''고속버스''' 노선표. 국토교통부 TAGO 고속버스정보(2026년 10월 17∼30일) 기준.", '', '== 고속버스 ==']
 # 차례: 접어 싣는 큰 표(한 쪽 폭을 넘는 것)를 먼저 — 그 띠들이 한 쪽에 위아래로 모이게
@@ -309,6 +312,7 @@ own = {p for T in tables for p in T['pairs']}
 for O in b['origins']: O['dests'] = [X for X in O['dests'] if (O['from'], X['to']) not in own]
 b['origins'] = [O for O in b['origins'] if O['dests']]
 b['routeOwned'] = sorted('%s→%s' % p for p in own)
+b['names'] = SHORT
 b['tableRefs'] = sorted([A, D, title_of[id(T)], P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
 json.dump(b, open(sys.argv[3], 'w'), ensure_ascii=False, indent=0)
 # 사람이 확인할 목록 (마크다운)
