@@ -3789,8 +3789,8 @@ class Book:
         mm_ = lambda s_: int(s_[:-2]) * 60 + int(s_[-2:])
         hmc = lambda m: ('%d:%02d' % divmod(int(m), 60)) if m >= 60 else '%d분' % m        # 띠의 짧은 소요 「3:35」「30분」
         # 덩이 몸: 발차 시각을 줄줄이. 줄 머리는 요일 점(그 줄의 차가 다니는 날)·등급 네모·시외 †
-        DWg = 0.56 * fs                                     # 요일 점 간격
-        LBW = 7 * DWg + 0.55 * fs                           # 줄 머리 폭 (요일 점 + 시외 †)
+        DWg = 0.56 * fs
+        LBW = 2.45 * fs + 0.5 * fs                          # 줄 머리 폭 (다니는 날 석 자 + 시외 †)
         NT = 5                                              # 한 줄에 발차 시각 다섯
         SW = (colw - 2 * pad - LBW) / NT                    # 시각 한 칸: 시각 + 오른쪽 작은 칸(위: ◇ → 따위, 아래: 등급)
         GORD = {'우': 0, '프': 1, '일': 2, '심': 3, '심프': 4, '심일': 5, '◆': 6}
@@ -3926,6 +3926,24 @@ class Book:
             self.bus.append(p); self.pages.append({'pieces': [], 'lines': [], 'bus': i})
 
     @staticmethod
+    def day_text(mask):
+        """다니는 요일 (노선표 비고와 같게): 날마다는 빈칸, 이어진 날은 「금∼일」, 아니면 「토일」, 넉 자 넘으면 쉬는 날로 「금일휴」"""
+        WD = '월화수목금토일'
+        ws = [d for d in range(7) if mask[d]]
+        def one(ws_):
+            if len(ws_) == 7 or not ws_: return ''
+            if ws_ == [0, 1, 2, 3, 4]: return '월∼금'
+            if len(ws_) >= 3:
+                for s0 in ws_:
+                    if sorted((s0 + k) % 7 for k in range(len(ws_))) == ws_: return WD[s0] + '∼' + WD[(s0 + len(ws_) - 1) % 7]
+            return ''.join(WD[w] for w in ws_)
+        t = one(ws)
+        if len(t) > 3:
+            t2 = one([d for d in range(7) if not mask[d]]) + '휴'
+            if len(t2) < len(t): t = t2
+        return t
+
+    @staticmethod
     def dur_text(m):
         """소요: 「3시간 20분」「45분」「2시간」"""
         h, mi = divmod(int(m), 60)
@@ -3966,8 +3984,7 @@ class Book:
                     if it[1] > 0: rects.append(('h', xx, xx + ww, y, 2))
                     tex.append(self.put_box(xx + pad, y + GP, ww - 2 * pad, TH, self.inl.run('%s 발' % it[2], Ctx('GB', 1.15)), 'l', 'm'))
                 elif kd == 'c':
-                    c = Ctx('G', 0.62)
-                    for d in range(7): tex.append(self.put_box(xL + d * DWg, y, DWg, CH, self.inl.run(WD[d], c), 'c', 'm'))
+                    tex.append(self.put_box(xL, y, LBW - 0.5 * fs, CH, self.inl.run('운행일', Ctx('G', 0.62)), 'c', 'm'))
                     tex.append(self.put_box(xT0, y, xx + ww - pad - xT0, CH, self.inl.run('발차 시각', Ctx('G', 0.7)), 'l', 'm'))
                     rects.append(('h', xx, xx + ww, y + CH, 1))
                     st = y
@@ -4019,10 +4036,13 @@ class Book:
                     lab_, cells = it[2]
                     if lab_ is not None:
                         (gk, sb) = lab_
-                        for d in range(7):                     # 다니는 날은 점, 쉬는 날은 짧은 줄 (자리를 읽기 쉽게)
-                            if gk[d]: dot(xL + (d + 0.5) * DWg, y + R / 2)
-                            else: rects.append(('h', xL + (d + 0.5) * DWg - 0.13 * fs, xL + (d + 0.5) * DWg + 0.13 * fs, y + R / 2, 1))
-                        if sb: tex.append(self.put_box(xL + 7 * DWg + 0.05 * fs, y, 0.45 * fs, R, self.inl.run('†', Ctx('M', 0.7)), 'c', 'm'))
+                        dt_ = self.day_text(gk)                # 노선표처럼 석 자까지: 「금∼일」「토일」「금일휴」, 날마다는 비움
+                        if dt_:
+                            ct_ = self.inl.run(dt_, Ctx('G', 0.74))
+                            wd_ = self.inl.wc.get(ct_, len(dt_)) * fs
+                            if wd_ > LBW - 0.6 * fs: ct_ = self.inl.run(dt_, Ctx('G', 0.74).but(hscale=max(0.5, (LBW - 0.6 * fs) / wd_)))
+                            tex.append(self.put_box(xL, y, LBW - 0.5 * fs, R, ct_, 'c', 'm'))
+                        if sb: tex.append(self.put_box(xL + LBW - 0.5 * fs, y, 0.4 * fs, R, self.inl.run('†', Ctx('M', 0.7)), 'c', 'm'))
                     for k_, c_ in enumerate(cells):
                         xs = xT0 + k_ * SW
                         if c_[0] == 'z':                       # 거의 같은 간격: 「매 20분」「15∼20분」
