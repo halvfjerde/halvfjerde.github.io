@@ -3748,6 +3748,9 @@ class Book:
             if ex_ is not None:                             # 같은 행선지 목록 덩이가 있으면 그 덩이에 「이 밖에 노선표 56」 (아산온양: 배방 경유는 목록, 아산탕정 경유는 노선표)
                 if tt not in ex_.setdefault('tabRefs', []): ex_['tabRefs'].append(tt)
                 continue
+            ex2_ = next((X for X in org[A]['dests'] if X['to'] == D and ('see' in X or 'seeFrom' in X)), None)
+            if ex2_ is not None:                            # 참조 줄 덩이(「→ 원주 행」)가 있으면 그 밑에 「→ 노선표」
+                ex2_.setdefault('alsoTable', tt); continue
             org[A]['dests'].append({'to': D, 'seeTable': tt, 'dur': df[0] if df else None, 'fare': df[1] if len(df) > 1 else None})
         sn = data.get('names', {}); sh_ = lambda x: sn.get(x, x)      # 짧은 터미널 이름 (센트럴시티(서울) → 서울호남)
         for O in data['origins']:

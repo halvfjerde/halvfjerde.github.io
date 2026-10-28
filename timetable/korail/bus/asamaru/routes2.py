@@ -323,6 +323,7 @@ for grp in groups.values():
     pairs = {(A, D) for tr in grp for A, t, D in tr['nodes']}
     nn = collections.Counter((A, D) for tr in grp for A, t, D in tr['nodes'])
     dense = {p for p in pairs if len(P[p]['t']) > 3 * nn[p] + 5}      # 이 노선의 차는 몇 편뿐인 촘촘한 구간(광주→목포 따위): 표가 갖지 않고 목록에 둔다
+    if isforce: SKIPOWN.update(dense)                    # 그 목록 덩이에서는 표에 실린 편을 빼고 「이 밖에 노선표」
     pairs = {p for p in pairs if p not in owned and p not in SHARED and p not in dense}
     owned |= pairs
     cols = []
