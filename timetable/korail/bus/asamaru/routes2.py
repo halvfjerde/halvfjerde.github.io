@@ -439,7 +439,7 @@ def foot(c):
 BR = {}
 ALT = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'alt-stops.json')))
 def cells_of(c, st, up=False):
-    """up: 상하 병기의 상행(아래에서 위로 읽는다) — 통과 ↿, 지나지 않음 ⇡. 하행·보통 표는 ⇂(v)·⇣"""
+    """up: 상하 병기의 상행(아래에서 위로 읽는다) — 통과 ↿, 하행·보통 표는 ⇂(v). 지나지 않는 곳도 통과(レ)로, 갈래가 갈린 표(지선)의 다른 갈래만 ║"""
     idx = [k for k, s_ in enumerate(st) if s_ in c]
     def other(s_): return s_ in BR and '_br' in c and BR[s_] != c['_br']        # 다른 갈래의 정류장
     def alt(s_): return any(s_ in g and any(o in c for g2 in A_ if g2 is not g for o in g2) for A_ in ALT for g in A_)   # 다른 길로 가는 차(alt-stops.json)
@@ -447,8 +447,8 @@ def cells_of(c, st, up=False):
         if s_ in c: return hm(c[s_][1])
         mid = idx[0] < k < idx[-1]
         if not mid: return 'x'
-        if other(s_) or alt(s_): return '⇡' if up else '⇣'           # 지나지 않음(다른 길·다른 갈래): 화살표
-        return '↿' if up else 'v'                                     # 통과
+        if other(s_): return 'i'                                      # 다른 갈래(지선): ║
+        return '↿' if up else 'v'                                     # 통과·지나지 않음: レ
     return [cell(k, s_) for k, s_ in enumerate(st)]
 def line(c, st, up=False):
     g0, dl_, rem_ = foot(c)
