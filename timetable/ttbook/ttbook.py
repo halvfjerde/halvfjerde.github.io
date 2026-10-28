@@ -3663,7 +3663,7 @@ class Book:
         cur_o = None
         def head(o, cont):
             nonlocal y
-            col.append(('o', y, o)); y += TH
+            col.append(('o', y, o)); y += TH + GP              # 출발 터미널 이름 위에도 행선지만큼 여백
             col.append(('c', y, None)); y += CH
         i = 0
         cap = self.ch
@@ -3671,7 +3671,7 @@ class Book:
             k, v = items[i]
             if k == 'o':
                 cur_o = v
-                if col and y + TH + CH + 3 * R > cap: cols.append(col); col, y = [], 0.0
+                if col and y + TH + GP + CH + DH + 3 * R > cap: cols.append(col); col, y = [], 0.0
                 head(v, False); i += 1; cur_x = None; continue
             if not col: head(cur_o, True)
             if k == 'r':                                    # 참조 줄: 「서대구 → 동대구 행」「서울경부 → 평택 발 52」
@@ -3728,8 +3728,8 @@ class Book:
                 if kd != 't' and st is not None: seg.append((st, y)); st = None
                 if kd == 'o':
                     if it[1] > 0: rects.append(('h', xx, xx + ww, y, 2))
-                    tex.append(self.put_box(xx + pad, y, ww - 2 * pad, TH, self.inl.run('%s 발' % it[2], Ctx('GB', 1.15)), 'l', 'm'))
-                    rects.append(('h', xx, xx + ww, y + TH, 2))
+                    tex.append(self.put_box(xx + pad, y + GP, ww - 2 * pad, TH, self.inl.run('%s 발' % it[2], Ctx('GB', 1.15)), 'l', 'm'))
+                    rects.append(('h', xx, xx + ww, y + GP + TH, 2))
                 elif kd == 'c':
                     c = Ctx('G', 0.7)
                     tex.append(self.put_box(xA, y, TS, CH, self.inl.run('발', c), 'c', 'm'))
@@ -3781,7 +3781,7 @@ class Book:
                         tex.append(self.put_box(xG, y, GW, R, self.inl.run('※', Ctx('M', 0.8)), 'c', 'm'))
                         for d in range(7):
                             if w[d]: tex.append(self.put_box(xD + d * DW, y, DW, R, self.inl.run(w[d], Ctx('M', 0.75).but(hscale=0.7 if len(w[d]) > 1 else 0.9)), 'c', 'm'))
-            yE = y0 + max(it[1] + (TH if it[0] == 'o' else CH if it[0] == 'c' else it[4] if it[0] == 'd' else R + GP if it[0] == 'r' else R) for it in col)
+            yE = y0 + max(it[1] + (TH + GP if it[0] == 'o' else CH if it[0] == 'c' else it[4] if it[0] == 'd' else R + GP if it[0] == 'r' else R) for it in col)
             if st is not None: seg.append((st, yE))
             for a, b in seg:
                 for xv in (xB, xG, xD): rects.append(('v', xv, a, b, 1))
