@@ -1374,3 +1374,21 @@ if len(sys.argv) > 5:
         if x[1] in sys.argv[5].split(',') or x[2] in sys.argv[5].split(','): print('LB', x, P[(x[1], x[0])]['dur'], P[(x[2], x[0])]['dur'], len(P[(x[1], x[0])]['t']), file=sys.stderr)
     for x in LD:
         if x[0] in sys.argv[5].split(','): print('LD', x, file=sys.stderr)
+if os.environ.get('DUMP_SPANS'):                       # 데이터 찾기용: 차마다 처음 타는 곳 → 마지막 내리는 곳 (한 차는 한 번만)
+    cov_, sp_ = set(), collections.Counter()
+    for tr in trips:
+        f_ = min(tr['board'], key=lambda A: (tr['board'][A] - min(tr['board'].values())) % 1440)
+        l_ = last(tr)
+        sp_[(f_, l_)] += 1; cov_ |= set(tr['nodes'])
+    for (A, D), v in P.items():
+        for t in v['t']:
+            if (A, t, D) not in cov_: sp_[(A, D)] += 1
+    endn_ = collections.Counter()                      # 구간마다 그 구간이 차의 처음·끝인 편 수
+    for tr in trips:
+        f_ = min(tr['board'], key=lambda A: (tr['board'][A] - min(tr['board'].values())) % 1440); l_ = last(tr)
+        for A, t, D in tr['nodes']:
+            if A == f_ and D == l_: endn_[(A, D)] += 1
+    for (A, D), v in P.items():
+        for t in v['t']:
+            if (A, t, D) not in cov_: endn_[(A, D)] += 1
+    json.dump({'spans': [[a, d, n] for (a, d), n in sp_.items()], 'pairs': [[a, d, len(v['t']), endn_[(a, d)]] for (a, d), v in P.items()]}, open(os.environ['DUMP_SPANS'], 'w'), ensure_ascii=False)
