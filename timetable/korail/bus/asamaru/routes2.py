@@ -373,7 +373,10 @@ def foot(c):
     g0 = gs.most_common(1)[0][0] if gs else '우'
     diff = [d for d in range(7) if w[d] and w[d] != g0]
     rem_ = ('%s%s' % (''.join(WD[d] for d in diff), GR.get(w[diff[0]], w[diff[0]]))) if diff else '_'
-    if c.get('_sub'): rem_ = '†' if rem_ == '_' else '†' + rem_          # 시외버스로 파는 편
+    if diff:                                              # 비고: 「금토일/□프」 (요일 줄바꿈 등급 네모, 심야는 검은 네모)
+        g1 = w[diff[0]]
+        rem_ = '%s/%s{%s}' % (''.join(WD[d] for d in diff), 'BS' if g1.startswith('심') else 'S', {'심': '우', '심프': '프', '심일': '일'}.get(g1, g1))
+    if c.get('_sub'): rem_ = '†' if rem_ == '_' else '†/' + rem_          # 시외버스로 파는 편
     return g0, wdl([d for d in range(7) if w[d]]), rem_
 BR = {}
 ALT = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'alt-stops.json')))
@@ -384,7 +387,8 @@ def cells_of(c, st):
     return [hm(c[s_][1]) if s_ in c else ('i' if other(s_) and idx[0] < k < idx[-1] else 'x' if other(s_) or alt(s_) else ('v' if idx[0] < k < idx[-1] else 'x')) for k, s_ in enumerate(st)]
 def line(c, st):
     g0, dl_, rem_ = foot(c)
-    kind = '"◆"' if g0 == '◆' else 'S{%s}' % GR.get(g0, g0)          # 차마다 돌아가는 등급
+    KB = {'우': '우등', '일': '일반', '프': '프리', '심': '우등', '심프': '프리', '심일': '일반'}
+    kind = '"◆"' if g0 == '◆' else '%s{%s}' % ('BS' if g0.startswith('심') else 'S', KB.get(g0, g0))   # 차마다 돌아가는 등급 ◆, 심야는 검은 네모 (목록과 같이)
     return '%s : %s : %s %s' % (kind, ' '.join(cells_of(c, st)), dl_, rem_)
 ORD = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째', '일곱째', '여덟째', '아홉째', '열째', '열한째', '열두째']
 def cut(xs, k):
@@ -392,6 +396,21 @@ def cut(xs, k):
     out_, a_ = [], 0
     for z in sz: out_.append(xs[a_:a_ + z]); a_ += z
     return out_
+CAPF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bus-caps.json')       # ttbook 이 잰 표마다 한 쪽 폭에 드는 편 수 (busCaps)
+CAPS = json.load(open(CAPF)) if os.path.exists(CAPF) else {}
+def capS(*tts):
+    for tt in tts:
+        if tt in CAPS: return CAPS[tt]
+        ks = {frozenset(x.strip() for x in tt.split('―'))}
+        for k_, v in CAPS.items():
+            if '|' not in k_ and frozenset(x.strip() for x in k_.split('―')) in ks: return v
+    return W1
+def capB(tt, tu):
+    if tt + '|both' in CAPS: return CAPS[tt + '|both']
+    return capS(tt, tu)                                  # 잰 값으로는 상하 병기도 한 방향 표와 폭이 같다
+def greedy(xs, k):
+    """앞 띠부터 꽉 채워 (뒤 띠가 짧게) — 잘린 데서 「차가 더 없나」 싶지 않게"""
+    return [xs[i:i + k] for i in range(0, len(xs), k)]
 emit = []
 TTL = {}                                                # 표 → 이름 (목록의 참조 줄)
 for T, U in both:
@@ -399,14 +418,14 @@ for T, U in both:
     st = T['stops']
     tT = T.get('title') or '%s ― %s' % (nm(st[0]), nm(st[-1]))
     n = len(T['cols']) + (len(U['cols']) if U else 0)
-    if U and n <= W1:
+    tU = '%s ― %s' % (nm(st[-1]), nm(st[0]))
+    if U and n <= capB(tT, tU):
         emit.append((T, U, tT, '', T['cols'], U['cols'])); TTL[id(T)] = TTL[id(U)] = tT; continue
-    for X_, tt in ((T, tT),) + (((dict(U, stops=list(reversed(st))), '%s ― %s' % (nm(st[-1]), nm(st[0]))),) if U else ()):
+    for X_, tt in ((T, tT),) + (((dict(U, stops=list(reversed(st))), tU),) if U else ()):
         TTL[id(X_ if X_ is T else U)] = tt
-        m = len(X_['cols'])
-        if m <= W1: emit.append((X_, None, tt, '', X_['cols'], [])); continue
-        k = -(-m // W1)
-        for i, cs in enumerate(cut(X_['cols'], k)): emit.append((X_, None, tt, '（%s）' % ORD[i], cs, []))
+        m = len(X_['cols']); k = capS(tt, tT)
+        if m <= k: emit.append((X_, None, tt, '', X_['cols'], [])); continue
+        for i, cs in enumerate(greedy(X_['cols'], k)): emit.append((X_, None, tt, '（%s）' % ORD[i], cs, []))
 for T, U, ttl, part, cols_, ucols in emit:
     st = T['stops']
     BR.clear(); BR.update(T.get('branch', {}))
@@ -590,7 +609,7 @@ for O in b['origins']:
     blocks = {x: (frozenset(t[0] for t in X['times']), X['dur']) for x, X in d.items()}
     for r, ms in chains.trees(blocks):
         xs = sorted(ms + [r], key=lambda x: blocks[x][1])
-        if not chains.sure(blocks, xs): continue
+        if not chains.sure(blocks, xs) and not (chains.ordered(blocks, xs) and min(len(blocks[x][0]) for x in xs) >= 2): continue   # 편이 둘 넘고 소요로 차례가 정해지면 사람이 볼 것으로 싣는다
         sq_ = next((q for q in SEQ if O['from'] in q and all(x in q for x in xs)), None)     # 사람이 확인한 차례(stop-order.json)가 있으면 그대로
         if sq_:
             i0_ = sq_.index(O['from'])

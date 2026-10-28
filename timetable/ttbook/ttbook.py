@@ -4280,6 +4280,13 @@ def main():
     tables = []
     for it in items:
         if it.get('type', 'table') == 'table': tables += bk.load_tables(it)
+    if cfg.get('busCaps'):                       # 고속버스 노선표: 표마다 한 쪽 폭에 드는 편 수 (routes2.py 가 띠를 나눌 때 앞 띠에 꽉 채우려고)
+        caps = {}
+        for T in tables:
+            if T.line not in cfg.get('otherModes', []) or T.title is None: continue
+            tt = re.sub(r'（[^）]*）', '', T.title.text().replace('︱', '―').replace('︵', '（').replace('︶', '）')).strip()
+            caps[tt + ('|both' if getattr(T, 'both', False) else '')] = bk.cap(T, 'B', True)
+        json.dump(caps, open(os.path.join(base, cfg['busCaps']), 'w'), ensure_ascii=False, indent=0)
     bk.layout(tables)
     out = os.path.join(HERE, 'build', cfg.get('name', 'book') + '.tex')
     bk.emit(out)
