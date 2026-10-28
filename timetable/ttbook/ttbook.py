@@ -3979,33 +3979,36 @@ class Book:
             if c0 != cur: cur = c0; lines += [('b', '', '', None), ('h', c0, '', None)]
             lines.append(('t', T, '', T))
             for D, ps in sorted(idx[T].items()): lines.append(('e', D, rng(p + first for p in ps), T))
+        TG = 0.35 * IR                                      # 출발 터미널 사이 여백
         def ifill(lines, cap):
-            """단마다 cap 줄까지. (단들, 단마다 시작 줄 자리)"""
-            icols, col, starts = [], [], []
+            """단마다 높이 cap 까지. 단 = [(줄, 단 안의 y)]. (단들, 단마다 시작 줄 자리, 단 높이들)"""
+            icols, col, starts, hs, y = [], [], [], [], 0.0
             for i, ln in enumerate(lines):
                 if not col and ln[0] == 'b': continue                      # 단 맨 위는 비우지 않는다
+                gap = TG if ln[0] == 't' and col and col[-1][0][0] == 'e' else 0.0     # 앞 터미널의 행선지 다음이면 조금 띄운다
                 keep = 2 if ln[0] == 'h' else 1 if ln[0] == 't' else 0     # 머리·터미널이 단 끝에 홀로 남지 않게
-                if len(col) + 1 + keep > cap and ln[0] in ('h', 't', 'b') or len(col) + 1 > cap:
-                    icols.append(col); col = []
+                if y + gap + IR * (1 + keep) > cap + 1e-6 and ln[0] in ('h', 't', 'b') or y + gap + IR > cap + 1e-6:
+                    icols.append(col); hs.append(y); col, y = [], 0.0
                     if ln[0] == 'b': continue
+                    gap = 0.0
                 if not col: starts.append(i)
-                if not col and ln[0] == 'e': col.append(('t', ln[3], '（계속）', ln[3]))      # 단을 넘어 이어지는 터미널은 이름을 다시
-                col.append(ln)
-            if col: icols.append(col)
-            return icols, starts
-        icols, starts = ifill(lines, icap)
+                if not col and ln[0] == 'e': col.append((('t', ln[3], '（계속）', ln[3]), 0.0)); y = IR      # 단을 넘어 이어지는 터미널은 이름을 다시
+                col.append((ln, y + gap)); y += gap + IR
+            if col: icols.append(col); hs.append(y)
+            return icols, starts, hs
+        icols, starts, _ = ifill(lines, icap * IR)
         pages_ = [icols[k:k + IC] for k in range(0, len(icols), IC)]
         # 마지막 쪽: 단을 고르게 (역명 색인처럼), 아래에 판권이 들면 판권도
         colo = self.cfg.get('colophon', [])
         hc = (len(colo) + 2) * IR if colo else 0
         last_ = lines[starts[(len(pages_) - 1) * IC]:] if pages_ else []
-        t_ = max(1, math.ceil(len(last_) / IC))
+        t_ = max(IR, math.ceil(len(last_) / IC) * IR)
         while True:
-            lc_, _ = ifill(last_, t_)
+            lc_, _, hs_ = ifill(last_, t_)
             if len(lc_) <= IC: break
-            t_ += 1
+            t_ += 0.25 * IR
         if pages_: pages_[-1] = lc_
-        fit_ = 2 * (fw + fp) + t_ * IR + hc <= self.ch
+        fit_ = 2 * (fw + fp) + max(hs_ + [0]) + hc <= self.ch
         self._busidx = dict(IC=IC, icw=icw, IR=IR, fw=fw, fp=fp, pad=ipad)
         self.bus_idx = []                                   # 터미널 색인 쪽은 책 뒤 역명 색인 다음에 (plan_back)
         for j, p in enumerate(pages_):
@@ -4048,8 +4051,8 @@ class Book:
             c_ = Ctx('M', 1.0)
             for ci, col in enumerate(self.bus[k]['idx']):
                 xx = ix + ci * I['icw'] + I['pad']; ww = I['icw'] - 2 * I['pad']
-                for li, (kind, nm, ps, _) in enumerate(col):
-                    yy = iy + li * I['IR']; yl = yy + I['IR'] / 2
+                for (kind, nm, ps, _), yc in col:
+                    yy = iy + yc; yl = yy + I['IR'] / 2
                     if kind == 'b': continue
                     if kind == 'h':
                         ht = self.inl.run(nm, Ctx('GB', 1.0))
