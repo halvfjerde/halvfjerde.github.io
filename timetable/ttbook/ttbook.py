@@ -3498,7 +3498,8 @@ class Book:
         colw = (self.cw - (NC - 1) * gut) / NC
         TH, SH = 2 * R, R                                   # 머리 행, 칸 이름 행
         pad = 0.5 * fs
-        nw = colw / 2 - 2 * pad                             # 주의 글줄 폭: 가는 편의 주는 왼쪽 반, 오는 편의 주는 오른쪽 반
+        WM = 1.5 * fs                                       # 주 앞 기호 자리 (기호는 오른쪽에 붙여, 편명은 늘 같은 자리에서)
+        nw = colw / 2 - 2 * pad - WM                        # 주의 글줄 폭: 가는 편의 주는 왼쪽 반, 오는 편의 주는 오른쪽 반
         wd = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.85)), len(t)) * fs
         def wrap(text):                                     # 주: 「・」·띄어쓰기에서 (괄호 속은 날 뒤에서만)
             toks = []
@@ -3507,7 +3508,7 @@ class Book:
                 else: toks.append(t_)
             out, cur = [], ''
             for t_ in toks:
-                if cur and wd((cur + t_).rstrip()) > nw: out.append(cur.rstrip()); cur = '　' + t_
+                if cur and wd((cur + t_).rstrip()) > nw: out.append(cur.rstrip()); cur = t_
                 else: cur += t_
             out.append(cur.rstrip())
             return out
@@ -3519,7 +3520,7 @@ class Book:
                 for r_ in L:
                     no, lab = r_[0], (r_[5] if wide else r_[3])
                     if lab: g.setdefault(re.sub(r'^\((.*)\)$', r'\1', lab) if lab.count('(') == 1 and lab.startswith('(') else lab, [[], self.air_marks(lab)])[0].append(no)
-                return [ln for lab, (nos, mk) in g.items() for ln in wrap('%s%s %s' % (mk, '・'.join(nos), lab))]
+                return [(mk if k_ == 0 else '') + '\t' + ln for lab, (nos, mk) in g.items() for k_, ln in enumerate(wrap('%s %s' % ('・'.join(nos), lab)))]
             nl, nr = side_notes(P['out']), side_notes(P['in'])
             items += [('n', nl[k] if k < len(nl) else '', nr[k] if k < len(nr) else '') for k in range(max(len(nl), len(nr)))]
             seq.append((P, items))
@@ -3569,6 +3570,8 @@ class Book:
         air_nw = sec['nw']
         wide = sec['wide']
         WDN, DWd = '월화수목금토일', 0.95 * fs                 # 요일 칸
+        WMn = 1.5 * fs                                      # 주 앞 기호 자리 (plan 의 WM 과 같게)
+        mark_ = lambda m: self.inl.run(m, Ctx('M', {1: 0.8, 2: 0.66}.get(len(m), 0.48)))    # 기호는 늘 오른쪽에 붙인다 (여럿이면 작게)
         tex, rects, ops = [], [], []
         y0 = self.mt
         hw = colw / 2
@@ -3635,7 +3638,7 @@ class Book:
                                 for d_, f_ in enumerate(L[r_][4]):
                                     if f_ == '1': rects.append(('dot', xw + (d_ + 0.5) * DWd, yy + R / 2, 0.32 * fs))
                             mk_ = self.air_marks(lab_)
-                            if mk_: tex.append(self.put_box(hx - 0.2 * fs, yy, cM + 0.2 * fs, R, self.inl.run(mk_, Ctx('M', 0.8 if len(mk_) == 1 else 0.62).but(hscale=1.0 if len(mk_) < 3 else 0.8)), 'l', 'm'))
+                            if mk_: tex.append(self.put_box(hx - 0.3 * fs, yy, cM + 0.2 * fs, R, mark_(mk_), 'r', 'm'))
                             co_, nu_ = self._fno(no)
                             tex.append(self.put_box(hx + cM, yy, cC, R, self.inl.run(co_, Ctx('G', 0.85).but(hscale=HS)), 'l', 'm'))
                             tex.append(self.put_box(hx + cM + cC, yy, cN - cM - cC, R, self.inl.run(nu_, Ctx('M', 1.0).but(hscale=hsN)), 'l', 'm'))
@@ -3651,8 +3654,11 @@ class Book:
                 if notes:
                     n0 = yy
                     for _, l_, r_ in notes:
-                        if l_: tex.append(self.put_box(xx + pad, yy, hw - 2 * pad, R, seg(l_, 0.85), 'l', 'm'))
-                        if r_: tex.append(self.put_box(xx + hw + pad, yy, hw - 2 * pad, R, seg(r_, 0.85), 'l', 'm'))
+                        for x_, t_ in ((xx, l_), (xx + hw, r_)):
+                            if not t_: continue
+                            mk_, tx_ = t_.split('\t', 1) if '\t' in t_ else ('', t_)
+                            if mk_: tex.append(self.put_box(x_ + pad - 0.3 * fs, yy, WMn, R, mark_(mk_), 'r', 'm'))
+                            tex.append(self.put_box(x_ + pad - 0.3 * fs + WMn + 0.15 * fs, yy, hw - 2 * pad - WMn, R, seg(tx_, 0.85), 'l', 'm'))
                         yy += R
                     rects.append(('v', xx + hw, n0, yy, 1))
                 yy += pad
