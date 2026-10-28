@@ -2663,7 +2663,7 @@ class Book:
                        'side': self.strip_side if fold else 'B'}
                 if gdef[0] == 'single':      # 좁은 표는 띠가 여러 줄이 될 수 있다
                     natB = self.fixed_w(T, job['side']) + used * self.P0
-                    job['narrow'] = natB < self.cw * 0.62 and not fold and T.line not in self.cfg.get('foldLines', [])     # 고속버스 노선표는 나란히 놓지 않는다 (좁은 표의 제목이 빠진다)
+                    job['narrow'] = natB < self.cw * 0.62 and not fold      # 좁은 표는 나란히 (고속버스 노선표도)
                     job['nat'] = natB
                     job['bw'] = self.band_w(natB) if job['narrow'] else BWF
                 else:
@@ -3268,7 +3268,7 @@ class Book:
             def gkey(T):                                # 고속버스 노선표: 같은 노선의 하행·상행 띠들(이름의 두 끝이 같은 것)은 한 쪽에 잇달아
                 tt = (T.title.text() if T.title is not None else '').replace('︱', '―').replace('︵', '（').replace('︶', '）')     # 세로쓰기 글자를 되돌려
                 tt = re.sub(r'（[^）]*）', '', tt)
-                return frozenset(x.strip() for x in tt.split('―')) if '―' in tt else None
+                return frozenset(x.strip() for x in re.split('[―・]', tt)) if '―' in tt else None     # 하행·상행 이름은 끝 정류장들이 같다 (차례만 거꾸로)
             while any(pend):
                 pi = next(i for i, q in enumerate(pend) if q)
                 job = pend[pi][0]

@@ -354,6 +354,45 @@ for tail, ps in grp_.items():
     both.append((M, None))
     for T in Ts: title_merge[id(T)] = M
 SEOUL = {'서울경부', '센트럴시티(서울)', '동서울', '서울남부'}
+# 구간별 표: 끝 구간(줄기, 정류장 둘 넘게)을 함께 쓰고 그 줄기가 노선의 반 넘는 표들은 한 표로 — 갈래마다 제 정류장, 다른 갈래 칸은 화살표.
+# 줄기를 끝(아래)에 두도록 표마다 방향을 맞추고(상하 병기면 하행·상행을 바꿔), 나중에 서울·줄기 쪽을 위로 돌린다
+def trunk_of(seq):
+    return [tuple(seq[-k:]) for k in range(len(seq) - 1, 1, -1)] + [tuple(seq[:k][::-1]) for k in range(len(seq) - 1, 1, -1)]
+pool = [p for p in both if not p[0].get('branch')]
+while True:
+    cnt_ = collections.defaultdict(list)
+    for p in pool:
+        seq = p[0]['stops']
+        for tr_ in set(trunk_of(seq)):
+            if 2 * len(tr_) >= len(seq): cnt_[tr_].append(p)
+    best_ = max(((tr_, ps) for tr_, ps in cnt_.items() if len(ps) >= 2), key=lambda kv: (len(kv[1]), len(kv[0])), default=None)
+    if not best_: break
+    tr_, ps = best_
+    tr_ = list(tr_)
+    mem = []
+    for p in ps:
+        T, U = p
+        if list(T['stops'][-len(tr_):]) == tr_: mem.append((T['stops'], T, U))                 # 줄기가 끝: 그대로
+        else: mem.append((list(reversed(T['stops'])), U, T))                                  # 줄기가 앞: 거꾸로 (하행 자리에 상행 표)
+    mem.sort(key=lambda m: (not any(s_ in SEOUL for s_ in m[0]), m[0][0]))
+    stops = [s_ for sq, _, _ in mem for s_ in sq if s_ not in tr_]
+    stops = list(dict.fromkeys(stops)) + tr_
+    br = {}
+    for i, (sq, _, _) in enumerate(mem):
+        for s_ in sq:
+            if s_ not in tr_: br.setdefault(s_, i)
+    head_ = sum(1 for p in ps if list(p[0]['stops'][:len(tr_)]) == tr_[::-1])        # 원래 줄기가 위였던 표 수
+    D = {'stops': stops, 'board': set().union(*(X['board'] for _, X, _ in mem if X)), 'pairs': set().union(*(X['pairs'] for _, X, _ in mem if X)),
+         'cols': [dict(c, _br=i) for i, (_, X, _) in enumerate(mem) if X for c in X['cols']], 'branch': br}
+    Uc = [dict(c, _br=i) for i, (_, _, Y) in enumerate(mem) if Y for c in Y['cols']]
+    UM = {'stops': list(reversed(stops)), 'board': set().union(*(Y['board'] for _, _, Y in mem if Y)), 'pairs': set().union(*(Y['pairs'] for _, _, Y in mem if Y)),
+          'cols': Uc, 'branch': br} if Uc else None
+    if not D['cols'] and UM: D, UM = dict(UM, stops=stops[::-1]), None; D['stops'] = list(reversed(stops))
+    # 보이는 방향: 서울이 갈래에 있으면 갈래를 위로(지금대로), 줄기에 있으면 줄기를 위로, 없으면 원래 표들이 많이 쓰던 쪽
+    up_trunk = any(s_ in SEOUL for s_ in tr_) or (not any(s_ in SEOUL for s_ in stops) and 2 * head_ > len(ps))
+    if up_trunk and UM: D, UM = UM, D
+    for p in ps: both.remove(p); pool.remove(p)
+    both.append((D, UM))
 for k_, (T, U) in enumerate(both):                     # 서울이 있으면 서울 쪽을 위로 (서울에서 나가는 방향을 하행으로)
     if not U: continue
     st = T['stops']
@@ -363,8 +402,27 @@ for k_, (T, U) in enumerate(both):                     # 서울이 있으면 서
         T2 = dict(U, stops=rv_); T2.pop('title', None)
         U2 = dict(T); U2['stops'] = st
         both[k_] = (T2, U2)
+def ends_of(T, U):
+    """표의 하행 차례로: 차가 떠나는 곳(왼쪽)·끝나는 곳(오른쪽) — 중간에서 시발·종착하는 주요 정류장"""
+    st = T['stops']; L_, R_ = set(), set()
+    for X, rev in ((T, False), (U, True)):
+        if not X: continue
+        for c in X['cols']:
+            idx = [s_ for s_ in st if s_ in c and s_ in st]
+            if not idx: continue
+            f_, l_ = idx[0], idx[-1]                       # 하행 차례로 처음·끝
+            if rev: f_, l_ = l_, f_                         # 상행: 하행 차례의 끝에서 떠나 처음에서 끝난다 → 하행 뜻으로는 끝이 시발(오른쪽)
+            (R_ if rev else L_).add(f_); (L_ if rev else R_).add(l_)
+    mids = (L_ | R_) - {st[0], st[-1]}
+    left = [st[0]] + [s_ for s_ in st[1:-1] if s_ in L_ and s_ not in R_]
+    right = [s_ for s_ in st[1:-1] if s_ in R_] + [st[-1]]
+    return mids, left, right
 for T, U in both:
-    if U: T['title'] = '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1]))
+    if T.get('title') and T.get('branch') and not U and '인천공항' in T['title']: T['mids'] = ends_of(T, U)[0]; continue    # 공항 갈래 표는 이름 그대로
+    mids, left, right = ends_of(T, U)
+    T['mids'] = mids
+    T['title'] = '%s ― %s' % ('・'.join(nm(x) for x in left), '・'.join(nm(x) for x in right))
+    T['title_up'] = '%s ― %s' % ('・'.join(nm(x) for x in right[::-1]), '・'.join(nm(x) for x in left[::-1]))
 ncols = lambda p: len(p[0]['cols']) + (len(p[1]['cols']) if p[1] else 0)
 both.sort(key=lambda p: (-(ncols(p) > W1), -apt(p[0]), p[0]['stops'][0], p[0]['stops'][-1]))
 def foot(c):
@@ -380,16 +438,23 @@ def foot(c):
     return g0, wdl([d for d in range(7) if w[d]]), rem_
 BR = {}
 ALT = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'alt-stops.json')))
-def cells_of(c, st):
+def cells_of(c, st, up=False):
+    """up: 상하 병기의 상행(아래에서 위로 읽는다) — 통과 ↿, 지나지 않음 ⇡. 하행·보통 표는 ⇂(v)·⇣"""
     idx = [k for k, s_ in enumerate(st) if s_ in c]
     def other(s_): return s_ in BR and '_br' in c and BR[s_] != c['_br']        # 다른 갈래의 정류장
-    def alt(s_): return any(s_ in g and any(o in c for g2 in A_ if g2 is not g for o in g2) for A_ in ALT for g in A_)   # 다른 길로 가는 차(alt-stops.json): 지나지 않음 ‥
-    return [hm(c[s_][1]) if s_ in c else ('i' if other(s_) and idx[0] < k < idx[-1] else 'x' if other(s_) or alt(s_) else ('v' if idx[0] < k < idx[-1] else 'x')) for k, s_ in enumerate(st)]
-def line(c, st):
+    def alt(s_): return any(s_ in g and any(o in c for g2 in A_ if g2 is not g for o in g2) for A_ in ALT for g in A_)   # 다른 길로 가는 차(alt-stops.json)
+    def cell(k, s_):
+        if s_ in c: return hm(c[s_][1])
+        mid = idx[0] < k < idx[-1]
+        if not mid: return 'x'
+        if other(s_) or alt(s_): return '⇡' if up else '⇣'           # 지나지 않음(다른 길·다른 갈래): 화살표
+        return '↿' if up else 'v'                                     # 통과
+    return [cell(k, s_) for k, s_ in enumerate(st)]
+def line(c, st, up=False):
     g0, dl_, rem_ = foot(c)
     KB = {'우': '우등', '일': '일반', '프': '프리', '심': '우등', '심프': '프리', '심일': '일반'}
     kind = '"◆"' if g0 == '◆' else '%s{%s}' % ('BS' if g0.startswith('심') else 'S', KB.get(g0, g0))   # 차마다 돌아가는 등급 ◆, 심야는 검은 네모 (목록과 같이)
-    return '%s : %s : %s %s' % (kind, ' '.join(cells_of(c, st)), dl_, rem_)
+    return '%s : %s : %s %s' % (kind, ' '.join(cells_of(c, st, up)), dl_, rem_)
 ORD = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째', '일곱째', '여덟째', '아홉째', '열째', '열한째', '열두째']
 def cut(xs, k):
     sz = [len(xs) // k + (1 if i < len(xs) % k else 0) for i in range(k)]
@@ -398,12 +463,13 @@ def cut(xs, k):
     return out_
 CAPF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bus-caps.json')       # ttbook 이 잰 표마다 한 쪽 폭에 드는 편 수 (busCaps)
 CAPS = json.load(open(CAPF)) if os.path.exists(CAPF) else {}
+import re as _re
+nset = lambda tt: frozenset(x.strip() for x in _re.split('[―・]', tt.split('|')[0]))          # 이름의 정류장들 (차례·방향 무관)
 def capS(*tts):
     for tt in tts:
         if tt in CAPS: return CAPS[tt]
-        ks = {frozenset(x.strip() for x in tt.split('―'))}
         for k_, v in CAPS.items():
-            if '|' not in k_ and frozenset(x.strip() for x in k_.split('―')) in ks: return v
+            if nset(k_) == nset(tt): return v
     return W1
 def capB(tt, tu):
     if tt + '|both' in CAPS: return CAPS[tt + '|both']
@@ -418,10 +484,10 @@ for T, U in both:
     st = T['stops']
     tT = T.get('title') or '%s ― %s' % (nm(st[0]), nm(st[-1]))
     n = len(T['cols']) + (len(U['cols']) if U else 0)
-    tU = '%s ― %s' % (nm(st[-1]), nm(st[0]))
+    tU = T.get('title_up') or '%s ― %s' % (nm(st[-1]), nm(st[0]))
     if U and n <= capB(tT, tU):
         emit.append((T, U, tT, '', T['cols'], U['cols'])); TTL[id(T)] = TTL[id(U)] = tT; continue
-    for X_, tt in ((T, tT),) + (((dict(U, stops=list(reversed(st))), tU),) if U else ()):
+    for X_, tt in ((T, tT),) + (((dict(U, stops=list(reversed(st)), mids=T.get('mids', set())), tU),) if U else ()):
         TTL[id(X_ if X_ is T else U)] = tt
         m = len(X_['cols']); k = capS(tt, tT)
         if m <= k: emit.append((X_, None, tt, '', X_['cols'], [])); continue
@@ -435,18 +501,20 @@ for T, U, ttl, part, cols_, ucols in emit:
     pv, pu = None, None
     for i, s_ in enumerate(st):
         ad = '發' if s_ in T['board'] else '着'
-        mk = '*' if i in (0, len(st) - 1) else ''
+        mk = '*' if i in (0, len(st) - 1) or s_ in T.get('mids', ()) else ''     # 처음·끝, 중간에서 시발·종착하는 주요 정류장 (조준선)
+        rl = ''
+        if BR and i > 0 and BR.get(s_, -1) != BR.get(st[i - 1], -1): rl = ' style=bt=1'      # 갈래가 바뀌는 곳(갈래 구간 위아래)에 선
         if U:
             au = '發' if s_ in U['board'] else '着'
-            out.append('%s %s%s %s' % (ad if ad != pv else '〃', mk, nm(s_), au if au != pu else '〃'))
+            out.append('%s %s%s %s%s' % (ad if ad != pv else '〃', mk, nm(s_), au if au != pu else '〃', rl))
             pu = au
         else:
-            out.append('%s%s %s' % (mk, nm(s_), ad if ad != pv else '〃'))
+            out.append('%s%s %s%s' % (mk, nm(s_), ad if ad != pv else '〃', rl))
         pv = ad
     out += ['', '[trains]'] + [line(c, st) for c in cols_]
     if U:
         rs = list(reversed(st))                        # 상행은 아래(출발)에서 위로 읽는 차례로
-        out += ['', '[trains up]'] + [line(c, rs) for c in ucols]
+        out += ['', '[trains up]'] + [line(c, rs, True) for c in ucols]
     out += ['', '[notes]', '}}', '']
 tables = [T for p in both for T in p if T]
 title_of = dict(TTL)                                    # 한 표 상하 병기면 상행도 하행 표 이름으로, 따로 실으면 제 이름으로
