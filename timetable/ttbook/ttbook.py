@@ -3979,20 +3979,39 @@ class Book:
             if c0 != cur: cur = c0; lines += [('b', '', '', None), ('h', c0, '', None)]
             lines.append(('t', T, '', T))
             for D, ps in sorted(idx[T].items()): lines.append(('e', D, rng(p + first for p in ps), T))
-        icols, col = [], []
-        for i, ln in enumerate(lines):
-            if not col and ln[0] == 'b': continue                      # 단 맨 위는 비우지 않는다
-            nxt = lines[i + 1] if i + 1 < len(lines) else None
-            keep = 2 if ln[0] == 'h' else 1 if ln[0] == 't' else 0     # 머리·터미널이 단 끝에 홀로 남지 않게
-            if len(col) + 1 + keep > icap and ln[0] in ('h', 't', 'b') or len(col) + 1 > icap:
-                icols.append(col); col = []
-                if ln[0] == 'b': continue
-                if ln[0] == 'e': col.append(('t', ln[3], '（계속）', ln[3]))      # 단을 넘어 이어지는 터미널은 이름을 다시
-            col.append(ln)
-        if col: icols.append(col)
+        def ifill(lines, cap):
+            """단마다 cap 줄까지. (단들, 단마다 시작 줄 자리)"""
+            icols, col, starts = [], [], []
+            for i, ln in enumerate(lines):
+                if not col and ln[0] == 'b': continue                      # 단 맨 위는 비우지 않는다
+                keep = 2 if ln[0] == 'h' else 1 if ln[0] == 't' else 0     # 머리·터미널이 단 끝에 홀로 남지 않게
+                if len(col) + 1 + keep > cap and ln[0] in ('h', 't', 'b') or len(col) + 1 > cap:
+                    icols.append(col); col = []
+                    if ln[0] == 'b': continue
+                if not col: starts.append(i)
+                if not col and ln[0] == 'e': col.append(('t', ln[3], '（계속）', ln[3]))      # 단을 넘어 이어지는 터미널은 이름을 다시
+                col.append(ln)
+            if col: icols.append(col)
+            return icols, starts
+        icols, starts = ifill(lines, icap)
+        pages_ = [icols[k:k + IC] for k in range(0, len(icols), IC)]
+        # 마지막 쪽: 단을 고르게 (역명 색인처럼), 아래에 판권이 들면 판권도
+        colo = self.cfg.get('colophon', [])
+        hc = (len(colo) + 2) * IR if colo else 0
+        last_ = lines[starts[(len(pages_) - 1) * IC]:] if pages_ else []
+        t_ = max(1, math.ceil(len(last_) / IC))
+        while True:
+            lc_, _ = ifill(last_, t_)
+            if len(lc_) <= IC: break
+            t_ += 1
+        if pages_: pages_[-1] = lc_
+        fit_ = 2 * (fw + fp) + t_ * IR + hc <= self.ch
         self._busidx = dict(IC=IC, icw=icw, IR=IR, fw=fw, fp=fp, pad=ipad)
-        for k in range(0, len(icols), IC):
-            self.bus.append({'idx': icols[k:k + IC]}); self.pages.append({'pieces': [], 'lines': [], 'bus': len(self.bus) - 1, 'busidx': True})
+        self.bus_idx = []                                   # 터미널 색인 쪽은 책 뒤 역명 색인 다음에 (plan_back)
+        for j, p in enumerate(pages_):
+            ln_ = j == len(pages_) - 1
+            self.bus.append({'idx': p, 'colophon': bool(colo) and fit_ and ln_}); self.bus_idx.append(len(self.bus) - 1)
+        self.bus_idx_colo = bool(colo) and not fit_         # 판권이 마지막 쪽에 안 들면 따로 한 쪽
 
     @staticmethod
     def day_text(mask):
@@ -4048,7 +4067,12 @@ class Book:
                     tex.append(self.put_box(xx, yy, ww, I['IR'], pt, 'r', 'm'))
                     a_, b_ = xd + wd(nt) + 0.5 * fs, xx + ww - wd(pt) - 0.5 * fs
                     if b_ - a_ > fs: ops.append(self.dots(a_, b_, yl))
-            tex += self.page_side_title(recto, [('', '고속버스')])
+            if self.bus[k].get('colophon'):                    # 판권 (책 맨 끝)
+                colo = self.cfg.get('colophon', [])
+                yb = y0 + self.ch - len(colo) * I['IR']
+                for i, t in enumerate(colo):
+                    tex.append(self.put_box(x0, yb + i * I['IR'], self.cw, I['IR'], self.inl.run(t, Ctx('GB' if i == 0 else 'M', 1.0)), 'l', 'm'))
+            tex += self.page_side_title(recto, [('', '터미널 색인')])
             return tex, ' '.join(ops)
         P = self._bus
         colw, pad, hw, CG, TH, CH, GP, SR, BG, LBW, SW, NC, HS = (P[k_] for k_ in ('colw', 'pad', 'hw', 'CG', 'TH', 'CH', 'GP', 'SR', 'BG', 'LBW', 'SW', 'NC', 'HS'))
@@ -4216,7 +4240,13 @@ class Book:
                               'h': (2 * (fw + fp) + t * lh) if ln and colo and fit else self.ch})
         if colo and not fit: self.back.append({'cols': [], 'colophon': True, 'h': 0})
         self._ix = (colw, pad, lh)
+        bix_ = getattr(self, 'bus_idx', [])
+        if bix_:                                          # 터미널 색인을 역명 색인 뒤에: 판권은 터미널 색인 끝으로
+            self.back = [dict(b_, colophon=False, h=self.ch) for b_ in self.back if b_['cols']]
         for i in range(len(self.back)): self.pages.append({'pieces': [], 'lines': [], 'back': i})
+        for k_ in bix_: self.pages.append({'pieces': [], 'lines': [], 'bus': k_, 'busidx': True})
+        if bix_ and getattr(self, 'bus_idx_colo', False):
+            self.back.append({'cols': [], 'colophon': True, 'h': 0}); self.pages.append({'pieces': [], 'lines': [], 'back': len(self.back) - 1})
 
     def dots(self, a_, b_, yl):
         """이름과 쪽 번호를 잇는 점: 글줄 가운데 높이에 둥근 점"""
@@ -4258,8 +4288,9 @@ class Book:
                 gi_ = [i for i in ai_ if not self.pages[i].get('busidx')]
                 xi_ = [i for i in ai_ if self.pages[i].get('busidx')]
                 seq += [('g',), ('h', lab_, a_, b_, None), ('i', '노선별', lp['고속버스'][0], lp['고속버스'][1], None)]
+                a_, b_ = lp['고속버스'][0], (gi_[-1] + first) if gi_ else lp['고속버스'][1]
+                seq[-2] = ('h', lab_, a_, b_, None)
                 if gi_: seq.append(('i', '구간별', gi_[0] + first, gi_[-1] + first, None))
-                if xi_: seq.append(('i', '터미널 색인', xi_[0] + first, xi_[-1] + first, None))
                 continue
             if ai_: seq += [('g',), ('h', lab_, ai_[0] + first, ai_[-1] + first, None)]
             if key_ == 'air' and len(getattr(self, 'air_secs', [])) > 1:          # 항공 밑에 장마다
@@ -4268,7 +4299,11 @@ class Book:
                     if pi_: seq.append(('i', sc_['sub'] if 'sub' in sc_ else sc_['title'], pi_[0] + first, pi_[-1] + first, None))
         for om in AFT:                                   # 고속버스 뒤에 따로: 인천공항 버스
             if om in lp: seq += [('g',), ('h', self.cfg.get('modeLabels', {}).get(om, om), lp[om][0], lp[om][1], None)]
-        if bk_: seq += [('g',), ('h', '역명 색인', bk_[0] + first, bk_[-1] + first, None)]
+        xi_ = [i for i, pg in enumerate(self.pages) if pg.get('busidx')]
+        if bk_ and xi_:                                  # 색인: 역명 · 터미널
+            seq += [('g',), ('h', '색인', bk_[0] + first, xi_[-1] + first, None), ('i', '역명', bk_[0] + first, bk_[-1] + first, None),
+                    ('i', '터미널', xi_[0] + first, xi_[-1] + first, None)]
+        elif bk_: seq += [('g',), ('h', '역명 색인', bk_[0] + first, bk_[-1] + first, None)]
         # 범례: 세 단 (등급 · KTX · 관광열차)
         lg = self.cfg.get('legend', [])
         groups, flat = [], []
