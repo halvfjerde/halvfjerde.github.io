@@ -3261,8 +3261,8 @@ class Book:
         OTH_ = self.cfg.get('otherModes', [])
         for bi, bunch in enumerate(bunches):
             cur['bi'] = bi
-            if bunch and bunch[0].line in OTH_ and not (bi and bunches[bi - 1] and bunches[bi - 1][0].line in OTH_):
-                c = cur['c']                            # 고속버스 노선표는 새 쪽에서
+            if bunch and bunch[0].line in OTH_ and not (bi and bunches[bi - 1] and bunches[bi - 1][0].line == bunch[0].line):
+                c = cur['c']                            # 고속버스 노선표(인천공항 버스 노선표도 따로)는 새 쪽에서
                 while page(c)['pieces']: c += 1
                 cur['c'] = c
             pend = [collections.deque([] if id(T) in prefilled else self.jobs_of(T)) for T in bunch]
@@ -3467,11 +3467,14 @@ class Book:
                     q['vrun_part'] = '・'.join(dict.fromkeys(r['part'] for r in run if r.get('part')))    # 한 칸에 걸친 몇째들: (첫째·둘째)
         # 철도 밖의 노선(고속버스 노선표)은 항공 뒤로: 철도 → 항공 → 고속버스(노선표 → 터미널별)
         OTHER = self.cfg.get('otherModes', [])
+        AFTER = self.cfg.get('afterBus', [])               # 고속버스 목록 뒤에 따로 싣는 갈래 (인천공항 버스)
         is_o = lambda pg: pg['pieces'] and all(pc['T'].line in OTHER for pc in pg['pieces'])
+        is_a = lambda pg: pg['pieces'] and all(pc['T'].line in AFTER for pc in pg['pieces'])
         self.pages = [pg for pg in pages if not is_o(pg)]
         self.plan_air()
-        self.pages += [pg for pg in pages if is_o(pg)]
+        self.pages += [pg for pg in pages if is_o(pg) and not is_a(pg)]
         self.plan_bus()
+        self.pages += [pg for pg in pages if is_a(pg)]
         self.plan_back()
 
     # ── 항공 (JTB 국내선 꼴): 공항 쌍마다 한 덩이 — 머리(번호·쌍·운임), 왼쪽 가는 편·오른쪽 오는 편, 밑에 ※ 주. 두 단으로 흘려 짠다 ──
@@ -4202,8 +4205,9 @@ class Book:
         rail = [(nm, a, b, T) for nm, (a, b, T) in lp.items() if nm not in OTHER]
         seq = [('h', '철도', min(x[1] for x in rail), max(x[2] for x in rail), None)] + [('i',) + x for x in rail]
         bi_ = [i for i, pg in enumerate(self.pages) if 'bus' in pg]
+        AFT = self.cfg.get('afterBus', [])
         for om in OTHER:
-            if om in lp and not (om == '고속버스' and bi_): seq += [('g',), ('h', om, lp[om][0], lp[om][1], None)]
+            if om in lp and om not in AFT and not (om == '고속버스' and bi_): seq += [('g',), ('h', om, lp[om][0], lp[om][1], None)]
         for key_, lab_ in (('air', '항공'), ('bus', '고속버스')):
             ai_ = [i for i, pg in enumerate(self.pages) if key_ in pg]
             if key_ == 'bus' and ai_ and '고속버스' in lp:          # 고속버스: 노선표 + 터미널별 목록을 한 갈래로
@@ -4216,6 +4220,8 @@ class Book:
                 for si_, sc_ in enumerate(self.air_secs):
                     pi_ = [i for i, pg in enumerate(self.pages) if pg.get('airSec') == si_]
                     if pi_: seq.append(('i', sc_['sub'] if 'sub' in sc_ else sc_['title'], pi_[0] + first, pi_[-1] + first, None))
+        for om in AFT:                                   # 고속버스 뒤에 따로: 인천공항 버스
+            if om in lp: seq += [('g',), ('h', self.cfg.get('modeLabels', {}).get(om, om), lp[om][0], lp[om][1], None)]
         if bk_: seq += [('g',), ('h', '역명 색인', bk_[0] + first, bk_[-1] + first, None)]
         # 범례: 세 단 (등급 · KTX · 관광열차)
         lg = self.cfg.get('legend', [])

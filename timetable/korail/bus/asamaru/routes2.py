@@ -220,6 +220,9 @@ for A, D1, D2, n, pv in LD:
 for la_, lb_ in (json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'manual-links.json'))) if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'manual-links.json')) else []):
     x_, y_ = (la_[0], m_(la_[1]), la_[2]), (lb_[0], m_(lb_[1]), lb_[2])     # 사람이 확인한 같은 차 (진도 1330 = 무안 1440)
     if x_[1] in P.get((x_[0], x_[2]), {}).get('t', {}) and y_[1] in P.get((y_[0], y_[2]), {}).get('t', {}): u(x_, y_); EDG.append((x_, y_, 0))
+for (A_, D_), v_ in P.items():                         # 인천공항 버스는 이어지지 않은 한 구간 차도 마디로 (주문진 ⇄ 인천공항2터미널, 공항 발 시외)
+    if A_.startswith('인천공항') or D_.startswith('인천공항'):
+        for t_ in v_['t']: f((A_, t_, D_))
 comp = collections.defaultdict(list)
 for x in list(par): comp[f(x)].append(x)
 # 한 차에 같은 곳 발이 둘(엇갈림): 버리지 않고, 착이 잘 맞는 단서부터 다시 이어 엇갈리는 단서(착이 10분 넘게 어긋나는 것)는 뺀다
@@ -248,7 +251,7 @@ if BADN:
     for x in list(par): comp[f(x)].append(x)
 trips = []
 for nodes in comp.values():
-    if len(nodes) < 2: continue
+    if len(nodes) < 2 and not (nodes[0][0].startswith('인천공항') or nodes[0][2].startswith('인천공항')): continue      # 인천공항 버스는 한 구간뿐인 차도 (주문진 ⇄ 인천공항2터미널)
     board, bad = {}, False
     for A, t, D in nodes:
         if A in board and board[A] != t: bad = True
@@ -509,6 +512,8 @@ ALL = tables
 def rev_ok(T, U):
     cm = [s_ for s_ in T['stops'] if s_ in U['stops']]
     if len(cm) < 2 or len(cm) < 0.5 * min(len(T['stops']), len(U['stops'])): return 0
+    _ap = lambda X: any(s_.startswith('인천공항') for s_ in X['stops'])
+    if _ap(T) != _ap(U) or (_ap(T) and all(s_.startswith('인천공항') for s_ in cm)): return 0     # 인천공항 버스: 공항 밖 정류장이 겹치는 반대 방향끼리만
     if not ({T['stops'][0], T['stops'][-1]} & set(U['stops']) and {U['stops'][0], U['stops'][-1]} & set(T['stops'])): return 0   # 끝 정류장을 서로 나눠 가져야
     ui = [U['stops'].index(s_) for s_ in cm]
     return len(cm) if all(ui[k] > ui[k + 1] for k in range(len(ui) - 1)) else 0
@@ -548,7 +553,7 @@ apt = lambda T: any(s_.startswith('인천공항') for s_ in T['stops'])         
 grp_ = collections.defaultdict(list)
 for p in both:
     T, U = p
-    if U is None and apt(T) and len(T['cols']) <= 8 and T['stops'][-1].startswith('인천공항'):
+    if False and U is None and apt(T) and len(T['cols']) <= 8 and T['stops'][-1].startswith('인천공항'):     # 인천공항 버스는 따로 떼어 노선마다 제 표로 (합치지 않는다)
         tail = tuple(s_ for s_ in T['stops'] if s_.startswith('인천공항'))
         grp_[tail].append(p)
 for tail, ps in grp_.items():
@@ -566,7 +571,7 @@ SEOUL = {'서울경부', '센트럴시티(서울)', '동서울', '서울남부'}
 # 줄기를 끝(아래)에 두도록 표마다 방향을 맞추고(상하 병기면 하행·상행을 바꿔), 나중에 서울·줄기 쪽을 위로 돌린다
 def trunk_of(seq):
     return [tuple(seq[-k:]) for k in range(len(seq) - 1, 1, -1)] + [tuple(seq[:k][::-1]) for k in range(len(seq) - 1, 1, -1)]
-pool = [p for p in both if not p[0].get('branch')]
+pool = [p for p in both if not p[0].get('branch') and not apt(p[0])]      # 인천공항 버스 표는 노선마다 따로 (줄기로 합치지 않는다)
 while True:
     cnt_ = collections.defaultdict(list)
     for p in pool:
@@ -656,6 +661,31 @@ for T_, U_ in both:                                    # 노선표: TAGO 가 같
             # 고창 ― 인천공항 시외 편: TAGO 에 고창 발만 있어 정읍·김제 칸이 비는 것을 나무위키 시각(정읍 +40, 김제 +80)으로
             if '고창' in c and c['고창'][0] == 'd' and c.get('_sub') and any(s_.startswith('인천공항') for s_ in c) and '정읍' not in c and '김제' not in c and '정읍' in X_['stops']:
                 c['정읍'] = ('d', (c['고창'][1] + 40) % 1440); c['김제'] = ('d', (c['고창'][1] + 80) % 1440)
+# 인천공항 버스: 공항을 위에 두어(공항 발이 하행) 차례를 맞추고, 1터미널 줄은 늘 둔다.
+# TAGO 시외는 2터미널과 끝 정류장 사이만 판다 → 1터미널은 그 표의 고속 편(또는 시각표)과 같은 간격으로 (공항 발은 모르면 +25분: 김해 고속・나무위키 시각표 모두 +25),
+# 그 밖의 사이 정류장은 모름(빈칸, 「통과」 아님)
+T1_, T2_ = '인천공항T1', '인천공항T2'
+for i_, (T_, U_) in enumerate(both):
+    if not any(s_.startswith('인천공항') for s_ in T_['stops']): continue
+    if U_ and not T_['stops'][0].startswith('인천공항'):
+        T_, U_ = dict(U_, stops=list(reversed(T_['stops'])), title=None), dict(T_, title=None)
+    if T1_ not in T_['stops'] and T2_ in T_['stops']:
+        k_ = T_['stops'].index(T2_); T_['stops'].insert(k_ + 1 if k_ == 0 else k_, T1_)
+    both[i_] = (T_, U_)
+    for X_, st_ in ((T_, T_['stops']), (U_, list(reversed(T_['stops'])))):
+        if not X_: continue
+        for out_ in (True, False):                    # 공항 발 / 공항 행
+            kd_ = 'd' if out_ else 'a'
+            offs_ = collections.Counter(((c[T1_][1] - c[T2_][1]) if out_ else (c[T2_][1] - c[T1_][1])) % 1440 for c in X_['cols'] if T1_ in c and T2_ in c and c[T2_][0] == kd_)
+            o_ = offs_.most_common(1)[0][0] if offs_ else (25 if out_ else None)
+            for c in X_['cols']:
+                if T2_ not in c or c[T2_][0] != kd_: continue
+                if T1_ not in c and o_ is not None:
+                    c[T1_] = (kd_, (c[T2_][1] + (o_ if out_ else -o_)) % 1440)
+                    if out_: X_['board'] = set(X_['board']) | {T1_}
+                if c.get('_sub'):
+                    on_ = [k for k, s_ in enumerate(st_) if s_ in c]
+                    c['_unk'] = {s_ for k, s_ in enumerate(st_) if on_[0] < k < on_[-1] and s_ not in c} | ({T1_} if T1_ not in c else set())
 def ends_of(T, U):
     """표의 하행 차례로: 차가 떠나는 곳(왼쪽)·끝나는 곳(오른쪽) — 중간에서 시발·종착하는 주요 정류장"""
     st = T['stops']; L_, R_ = set(), set()
@@ -700,6 +730,7 @@ def cells_of(c, st, up=False):
     def alt(s_): return any(s_ in g and any(o in c for g2 in A_ if g2 is not g for o in g2) for A_ in ALT for g in A_)   # 다른 길로 가는 차(alt-stops.json)
     def cell(k, s_):
         if s_ in c: return hm(c[s_][1])
+        if s_ in c.get('_unk', ()): return 'c'                         # 시각 모름 (인천공항 발 시외의 사이 정류장)
         mid = idx[0] < k < idx[-1]
         if not mid: return 'x'
         if other(s_): return 'i'                                      # 다른 갈래(지선): ║
@@ -747,7 +778,10 @@ for T, U in both:
         m = len(X_['cols']); k = capS(tt, tT)
         if m <= k: emit.append((X_, None, tt, '', X_['cols'], [])); continue
         for i, cs in enumerate(greedy(X_['cols'], k)): emit.append((X_, None, tt, '（%s）' % ORD[i], cs, []))
+out_apt = ["{{시각표테마}}", "'''인천공항 버스''' 노선표. 국토교통부 TAGO 고속・시외버스정보(2026년 10월 17∼30일) 기준.", '', '== 인천공항버스 ==']
+out_reg = out
 for T, U, ttl, part, cols_, ucols in emit:
+    out = out_apt if apt(T) else out_reg               # 인천공항 버스는 따로 (pages/인천공항버스.txt)
     st = T['stops']
     BR.clear(); BR.update(T.get('branch', {}))
     out += ['=== %s%s ===' % (ttl, part), '{{#invoke:Timetable|main|data=', 'title "%s%s"' % (ttl, part), 'headl "b%s"' % ttl]
@@ -777,7 +811,9 @@ for T, U, ttl, part, cols_, ucols in emit:
 tables = [T for p in both for T in p if T]
 title_of = dict(TTL)                                    # 한 표 상하 병기면 상행도 하행 표 이름으로, 따로 실으면 제 이름으로
 for k_, M_ in title_merge.items(): title_of[k_] = title_of[id(M_)]
+out = out_reg
 open(sys.argv[2], 'w').write('\n'.join(out))
+open(re.sub(r'(\.txt)?$', '-apt.txt', sys.argv[2], count=1), 'w').write('\n'.join(out_apt))
 # 일부 편만 들르는 정류장 (사람이 확인한 것, partial-stops.json: [A, B, D] = A 발 D 행의 몇 편이 B 에도 선다): 목록의 A→D 에 ◇ 표지와 안내 줄.
 # B 의 편 가운데 노선표에 실린 다른 노선의 차는 빼고 맞춘다
 pmark, pfold = {}, {}                                    # pfold: B 쪽 덩이의 편이 모두 ◇ 편이면 참조 줄로 (가장 긴 구간에 싣는다)
@@ -799,7 +835,7 @@ for A, B_, D in PART:
         d = P[(D, A)]['dur'] - P[(D, B_)]['dur']
         pmark[(D, A)] = ({t for t in ta if t in tb}, '◇ 경유 %s %s' % (nm(B_), hmd(P[(D, B_)]['dur'])))
         pfold[(D, B_)] = ('see', A, pmark[(D, A)][0])
-own = {p for T in tables for p in T['pairs']}
+own = {p for T in tables for p in T['pairs'] if not apt(T) or any(s_.startswith('인천공항') for s_ in p)}      # 인천공항 버스 표의 공항 밖 구간(김해 → 인천)은 목록에도
 _cov = {(A, c[A][1], D) for T in tables for c in T['cols'] for A in c if not A.startswith('_') and c[A][0] == 'd' for D in c if not D.startswith('_') and D != A}
 _bo = {tuple(k.split('|')): v for k, v in json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'board-offsets.json'))).items()}
 _altS = [set(R_['seq']) for R_ in (json.load(open(ALTF)) if os.path.exists(ALTF) else [])]
@@ -1114,6 +1150,12 @@ b['names'] = SHORT
 b['tableRefs'] = sorted([A, D, title_of[id(T)], P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
 b['tableRefs'] += sorted(map(list, {tuple(x[:3]) + (x[3], tuple(x[4]) if x[4] else None) for x in SKIPREF}))
 b['tableRefs'] += sorted([A, D, title_of[i_], du_, None] for A, D, i_, du_ in set(EXREF) if i_ in title_of)                  # TAGO 에 없는 끝 정류장 (요금 모름)
+APT_T = {title_of[id(T)] for T in tables if apt(T) and id(T) in title_of}          # 인천공항 버스는 따로 떼어: 목록에서 그 표로 보내지 않고, 공항 오가는 덩이도 싣지 않는다
+b['tableRefs'] = [r_ for r_ in b['tableRefs'] if r_[2] not in APT_T and not r_[0].startswith('인천공항') and not r_[1].startswith('인천공항')]
+_apl = sum(len(X.get('times', [])) for O in b['origins'] for X in O['dests'] if O['from'].startswith('인천공항') or X['to'].startswith('인천공항'))
+if _apl: print('인천공항 버스인데 표에 없어 목록에서도 빠진 편', _apl, file=sys.stderr)
+for O in b['origins']: O['dests'] = [X for X in O['dests'] if not (O['from'].startswith('인천공항') or X['to'].startswith('인천공항') or str(X.get('see', '')).startswith('인천공항'))]
+b['origins'] = [O for O in b['origins'] if O['dests']]
 # ── 이어진 노선을 목록에서 이어서 보이기 ──
 # 1) 「이 밖에 D 행 n편도 섬」: 그 편들(더 먼 D 까지 가는 차)을 이 덩이에도 싣고 그 줄에 「→D 착」 (D 덩이에도 그대로)
 # 2) 「이 밖에 A 발 n편도 탐」: 앞 출발지 A 에서 오는 차를 이 덩이에 싣고 그 줄에 「A 발 시각」

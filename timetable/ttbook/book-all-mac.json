@@ -58,7 +58,8 @@
   "목포보성선",
   "교외선",
   "관광열차",
-  "고속버스"
+  "고속버스",
+  "인천공항버스"
  ],
  "pageTitle": true,
  "notes": "header",
@@ -210,10 +211,12 @@
  "airCodes": "iata2icao.json",
  "bus": "bus.json",
  "otherModes": [
-  "고속버스"
+  "고속버스",
+  "인천공항버스"
  ],
  "foldLines": [
-  "고속버스"
+  "고속버스",
+  "인천공항버스"
  ],
  "airlines": {
   "KE": "대한항공",
@@ -228,5 +231,11 @@
   "XU": "섬에어",
   "RF": "에어로케이"
  },
- "busCaps": "bus-caps.json"
+ "busCaps": "bus-caps.json",
+ "afterBus": [
+  "인천공항버스"
+ ],
+ "modeLabels": {
+  "인천공항버스": "인천공항 버스"
+ }
 }
