@@ -242,48 +242,73 @@ for T in sorted([T for T in tables if T not in pick and len(T['stops']) >= 4 and
                 key=lambda T: (-len(T['cols']) * len(T['stops']))):       # 주요(차가 많고) 긴(정류장이 많은) 노선부터
     if tot2 + len(T['cols']) <= CAP2: pick.append(T); tot2 += len(T['cols'])
 print('candidates', len(cand), 'picked', len(pick), 'cols', tot, '+', tot2, file=sys.stderr)
-tables = pick
-out = ["{{시각표테마}}", "'''고속버스''' 노선표. 국토교통부 TAGO 고속버스정보(2026년 10월 24∼30일) 기준.", '', '== 고속버스 ==']
-tables.sort(key=lambda T: (T['stops'][0], T['stops'][-1]))
-for T in tables:
+# 편도 8편 이하: 반대 방향 표(정류장이 같은 것)와 상하 병기 한 표로 (고르지 않았어도 반대 방향은 곁들인다)
+ALL = tables
+both = []
+used_ = set()
+for T in pick:
+    if id(T) in used_: continue
+    U = next((U for U in ALL if U is not T and set(U['stops']) == set(T['stops']) and id(U) not in used_), None)
+    if U and len(T['cols']) <= 8 and len(U['cols']) <= 8:
+        both.append((T, U)); used_ |= {id(T), id(U)}
+    else:
+        both.append((T, None)); used_.add(id(T))
+NM = {'인천공항T1': '인천공항1터미널', '인천공항T2': '인천공항2터미널'}        # 노선표 굵은 글꼴에는 로마자가 없어 한글로
+nm = lambda x: NM.get(x, x)
+out = ["{{시각표테마}}", "'''고속버스''' 노선표. 국토교통부 TAGO 고속버스정보(2026년 10월 17∼30일) 기준.", '', '== 고속버스 ==']
+# 차례: 접어 싣는 큰 표(한 쪽 폭을 넘는 것)를 먼저 — 그 띠들이 한 쪽에 위아래로 모이게
+both.sort(key=lambda p: (-(len(p[0]['cols']) > W1), p[0]['stops'][0], p[0]['stops'][-1]))
+def foot(c):
+    w = c['_w']
+    gs = collections.Counter(x for x in w if x)
+    g0 = gs.most_common(1)[0][0] if gs else '우'
+    diff = [d for d in range(7) if w[d] and w[d] != g0]
+    rem_ = ('%s%s' % (''.join(WD[d] for d in diff), GR.get(w[diff[0]], w[diff[0]]))) if diff else '_'
+    return g0, wdl([d for d in range(7) if w[d]]), rem_
+def cells_of(c, st):
+    idx = [k for k, s_ in enumerate(st) if s_ in c]
+    return [hm(c[s_][1]) if s_ in c else ('v' if idx[0] < k < idx[-1] else 'x') for k, s_ in enumerate(st)]
+def line(c, st):
+    g0, dl_, rem_ = foot(c)
+    kind = '"※"' if g0 == '※' else 'S{%s}' % GR.get(g0, g0)          # 차마다 돌아가는 등급
+    return '%s : %s : %s %s' % (kind, ' '.join(cells_of(c, st)), dl_, rem_)
+ORD = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째']
+emit = []
+for T, U in both:                                       # 한 쪽 폭을 넘는 표는 같은 이름의 표 여럿으로 나눠 위아래로 (펼침면으로 넘기지 않게)
+    n = len(T['cols'])
+    if U or n <= W1: emit.append((T, U, '', T['cols'])); continue
+    k = -(-n // W1); sz = [n // k + (1 if i < n % k else 0) for i in range(k)]
+    a_ = 0
+    for i, z in enumerate(sz): emit.append((T, None, '（%s）' % ORD[i], T['cols'][a_:a_ + z])); a_ += z
+for T, U, part, cols_ in emit:
     st = T['stops']
-    def foot(c):
-        w = c['_w']
-        gs = collections.Counter(x for x in w if x)
-        g0 = gs.most_common(1)[0][0] if gs else '우'
-        diff = [d for d in range(7) if w[d] and w[d] != g0]
-        rem_ = ('%s%s' % (''.join(WD[d] for d in diff), GR.get(w[diff[0]], w[diff[0]]))) if diff else '_'
-        return g0, wdl([d for d in range(7) if w[d]]), rem_
-    fs_ = [foot(c) for c in T['cols']]
-    hasd = hasr = True                                   # 표마다 줄 짜임이 같아야 나란히 놓을 때 어긋나지 않는다
-    out += ['=== %s ― %s ===' % (st[0], st[-1]), '{{#invoke:Timetable|main|data=',
-            'title "%s ― %s"' % (st[0], st[-1]), 'headl "b%s ― %s"' % (st[0], st[-1]), 'cols st ad', 'rcols st', '',
-            '[rows]', 'kind 등급 style=va=b r=等級', '']
-    if hasd or hasr:
-        out += ['[footer]'] + (['days 운행일 r=運行日 style=va=t'] if hasd else []) + (['rem 비고 r=備考 style=va=t'] if hasr else []) + ['']
-    out += ['[stations]']
-    prev = None
-    for i, s in enumerate(st):
-        ad = '發' if s in T['board'] else '着'
-        out.append('%s%s %s' % ('*' if i in (0, len(st) - 1) else '', s, ad if ad != prev else '〃'))
-        prev = ad
-    out += ['', '[trains]']
-    for c, (g0, dl_, rem_) in zip(T['cols'], fs_):
-        idx = [k for k, s in enumerate(st) if s in c]
-        cells = []
-        for k, s in enumerate(st):
-            if s in c: cells.append(hm(c[s][1]))
-            elif idx[0] < k < idx[-1]: cells.append('v')
-            else: cells.append('x')
-        ft = ([dl_] if hasd else []) + ([rem_] if hasr else [])
-        out.append('S{%s} : %s' % (GR.get(g0, g0), ' '.join(cells)) + (' : ' + ' '.join(ft) if ft else ''))
+    ttl = '%s ― %s' % (nm(st[0]), nm(st[-1]))
+    out += ['=== %s%s ===' % (ttl, part), '{{#invoke:Timetable|main|data=', 'title "%s%s"' % (ttl, part), 'headl "b%s"' % ttl]
+    out += (['cols ad st ad', 'both 1'] if U else ['cols st ad', 'rcols st']) + ['',
+            '[rows]', 'kind 등급 style=va=b r=等級', '', '[footer]', 'days 운행일 r=運行日 style=va=t', 'rem 비고 r=備考 style=va=t', '', '[stations]']
+    pv, pu = None, None
+    for i, s_ in enumerate(st):
+        ad = '發' if s_ in T['board'] else '着'
+        mk = '*' if i in (0, len(st) - 1) else ''
+        if U:
+            au = '發' if s_ in U['board'] else '着'
+            out.append('%s %s%s %s' % (ad if ad != pv else '〃', mk, nm(s_), au if au != pu else '〃'))
+            pu = au
+        else:
+            out.append('%s%s %s' % (mk, nm(s_), ad if ad != pv else '〃'))
+        pv = ad
+    out += ['', '[trains]'] + [line(c, st) for c in cols_]
+    if U:
+        rs = list(reversed(st))                        # 상행은 아래(출발)에서 위로 읽는 차례로
+        out += ['', '[trains up]'] + [line(c, rs) for c in U['cols']]
     out += ['', '[notes]', '}}', '']
+tables = [T for p in both for T in p if T]
 open(sys.argv[2], 'w').write('\n'.join(out))
 own = {p for T in tables for p in T['pairs']}
 for O in b['origins']: O['dests'] = [X for X in O['dests'] if (O['from'], X['to']) not in own]
 b['origins'] = [O for O in b['origins'] if O['dests']]
 b['routeOwned'] = sorted('%s→%s' % p for p in own)
-b['tableRefs'] = sorted([A, D, '%s ― %s' % (T['stops'][0], T['stops'][-1]), P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
+b['tableRefs'] = sorted([A, D, '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1])), P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
 json.dump(b, open(sys.argv[3], 'w'), ensure_ascii=False, indent=0)
 # 사람이 확인할 목록 (마크다운)
 rep = ['# 고속버스 노선표: 확인할 것', '', '정류장 차례·경유 여부는 TAGO 구간별 시각을 맞물려 짐작한 것. 아래는 근거가 약하거나 따로 확인되지 않은 것.', '']

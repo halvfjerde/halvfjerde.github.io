@@ -3713,6 +3713,12 @@ class Book:
                     if wsm(cur + sep + t_) > ww_: out.append(cur + sep.strip()); cur = '　　' + t_
                     else: cur += sep + t_
                 out.append(cur)
+            if X.get('gnote'):                              # 돌아가는 등급: 「※ 가운데 날마다 1∼2편 프리미엄, 나머지 우등」
+                cur = ''
+                for k_, t_ in enumerate(X['gnote'].split(', ')):
+                    if cur and wsm(cur + ', ' + t_) > ww_: out.append(cur + ','); cur = '　' + t_
+                    else: cur = (cur + ', ' + t_) if cur else t_
+                out.append(cur)
             return out
         items = []                                          # (종류, 높이, 내용)
         for O in data['origins']:

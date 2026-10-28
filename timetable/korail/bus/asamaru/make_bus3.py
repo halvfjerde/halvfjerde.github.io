@@ -32,23 +32,64 @@ def wdl(ws):
     if ws == [0, 1, 2, 3, 4]: return '월∼금'
     if len(ws) >= 3 and ws == list(range(ws[0], ws[-1] + 1)): return WD[ws[0]] + '∼' + WD[ws[-1]]
     return '・'.join(WD[w] for w in ws)
+# 두 주(이레 × 2)를 맞대어:
+# · 다니는 요일: 나중 주에 한 번이라도 다니는 편만 싣고, 두 주 가운데 한 번이라도 다닌 요일은 다니는 날로 (하루 빠진 것은 거의 임의 결행)
+# · 등급: 같은 요일인데 주마다 다르면 편마다 정해진 등급이 아니라 차가 돌아가며 바뀌는 것 → 등급 칸 ※, 행선지 밑에 「※ 가운데 날마다 1편 프리미엄」
+LAST = set(days[-7:])                                      # 나중 주
+GN = {'우등': '우등', '고속': '일반', '프리미엄': '프리미엄', '심야우등': '심야우등', '심야프리미엄': '심야프리미엄', '심야고속': '심야일반'}
+PD = collections.defaultdict(dict)                         # (출발, 도착, 시각) → 날짜 → 등급
+for (o, x, t, w_), gs in GD2.items(): pass
+for a, b_, ia, ib in pairs:
+    if '휴게소' in a or '휴게소' in b_: continue
+    for d in days:
+        f = os.path.join(C, 'p-%s-%s-%s.json' % (d, ia[0], ib[0]))
+        if not os.path.exists(f): continue
+        for r in json.load(open(f)):
+            o, x = r['depPlaceNm'], r['arrPlaceNm']
+            if o == x: continue
+            PD[(o, x, mins(r['depPlandTime']))][d] = r.get('gradeNm', '')
 origins = []
+nvar = 0
 for o in sorted(T):
     dests = []
     for x in sorted(T[o]):
         ds = [du for du, _ in info[o][x]]; fs = [c for _, c in info[o][x] if c]
         dur = int(statistics.median(ds))
-        times = []
-        for t, ws in sorted(T[o][x].items()):
+        times, var_t = [], []
+        for t in sorted(T[o][x]):
+            pd = PD[(o, x, t)]
+            if not (set(pd) & LAST): continue                # 나중 주에 없는 편 (철이 바뀌어 없어진 편)
+            byw = collections.defaultdict(set)
+            for d, g in pd.items(): byw[wd[d]].add(g)
+            gvar = any(len(v) > 1 for v in byw.values())
             w = [0] * 7
-            for d in days:
-                if wd[d] in ws:
-                    gs = GD2.get((o, x, t, wd[d]), {''})
-                    w[wd[d]] = G.get(next(iter(gs)), '') or '우'
+            for w_, gs in byw.items():
+                w[w_] = '※' if gvar else (G.get(next(iter(gs)), '') or '우')
             hm = lambda m: '%d%02d' % (m // 60 % 24, m % 60)
             times.append([hm(t), hm(t + dur), w])
-        dests.append({'to': x, 'dur': dur, 'fare': [min(fs), max(fs)] if fs else None, 'times': times})
-    origins.append({'from': o, 'dests': dests})
+            if gvar: var_t.append(t)
+        X = {'to': x, 'dur': dur, 'fare': [min(fs), max(fs)] if fs else None, 'times': times}
+        if var_t:                                           # 돌아가는 등급: 날마다 몇 편이 무슨 등급인지
+            nvar += len(var_t)
+            cnt = collections.defaultdict(collections.Counter)
+            for t in var_t:
+                for d, g in PD[(o, x, t)].items(): cnt[d][g] += 1
+            gall = collections.Counter(g for c in cnt.values() for g in c.elements())
+            major = gall.most_common(1)[0][0]
+            parts, ok = [], True
+            for g in sorted(gall, key=lambda g: -gall[g]):
+                if g == major: continue
+                ks = sorted(cnt[d][g] for d in cnt)
+                lo_, hi_ = ks[len(ks) // 10], ks[-1 - len(ks) // 10]        # 드문 튀는 날(임의 결행 등)은 빼고
+                if lo_ == hi_ and lo_ > 0: parts.append('날마다 %d편 %s' % (lo_, GN.get(g, g)))
+                elif hi_ - lo_ == 1 and lo_ > 0: parts.append('날마다 %d∼%d편 %s' % (lo_, hi_, GN.get(g, g)))
+                elif hi_ - lo_ == 1: parts.append('어떤 날 %d편 %s' % (hi_, GN.get(g, g)))
+                else: ok = False
+            if ok and parts: X['gnote'] = '※ 가운데 ' + ', '.join(parts) + ', 나머지 %s' % GN.get(major, major)
+            else: X['gnote'] = '※ 날마다 등급이 바뀜 (%s)' % '・'.join(GN.get(g, g) for g in sorted(gall, key=lambda g: -gall[g]))
+        if times: dests.append(X)
+    if dests: origins.append({'from': o, 'dests': dests})
+print('grade-rotating times', nvar, file=sys.stderr)
 json.dump({'days': days, 'origins': origins}, sys.stdout, ensure_ascii=False, indent=0)
 print('origins', len(origins), 'dests', sum(len(o['dests']) for o in origins), 'times', sum(len(x['times']) for o in origins for x in o['dests']),
       'daily', sum(1 for o in origins for x in o['dests'] for t in x['times'] if all(t[2])), 'missing files', dict(miss), file=sys.stderr)
