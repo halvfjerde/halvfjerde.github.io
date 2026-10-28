@@ -3507,8 +3507,27 @@ class Book:
         if '(' in lab: out += '※'
         return out
 
+    @staticmethod
+    def same_month(text):
+        """「・」로 이은 날짜에서 앞 날짜와 같은 달은 빼고 일만: 「3월 13일・3월 18일・3월 19일」 → 「3월 13일・18일・19일」,
+        「11월 7일∼15일・11월 28일∼29일」 → 「11월 7일∼15일・28일∼29일」 (앞 덩이가 끝난 달과 같을 때만)"""
+        if not text or not re.search(r'\d+월', text): return text
+        parts = text.split('・')
+        out = [parts[0]]
+        for k, p in enumerate(parts[1:], 1):
+            pm = re.findall(r'(\d+)월', parts[k - 1])
+            m = re.match(r'(\d+)월 (?=\d+일)', p)
+            if m and pm and pm[-1] == m.group(1): p = p[m.end():]
+            out.append(p)
+        return '・'.join(out)
+
     def plan_air_one(self, data, si, title, wide=False):
         R, fs = self.R, self.fs
+        for P_ in data['pairs']:                            # 같은 달 날짜는 일만
+            for L_ in (P_['out'], P_['in']):
+                for r_ in L_:
+                    for ix_ in (3, 5):
+                        if len(r_) > ix_ and isinstance(r_[ix_], str): r_[ix_] = self.same_month(r_[ix_])
         NC = 1 if wide else 2; gut = 0.0                    # 단 사이도 띄우지 않고 맞붙인다. 요일 칸 쌍은 한 단(쪽 폭)
         cf_ = self.cfg.get('airCodes')                      # 편명 앞 두 자(IATA) → 세 자 항공사 부호(ICAO): 「KAL 1122」
         codes = json.load(open(os.path.join(self.base, cf_), encoding='utf-8')) if cf_ else {}
