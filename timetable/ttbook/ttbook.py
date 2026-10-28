@@ -1916,7 +1916,7 @@ class Book:
                 rect(x0, y0, x1 - x0, t); rect(x0, y1 - t, x1 - x0, t)
                 rect(x0, y0, t, y1 - y0); rect(x1 - t, y0, t, y1 - y0)
             elif r[0] == 'dot':                                # 둥근 점: 길이 0 인 둥근 끝 선
-                dots.setdefault(r[3], []).append('%.2f %.2f m %.2f %.2f l' % (r[1], H - r[2], r[1], H - r[2]))
+                dots.setdefault(r[3], []).append('%.2f %.2f m %.2f %.2f l' % (r[1] - 0.01, H - r[2], r[1] + 0.01, H - r[2]))      # 길이 0 이면 그리지 않는 보기 프로그램이 있어 아주 짧게
             elif r[0] in ('line', 'fill', 'closed'):          # 꺾은선(굵기) / 칠한 다각형 / 속 빈 다각형(굵기)
                 pts = ' '.join('%.3f %.3f %s' % (x, H - y, 'm' if i == 0 else 'l') for i, (x, y) in enumerate(r[1]))
                 if r[0] == 'line': extra.append('q %.3f w 0 J 0 j 0 G %s S Q' % (r[2], pts))
@@ -3571,7 +3571,9 @@ class Book:
         wide = sec['wide']
         WDN, DWd = '월화수목금토일', 0.95 * fs                 # 요일 칸
         WMn = 1.5 * fs                                      # 주 앞 기호 자리 (plan 의 WM 과 같게)
-        mark_ = lambda m: self.inl.run(m, Ctx('M', {1: 0.8, 2: 0.66}.get(len(m), 0.48)))    # 기호는 늘 오른쪽에 붙인다 (여럿이면 작게)
+        def mark_(m):                                       # 기호는 늘 오른쪽에 붙인다 (여럿이면 작게). ▲ 는 글꼴에서 커서 줄여 다른 기호와 맞춘다
+            z = {1: 0.8, 2: 0.66}.get(len(m), 0.48)
+            return ''.join(self.inl.run(ch, Ctx('M', z * (0.72 if ch == '▲' else 1.0))) for ch in m)
         tex, rects, ops = [], [], []
         y0 = self.mt
         hw = colw / 2
