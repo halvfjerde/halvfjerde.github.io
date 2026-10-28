@@ -265,6 +265,39 @@ for nodes in comp.values():
             if g_ and not w[d_]: w[d_] = g_
     trips.append({'board': board, 'drop': {D: a for D, (a, _) in drop.items()}, 'w': w, 'nodes': nodes, 'sub': any(x in SUBN for x in nodes)})
 
+# 전환시외 목록의 구간으로만 받은 시외(sub-jh.json) 가운데 동네 시외는 뺀다: 그 노선의 끝과 끝(어느 방향이든)을 오가는 편,
+# 고속(또는 끝과 끝을 오가는 전환시외) 차와 한 차로 이어지는 편만 둔다 (순천 → 여수 50편, 광주 ⇄ 목포 60편 따위 동네 시외는 빼고)
+HERE2_ = os.path.dirname(os.path.abspath(__file__))
+_jf = os.path.join(HERE2_, 'sub-jh.json')
+SUBJ = {(o, t, x) for o, t, x in json.load(open(_jf))} & SUBN if os.path.exists(_jf) else set()
+_JHA = {'거제(고현동)': ['고현'], '광주': ['광주(유·스퀘어)'], '광주(유•스퀘어)': ['광주(유·스퀘어)'], '대구': ['동대구', '서대구'], '대구서부': ['서대구'],
+        '대전': ['대전복합'], '부산(노포동)': ['부산'], '부산(사상)': ['부산사상'], '부산서부(사상)': ['부산사상'], '서울(경부)': ['서울경부'],
+        '서울(호남)': ['센트럴시티(서울)'], '서울호남': ['센트럴시티(서울)'], '시흥(시화)': ['시흥시화'], '안양': ['안양역'], '울산시외': ['울산'],
+        '인천공항': ['인천공항T1', '인천공항T2'], '임자도': ['임자(진리)'], '천안(시외)': ['천안'], '포항(시외)': ['포항'], '동광양(중마동)': ['동광양'],
+        '청주': ['청주(센트럴)'], '세종': ['세종터미널(연구)']}
+_jhn = lambda n: _JHA.get(n.split(':')[0].strip(), [n.split(':')[0].strip()])
+JHE = set()
+_jj = os.path.join(HERE2_, '..', 'suburb', 'jeonhwan.json')
+for q_ in (json.load(open(_jj)) if os.path.exists(_jj) else []):
+    for a_ in _jhn(q_[0]):
+        for d_ in _jhn(q_[-1]): JHE |= {(a_, d_), (d_, a_)}
+_keepJ = lambda x: (x[0], x[2]) in JHE
+JDROP = set()
+for tr in trips:
+    if any(x not in SUBN or _keepJ(x) for x in tr['nodes']): continue          # 고속 차 또는 끝과 끝을 오가는 편과 이어진 차: 둔다
+    JDROP |= {x for x in tr['nodes'] if x in SUBJ}
+_intr = {x for tr in trips for x in tr['nodes']}
+JDROP |= {x for x in SUBJ if x not in _intr and not _keepJ(x)}
+if JDROP:
+    trips = [tr for tr in trips if not any(x in JDROP for x in tr['nodes'])]
+    for A, t, D in JDROP: P[(A, D)]['t'].pop(t, None)
+    for O in b['origins']:
+        for X in O['dests']: X['times'] = [t for t in X['times'] if (O['from'], m_(t[0]), X['to']) not in JDROP]
+        O['dests'] = [X for X in O['dests'] if X['times']]
+    b['origins'] = [O for O in b['origins'] if O['dests']]
+    for k_ in [k_ for k_, v_ in P.items() if not v_['t']]: del P[k_]
+    SUBN -= JDROP
+print('전환시외 구간의 동네 시외 뺌', len(JDROP), file=sys.stderr)
 SEQ = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stop-order.json')))   # 확인한 차례들
 # 표 묶음: 끝 행선지(가장 늦게 닿는 곳)가 같고 타는 곳이 겹치는 차끼리
 def last(tr): return max(tr['drop'], key=lambda D: (tr['drop'][D] - min(tr['board'].values())) % 1440)

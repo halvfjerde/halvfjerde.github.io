@@ -43,6 +43,11 @@ for q in _seqs:
                 for _, ia in _map.get(a_, []):
                     for _, ib in _map.get(b_, []): ALLOWED.add((ia, ib))
 SUBDROP = collections.Counter()
+# 전환시외 목록(나무위키)의 구간으로만 받은 시외: 그 구간을 다니는 동네 시외도 섞여 있다 → routes2 가 노선 끝과 끝이 아니고 고속・전환시외 차와 이어지지 않는 편은 뺀다
+_JOBS = {tuple(p) for p in json.load(open(os.path.join(SUBD, 'jeonhwan-jobs.json')))}
+_XJ = {tuple(p) for p in json.load(open(os.path.join(SUBD, 'extra-jobs.json')))} if os.path.exists(os.path.join(SUBD, 'extra-jobs.json')) else set()
+JH_ONLY = _JOBS - _XJ
+SUBJ = set()
 def sub_records(d):
     import glob as _g
     for f in _g.glob(os.path.join(SUB, d + '-*.json')):
@@ -53,7 +58,7 @@ def sub_records(d):
             if r['depPlaceNm'] == '광주(경기)': r = dict(r, depPlaceNm='경기광주')            # 경기 광주: 책의 광주(유·스퀘어)와 다른 곳
             if r['arrPlaceNm'] == '광주(경기)': r = dict(r, arrPlaceNm='경기광주')
             r = dict(r, depPlaceNm=SUBNM.get(r['depPlaceNm'], r['depPlaceNm']), arrPlaceNm=SUBNM.get(r['arrPlaceNm'], r['arrPlaceNm']),
-                     gradeNm=SG.get(r.get('gradeNm', ''), r.get('gradeNm', '')))
+                     gradeNm=SG.get(r.get('gradeNm', ''), r.get('gradeNm', '')), _jh=ids in JH_ONLY)
             yield r
 for d in days:                                            # 시외: 고속과 같은 편(같은 구간·같은 분)이면 고속 쪽을 둔다
     for r in sub_records(d):
@@ -61,6 +66,7 @@ for d in days:                                            # 시외: 고속과 �
         if o == x: continue
         t = mins(r['depPlandTime']); du = (mins(r['arrPlandTime']) - t) % 1440
         SUBT.add((o, x, t))
+        if r['_jh']: SUBJ.add((o, x, t))
         T[o][x][t].add(wd[d]); GD[(o, x, t)].add(r.get('gradeNm', '')); GD2.setdefault((o, x, t, wd[d]), set()).add(r.get('gradeNm', ''))
         info[o][x].append((du, r.get('charge') or 0))
 EXPT = set()
@@ -200,6 +206,7 @@ _mm = lambda s_: int(s_[:-2]) * 60 + int(s_[-2:])
 _gone = {(o, x, _mm(a if k == b else b)) for o, x, a, b, k in MERGED1}     # 1분 차이로 합쳐 없어진 편은 확인 목록에서도 뺀다
 FILLED = [e for e in FILLED if tuple(e[:3]) not in _gone]; FIRSTONLY = [e for e in FIRSTONLY if tuple(e[:3]) not in _gone]
 json.dump({'filled': FILLED, 'firstonly': FIRSTONLY, 'merged1': MERGED1}, open(os.path.join(HERE_, 'bus-review-data.json'), 'w'), ensure_ascii=False)
+json.dump(sorted([o, t, x] for o, x, t in SUBJ & SUBT), open(os.path.join(HERE_, 'sub-jh.json'), 'w'), ensure_ascii=False)
 json.dump({'days': days, 'origins': origins}, sys.stdout, ensure_ascii=False, indent=0)
 print('origins', len(origins), 'dests', sum(len(o['dests']) for o in origins), 'times', sum(len(x['times']) for o in origins for x in o['dests']),
       'daily', sum(1 for o in origins for x in o['dests'] for t in x['times'] if all(t[2])), 'missing files', dict(miss), file=sys.stderr)
