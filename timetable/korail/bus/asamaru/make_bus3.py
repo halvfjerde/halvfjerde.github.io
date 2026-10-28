@@ -106,6 +106,7 @@ origins = []
 nvar = 0
 FILLED = []
 FIRSTONLY = []
+MERGED1 = []
 for o in sorted(T):
     dests = []
     for x in sorted(T[o]):
@@ -129,6 +130,20 @@ for o in sorted(T):
             hm = lambda m: '%d%02d' % (m // 60 % 24, m % 60)
             times.append([hm(t), hm(t + dur), w] + (['시'] if (o, x, t) in SUBT else []))      # 넷째 칸 「시」: 시외버스로 팔리는 편
             if gvar: var_t.append(t)
+        # 1분 차이로 붙은 두 편(17:00·17:01 따위)은 한 편으로: 뒤의 것은 TAGO 의 겹친 편(증차·자료 잘못)으로 보고 요일을 앞 편에 합친다.
+        # 한쪽만 시외(†)면 고속 쪽을 남긴다
+        mm_ = lambda s_: int(s_[:-2]) * 60 + int(s_[-2:])
+        times.sort(key=lambda tg: mm_(tg[0]))
+        k_ = 0
+        while k_ + 1 < len(times):
+            a_, c_ = times[k_], times[k_ + 1]
+            if mm_(c_[0]) - mm_(a_[0]) == 1:
+                keep, drop = (c_, a_) if ('시' in a_[3:] and '시' not in c_[3:]) else (a_, c_)
+                keep[2] = [keep[2][i] or drop[2][i] for i in range(7)]
+                MERGED1.append((o, x, a_[0], c_[0], keep[0]))
+                times[k_:k_ + 2] = [keep]
+                continue
+            k_ += 1
         X = {'to': x, 'dur': dur, 'fare': [min(fs), max(fs)] if fs else None, 'times': times}
         if var_t:                                           # 돌아가는 등급: 날마다 몇 편이 무슨 등급인지
             nvar += len(var_t)
@@ -152,8 +167,8 @@ for o in sorted(T):
             else: X['gnote'] = '◆ 날마다 등급이 바뀜'                  # 등급이 셋 넘으면 늘어놓지 않는다
         if times: dests.append(X)
     if dests: origins.append({'from': o, 'dests': dests})
-print('grade-rotating times', nvar, 'filled as daily', len(FILLED), 'first-week only', len(FIRSTONLY), 'sub dropped', dict(SUBDROP), file=sys.stderr)
-json.dump({'filled': FILLED, 'firstonly': FIRSTONLY}, open(os.path.join(HERE_, 'bus-review-data.json'), 'w'), ensure_ascii=False)
+print('grade-rotating times', nvar, 'filled as daily', len(FILLED), 'first-week only', len(FIRSTONLY), 'merged 1-min', len(MERGED1), 'sub dropped', dict(SUBDROP), file=sys.stderr)
+json.dump({'filled': FILLED, 'firstonly': FIRSTONLY, 'merged1': MERGED1}, open(os.path.join(HERE_, 'bus-review-data.json'), 'w'), ensure_ascii=False)
 json.dump({'days': days, 'origins': origins}, sys.stdout, ensure_ascii=False, indent=0)
 print('origins', len(origins), 'dests', sum(len(o['dests']) for o in origins), 'times', sum(len(x['times']) for o in origins for x in o['dests']),
       'daily', sum(1 for o in origins for x in o['dests'] for t in x['times'] if all(t[2])), 'missing files', dict(miss), file=sys.stderr)
