@@ -64,7 +64,7 @@ for o in sorted(T):
             gvar = any(len(v) > 1 for v in byw.values())
             w = [0] * 7
             for w_, gs in byw.items():
-                w[w_] = '※' if gvar else (G.get(next(iter(gs)), '') or '우')
+                w[w_] = '◆' if gvar else (G.get(next(iter(gs)), '') or '우')
             hm = lambda m: '%d%02d' % (m // 60 % 24, m % 60)
             times.append([hm(t), hm(t + dur), w])
             if gvar: var_t.append(t)
@@ -85,8 +85,9 @@ for o in sorted(T):
                 elif hi_ - lo_ == 1 and lo_ > 0: parts.append('날마다 %d∼%d편 %s' % (lo_, hi_, GN.get(g, g)))
                 elif hi_ - lo_ == 1: parts.append('어떤 날 %d편 %s' % (hi_, GN.get(g, g)))
                 else: ok = False
-            if ok and parts: X['gnote'] = '※ 가운데 ' + ', '.join(parts) + ', 나머지 %s' % GN.get(major, major)
-            else: X['gnote'] = '※ 날마다 등급이 바뀜 (%s)' % '・'.join(GN.get(g, g) for g in sorted(gall, key=lambda g: -gall[g]))
+            if len(var_t) == 1: X['gnote'] = '◆ 날에 따라 %s' % ' 또는 '.join(GN.get(g, g) for g in sorted(gall, key=lambda g: -gall[g]))
+            elif ok and parts: X['gnote'] = '◆ 가운데 ' + ', '.join(parts) + ', 나머지 %s' % GN.get(major, major)
+            else: X['gnote'] = '◆ 날마다 등급이 바뀜 (%s)' % '・'.join(GN.get(g, g) for g in sorted(gall, key=lambda g: -gall[g]))
         if times: dests.append(X)
     if dests: origins.append({'from': o, 'dests': dests})
 print('grade-rotating times', nvar, file=sys.stderr)

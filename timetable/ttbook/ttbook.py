@@ -3678,9 +3678,11 @@ class Book:
         data = json.load(open(os.path.join(self.base, f), encoding='utf-8'))
         # 노선표로 옮긴 구간: 출발 터미널 목록에 참조 줄만 (「센트럴시티(서울) → 익산 ― 센트럴시티(서울) 61」)
         self.bus_tpage = {}
+        # 표 이름 맞추기: 세로 띠 제목은 세로꼴 글자(︱︵︶)로 바뀌어 있고, 나눈 표는 「(둘째)」가 붙는다
+        self._tkey = tkey = lambda t: re.sub(r'[(（](첫째|둘째|셋째|넷째|다섯째|여섯째)[)）]|\s', '', t.translate(str.maketrans('︱︵︶（）', '―()()')))
         for pi, pg in enumerate(self.pages):
             for pc in pg['pieces']:
-                if pc['T'].title is not None: self.bus_tpage.setdefault(pc['T'].title.text().strip(), pi)
+                if pc['T'].title is not None: self.bus_tpage.setdefault(tkey(pc['T'].title.text()), pi)
         org = {O['from']: O for O in data['origins']}
         for A, D, tt, *df in data.get('tableRefs', []):
             if A not in org: org[A] = {'from': A, 'dests': []}; data['origins'].append(org[A])
@@ -3822,7 +3824,7 @@ class Book:
                         pg_ = self.bus_dpage.get((it[3], X['see']))
                         rt = '%s 행%s' % (X['see'], ' %d' % (pg_ + first) if pg_ is not None else '')
                     elif 'seeTable' in X:
-                        pg_ = self.bus_tpage.get(X['seeTable'])
+                        pg_ = self.bus_tpage.get(self._tkey(X['seeTable']))
                         rt = '노선표%s' % (' %d' % (pg_ + first) if pg_ is not None else '')
                     else:
                         pg_ = self.bus_opage.get(X['seeFrom'])

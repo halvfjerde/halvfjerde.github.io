@@ -270,7 +270,7 @@ def cells_of(c, st):
     return [hm(c[s_][1]) if s_ in c else ('v' if idx[0] < k < idx[-1] else 'x') for k, s_ in enumerate(st)]
 def line(c, st):
     g0, dl_, rem_ = foot(c)
-    kind = '"※"' if g0 == '※' else 'S{%s}' % GR.get(g0, g0)          # 차마다 돌아가는 등급
+    kind = '"◆"' if g0 == '◆' else 'S{%s}' % GR.get(g0, g0)          # 차마다 돌아가는 등급
     return '%s : %s : %s %s' % (kind, ' '.join(cells_of(c, st)), dl_, rem_)
 ORD = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째']
 emit = []
@@ -303,12 +303,13 @@ for T, U, part, cols_ in emit:
         out += ['', '[trains up]'] + [line(c, rs) for c in U['cols']]
     out += ['', '[notes]', '}}', '']
 tables = [T for p in both for T in p if T]
+title_of = {id(X_): '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1])) for T, U in both for X_ in (T, U) if X_}      # 상하 병기면 상행도 하행 표 이름으로
 open(sys.argv[2], 'w').write('\n'.join(out))
 own = {p for T in tables for p in T['pairs']}
 for O in b['origins']: O['dests'] = [X for X in O['dests'] if (O['from'], X['to']) not in own]
 b['origins'] = [O for O in b['origins'] if O['dests']]
 b['routeOwned'] = sorted('%s→%s' % p for p in own)
-b['tableRefs'] = sorted([A, D, '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1])), P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
+b['tableRefs'] = sorted([A, D, title_of[id(T)], P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
 json.dump(b, open(sys.argv[3], 'w'), ensure_ascii=False, indent=0)
 # 사람이 확인할 목록 (마크다운)
 rep = ['# 고속버스 노선표: 확인할 것', '', '정류장 차례·경유 여부는 TAGO 구간별 시각을 맞물려 짐작한 것. 아래는 근거가 약하거나 따로 확인되지 않은 것.', '']
