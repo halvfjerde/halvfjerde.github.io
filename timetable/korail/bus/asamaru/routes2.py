@@ -779,6 +779,8 @@ def foot(c):
     return g0, wdl([d for d in range(7) if w[d]]), rem_
 BR = {}
 ALT = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'alt-stops.json')))
+_NVF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'not-via.json')
+NV_ = json.load(open(_NVF)) if os.path.exists(_NVF) else []
 def cells_of(c, st, up=False):
     """up: 상하 병기의 상행(아래에서 위로 읽는다) — 통과 ↿, 하행·보통 표는 ⇂(v). 지나지 않는 곳도 통과(レ)로, 갈래가 갈린 표(지선)의 다른 갈래만 ║"""
     idx = [k for k, s_ in enumerate(st) if s_ in c]
@@ -790,6 +792,7 @@ def cells_of(c, st, up=False):
         mid = idx[0] < k < idx[-1]
         if not mid: return 'x'
         if other(s_): return 'i'                                      # 다른 갈래(지선): ║
+        if any(s_ == nv_['stop'] and nv_['from_side'] in c and nv_['to'] in c and c[nv_['from_side']][0] == 'd' for nv_ in NV_): return 'x'    # 그 방향은 거치지 않는 곳 (not-via.json): ‥
         if c.get('_sub'): return 'c'                                  # 시외는 TAGO 가 끝과 끝만 팔아 사이 정류장은 모름 (통과 아님): 빈칸
         return '↿' if up else 'v'                                     # 통과·지나지 않음: レ
     return [cell(k, s_) for k, s_ in enumerate(st)]
