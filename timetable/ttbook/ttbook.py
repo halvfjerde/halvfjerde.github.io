@@ -3666,7 +3666,9 @@ class Book:
                 yy += pad
                 rects.append(('box', xx, Y, xx + colw, yy, self.rw[1]))
                 yEnd = yy
-            if yB - yEnd > 1.5 * R: rects.append(('box', xx, yEnd, xx + colw, yB, self.rw[1]))     # 남는 자리: 빈 상자
+            if 0 < yB - yEnd < R and rects and rects[-1][0] == 'box':      # 한 줄도 안 남으면 마지막 덩이를 쪽 끝까지
+                rects[-1] = rects[-1][:4] + (yB,) + rects[-1][5:]
+            elif yB - yEnd >= R: rects.append(('box', xx, yEnd, xx + colw, yB, self.rw[1]))     # 남는 자리: 빈 상자
         tex += self.page_side_title(recto, [('', sec['title'])])
         return tex, ' '.join(ops) + ' ' + (self.pdf_ops(rects) if rects else '')
 
@@ -3762,7 +3764,7 @@ class Book:
                 col.append(('r', y, v, cur_o)); y += DH + SR + BG; i += 1; continue
             if k == 'd':
                 cur_x = v
-                hd = DH + SR * len(v['_sub'])
+                hd = DH + SR * len(v['_sub']) + (BG if v['_sub'] else 0)      # 안내 줄 밑에도 덩이 아래만큼 여백
                 need = hd + R * min(3, len(v['times']))        # 머리 밑에 적어도 세 줄
                 if y + need > cap + 1e-6: cols.append(col); col, y = [], 0.0; continue
                 col.append(('d', y, v, False, hd, cur_o)); y += hd; i += 1; continue
@@ -3802,12 +3804,12 @@ class Book:
         rd = 0.16 * fs
         def dot(cx, cy): rects.append(('dot', cx, cy, 2 * rd))
         def gmark(g, sz):
-            """등급 한 자: 일·프 / 심야는 검은 네모에 흰 글자(심야우등 ■우, 심야프리미엄 ■프, 심야일반 ■일)"""
+            """등급 네모 한 자: □우 □프 □일, 심야는 검은 네모에 흰 글자 ■우 ■프 ■일"""
             base, fill = {'심': ('우', 1), '심프': ('프', 1), '심일': ('일', 1)}.get(g, (g, 0))
-            if not fill: return self.inl.run(base, Ctx('M', sz))
-            inner = self.inl.run(base, Ctx('G', sz * 0.88, 'FFFFFF'))
+            if base not in ('우', '프', '일'): return self.inl.run(base, Ctx('M', sz))      # ※ ◆ 따위
+            inner = self.inl.run(base, Ctx('G', sz * 0.88, 'FFFFFF' if fill else None))
             wh = 1.05 * sz * fs
-            return r'\ttbadge{%.3f}{%.3f}{1}{1.000}{%.3f}{%s}' % (wh, wh, self.inl.c * sz * fs, inner)
+            return r'\ttbadge{%.3f}{%.3f}{%d}{1.000}{%.3f}{%s}' % (wh, wh, fill, self.inl.c * sz * fs, inner)
         for ci in range(NC):                           # 단은 맞붙여 한 표처럼
             xx = x0 + ci * colw
             ww = colw
@@ -3824,7 +3826,6 @@ class Book:
                 if kd == 'o':
                     if it[1] > 0: rects.append(('h', xx, xx + ww, y, 2))
                     tex.append(self.put_box(xx + pad, y + GP, ww - 2 * pad, TH, self.inl.run('%s 발' % it[2], Ctx('GB', 1.15)), 'l', 'm'))
-                    rects.append(('h', xx, xx + ww, y + GP + TH, 2))
                 elif kd == 'c':
                     c = Ctx('G', 0.7)
                     tex.append(self.put_box(xA, y, TS, CH, self.inl.run('발', c), 'c', 'm'))
@@ -3864,8 +3865,10 @@ class Book:
                     y += R
                     if not it[3]:
                         for ln in X.get('_sub', []):
-                            tex.append(self.put_box(xx + pad, y, ww - 2 * pad, SR, self.inl.run(ln, Ctx('M', 0.72).but(hscale=HS)), 'l', 'm'))
+                            parts_ = re.split(r'\{([^}]*)\}', ln)          # {프}: 등급 네모 표지
+                            tex.append(self.put_box(xx + pad, y, ww - 2 * pad, SR, ''.join(gmark(p_, 0.66) if k_ % 2 else self.inl.run(p_, Ctx('M', 0.72).but(hscale=HS)) for k_, p_ in enumerate(parts_) if p_), 'l', 'm'))
                             y += SR
+                        if X.get('_sub'): y += BG
                     st = y
                 else:
                     dep, arr, w = it[2]
@@ -3880,13 +3883,14 @@ class Book:
                     else:                                  # 날에 따라 등급이 바뀜: 등급 칸에 ※, 요일 칸에 그날 등급
                         tex.append(self.put_box(xG, y, GW, R, self.inl.run('※', Ctx('M', 0.8)), 'c', 'm'))
                         for d in range(7):
-                            if w[d]: tex.append(self.put_box(xD + d * DW, y, DW, R, gmark(w[d], 0.75), 'c', 'm'))
+                            if w[d]: tex.append(self.put_box(xD + d * DW, y, DW, R, gmark(w[d], 0.64), 'c', 'm'))
             yE = y0 + max(it[1] + (TH + GP if it[0] == 'o' else CH if it[0] == 'c' else it[4] if it[0] == 'd' else R + GP + SR + BG if it[0] == 'r' else R + BG) for it in col)
             if st is not None: seg.append((st, lastT if lastT > st else yE))
             for a, b in seg:
                 for xv in (xB, xG, xG + GW): rects.append(('v', xv, a, b, 1))       # 요일 칸 왼쪽 괘선은 등급 칸에 붙여 (점·글자만 가운데로)
+            if yB - yE < R: yE = yB                    # 한 줄도 안 남으면 빈 상자 없이 표를 쪽 끝까지 (아래는 여백으로)
             rects.append(('box', xx, y0, xx + ww, yE, self.rw[1]))
-            if yB - yE > 1.5 * R: rects.append(('box', xx, yE, xx + ww, yB, self.rw[1]))     # 남는 자리: 빈 상자
+            if yB - yE >= R: rects.append(('box', xx, yE, xx + ww, yB, self.rw[1]))     # 남는 자리: 빈 상자
         tex += self.page_side_title(recto, [('', '고속버스')])
         return tex, self.pdf_ops(rects) if rects else ''
 
