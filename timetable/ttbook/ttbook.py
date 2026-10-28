@@ -3584,7 +3584,7 @@ class Book:
         tex, rects, ops = [], [], []
         y0 = self.mt
         hw = colw / 2
-        cT, cA, cM, cC = 2.3 * fs, 1.1 * fs, self._air_mk[0] * self._air_mk[1] + 0.2 * fs, 2.2 * fs   # 시각 칸, 화살표 칸, 기호(◇▲●※) 칸, 항공사 부호 칸
+        cT, cA, cM, cC = 2.3 * fs, 1.1 * fs, self._air_mk[0] * self._air_mk[1] + 0.2 * fs, (0.0 if self.cfg.get('airlines') else 2.2 * fs)   # 시각 칸, 화살표 칸, 기호(◇▲●※) 칸, 항공사 부호 칸 (항공사 색인이 있으면 편명만)
         room_ = hw - 2 * pad - 2 * cT - cA - cM - cC        # 편 번호에 쓸 폭: 가장 긴 것이 넘치면 가로로 좁힌다
         hsN = min(0.82, (room_ - 0.3 * fs) / air_nw)
         cN = cM + cC + min(room_, air_nw * hsN + 0.3 * fs)
@@ -3649,7 +3649,7 @@ class Book:
                             mk_ = self.air_marks(lab_)
                             if mk_: marks_at(hx - 0.2 * fs, yy, mk_)
                             co_, nu_ = self._fno(no)
-                            tex.append(self.put_box(hx + cM, yy, cC, R, self.inl.run(co_, Ctx('G', 0.85).but(hscale=HS)), 'l', 'm'))
+                            if cC: tex.append(self.put_box(hx + cM, yy, cC, R, self.inl.run(co_, Ctx('G', 0.85).but(hscale=HS)), 'l', 'm'))
                             tex.append(self.put_box(hx + cM + cC, yy, cN - cM - cC, R, self.inl.run(nu_, Ctx('M', 1.0).but(hscale=hsN)), 'l', 'm'))
                             if one:
                                 tex.append(self.put_box(hx + cN, yy, cT + cA, R, self.inl.run(hmf(t), Ctx('DM', 1.0)), 'r', 'm'))
@@ -3954,6 +3954,12 @@ class Book:
             if c0 != cur:
                 cur = c0; units.append([('b', '', ''), ('h', c0, '')] + ent)      # 자음 머리 위는 한 줄 비운다 (단 맨 위면 안 비움)
             else: units.append(ent)
+        al = self.cfg.get('airlines', {})                 # 항공사 색인: 이름 ··· 두 자(IATA)·세 자(ICAO) 부호
+        if al:
+            cf_ = self.cfg.get('airCodes')
+            codes = json.load(open(os.path.join(self.base, cf_), encoding='utf-8')) if cf_ else {}
+            ent = [('e', nm, '%s　%s' % (k, codes.get(k, ''))) for k, nm in sorted(al.items(), key=lambda kv: kv[1])]
+            units.append([('b', '', ''), ('h', '항공사', '')] + ent)
         def fill(us, c_):
             cols, col, cu, ucs = [], [], [], []
             for ui, u in enumerate(us):
