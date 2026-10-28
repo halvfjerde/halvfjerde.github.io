@@ -85,9 +85,10 @@ for o in sorted(T):
                 elif hi_ - lo_ == 1 and lo_ > 0: parts.append('날마다 %d∼%d편 %s' % (lo_, hi_, GN.get(g, g)))
                 elif hi_ - lo_ == 1: parts.append('어떤 날 %d편 %s' % (hi_, GN.get(g, g)))
                 else: ok = False
-            if len(var_t) == 1: X['gnote'] = '◆ 날에 따라 %s' % ' 또는 '.join(GN.get(g, g) for g in sorted(gall, key=lambda g: -gall[g]))
-            elif ok and parts: X['gnote'] = '◆ 가운데 ' + ', '.join(parts) + ', 나머지 %s' % GN.get(major, major)
-            else: X['gnote'] = '◆ 날마다 등급이 바뀜 (%s)' % '・'.join(GN.get(g, g) for g in sorted(gall, key=lambda g: -gall[g]))
+            if len(var_t) == 1 and len(gall) == 2: X['gnote'] = '◆ 날에 따라 %s' % ' 또는 '.join(GN.get(g, g) for g in sorted(gall, key=lambda g: -gall[g]))
+            elif ok and len(parts) == 1 and len(gall) == 2: X['gnote'] = '◆ 가운데 ' + ', '.join(parts) + ', 나머지 %s' % GN.get(major, major)
+            elif len(gall) == 2: X['gnote'] = '◆ 날에 따라 %s 또는 %s' % tuple(GN.get(g, g) for g in sorted(gall, key=lambda g: -gall[g]))
+            else: X['gnote'] = '◆ 날마다 등급이 바뀜'                  # 등급이 셋 넘으면 늘어놓지 않는다
         if times: dests.append(X)
     if dests: origins.append({'from': o, 'dests': dests})
 print('grade-rotating times', nvar, file=sys.stderr)

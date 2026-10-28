@@ -3801,6 +3801,13 @@ class Book:
         WD = '월화수목금토일'
         rd = 0.16 * fs
         def dot(cx, cy): rects.append(('dot', cx, cy, 2 * rd))
+        def gmark(g, sz):
+            """등급 한 자: 일·프 / 심야는 검은 네모에 흰 글자(심야우등 ■우, 심야프리미엄 ■프, 심야일반 ■일)"""
+            base, fill = {'심': ('우', 1), '심프': ('프', 1), '심일': ('일', 1)}.get(g, (g, 0))
+            if not fill: return self.inl.run(base, Ctx('M', sz))
+            inner = self.inl.run(base, Ctx('G', sz * 0.88, 'FFFFFF'))
+            wh = 1.05 * sz * fs
+            return r'\ttbadge{%.3f}{%.3f}{1}{1.000}{%.3f}{%s}' % (wh, wh, self.inl.c * sz * fs, inner)
         for ci in range(NC):                           # 단은 맞붙여 한 표처럼
             xx = x0 + ci * colw
             ww = colw
@@ -3867,17 +3874,17 @@ class Book:
                     gs = {g for g in w if g}
                     if len(gs) == 1:
                         g = next(iter(gs))
-                        if g != '우': tex.append(self.put_box(xG, y, GW, R, self.inl.run(g, Ctx('M', 0.8).but(hscale=HS)), 'c', 'm'))
+                        if g != '우': tex.append(self.put_box(xG, y, GW, R, gmark(g, 0.8), 'c', 'm'))
                         for d in range(7):
                             if w[d]: dot(xD + (d + 0.5) * DW, y + R / 2)
                     else:                                  # 날에 따라 등급이 바뀜: 등급 칸에 ※, 요일 칸에 그날 등급
                         tex.append(self.put_box(xG, y, GW, R, self.inl.run('※', Ctx('M', 0.8)), 'c', 'm'))
                         for d in range(7):
-                            if w[d]: tex.append(self.put_box(xD + d * DW, y, DW, R, self.inl.run(w[d], Ctx('M', 0.75).but(hscale=0.7 if len(w[d]) > 1 else 0.9)), 'c', 'm'))
+                            if w[d]: tex.append(self.put_box(xD + d * DW, y, DW, R, gmark(w[d], 0.75), 'c', 'm'))
             yE = y0 + max(it[1] + (TH + GP if it[0] == 'o' else CH if it[0] == 'c' else it[4] if it[0] == 'd' else R + GP + SR + BG if it[0] == 'r' else R + BG) for it in col)
             if st is not None: seg.append((st, lastT if lastT > st else yE))
             for a, b in seg:
-                for xv in (xB, xG, xD): rects.append(('v', xv, a, b, 1))
+                for xv in (xB, xG, xG + GW): rects.append(('v', xv, a, b, 1))       # 요일 칸 왼쪽 괘선은 등급 칸에 붙여 (점·글자만 가운데로)
             rects.append(('box', xx, y0, xx + ww, yE, self.rw[1]))
             if yB - yE > 1.5 * R: rects.append(('box', xx, yE, xx + ww, yB, self.rw[1]))     # 남는 자리: 빈 상자
         tex += self.page_side_title(recto, [('', '고속버스')])
