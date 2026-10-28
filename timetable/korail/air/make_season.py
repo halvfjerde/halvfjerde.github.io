@@ -2,7 +2,7 @@
 """공항공사 국내선 스케줄(SCHEDULE_DOM_*.xlsx) → 한 철(동계·하계)의 정기편 다이아 air.json
 운항일은 철 전체를 두고 적는다: 요일마다 다니는 주(週)가 같은 요일끼리 묶어 「화・목・토・일, 월・수・금 12월 11일까지・12월 21일∼1월 15일」.
 요금은 TAGO 한 달치(있으면)에서. FROM=20261101 python3 make_season.py kac/ [flights-YYYYMM.json(TAGO)] > air.json"""
-import sys, os, glob, json, datetime, collections, re, openpyxl
+import sys, os, glob, calendar, json, datetime, collections, re, openpyxl
 D = datetime.date
 EN = {'GIMPO': '김포', 'GIMHAE': '김해', 'JEJU': '제주', 'CHEONGJU': '청주', 'DAEGU': '대구', 'YANGYANG': '양양', 'GWANGJU': '광주',
       'ULSAN': '울산', 'YEOSU': '여수', 'POHANG GYEONGJU': '포항', 'SACHEON': '사천', 'GUNSAN': '군산', 'WONJU': '원주', 'INCHEON': '인천', 'MUAN': '무안'}
@@ -24,6 +24,20 @@ fl = collections.defaultdict(lambda: collections.defaultdict(set))          # (�
 for dep, arr, no, t, a, fg, d0, d1 in recs:
     for d in season:
         if d0 <= d <= d1 and fg[d.weekday()]: fl[(dep, arr)][(no, t, a)].add(d)
+# 공항공사 스케줄에 없는 편 (TAGO 한 달치에만: 인천 연결편·임시편). 그 달 끝 주에도 뜨면 그 요일로 철 끝까지 이어 뜬다고 본다.
+# 김포↔인천의 편명 끝 A·P (특별·전세 편)는 싣지 않는다
+if os.environ.get('EXTRA'):
+    ex = json.load(open(os.environ['EXTRA']))
+    by = collections.defaultdict(set)
+    for f in ex['flights']:
+        if {f['dep'], f['arr']} == {'김포', '인천'} and f['no'][-1] in 'AP': continue
+        by[(f['dep'], f['arr'], f['no'], f['t'], f['a'])].add(D(int(f['day'][:4]), int(f['day'][4:6]), int(f['day'][6:])))
+    for (dep, arr, no, t, a), ds in by.items():
+        last = max(ds); mend = D(last.year, last.month, calendar.monthrange(last.year, last.month)[1])
+        ws = {d.weekday() for d in ds}
+        if (mend - last).days <= 1 and (last - min(ds)).days >= 6:      # 달 끝까지 한 주 넘게 뜬 편만 이어 뜬다고 본다
+            ds = ds | {d for d in season if d > mend and d.weekday() in ws}
+        fl[(dep, arr)][(no, t, a)] |= {d for d in ds if S0 <= d <= S1}
 mon0 = S0 - datetime.timedelta(S0.weekday())
 wk = lambda d: (d - mon0).days // 7
 def wdl(ws):
@@ -69,6 +83,7 @@ def label_skip(days):
     days = set(days)
     lo0, hi0 = min(days), max(days)
     W = {w for w in range(7) if 2 * sum(1 for d in days if d.weekday() == w) > sum(1 for d in season if d.weekday() == w and lo0 <= d <= hi0)}
+    if all(d in days for d in season if lo0 <= d <= hi0): W = set(range(7))       # 동안 안에서 날마다
     if not W: return None
     B = [d for d in season if d.weekday() in W]
     on = [d for d in B if d in days]
@@ -83,7 +98,8 @@ def label_skip(days):
         elif cur: gaps.append(cur); cur = None
     out = '' if len(W) == 7 else wdl(W)
     per = ''
-    if lo != B[0] and hi != B[-1]: per = md(lo) + '∼' + md(hi, lo)
+    if lo == hi: per = md(lo)
+    elif lo != B[0] and hi != B[-1]: per = md(lo) + '∼' + md(hi, lo)
     elif lo != B[0]: per = md(lo) + '부터'
     elif hi != B[-1]: per = md(hi) + '까지'
     out = (out + ' ' + per).strip()

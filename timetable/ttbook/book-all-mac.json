@@ -198,18 +198,7 @@
   "title": "시각표",
   "sub": "2026년 11월호"
  },
- "air": [
-  [
-   "air.json",
-   "항공",
-   "정기편"
-  ],
-  [
-   "air-extra.json",
-   "임시편・연결편",
-   "11월 임시편・연결편"
-  ]
- ],
+ "air": "air.json",
  "airCodes": "iata2icao.json",
  "bus": "bus.json",
  "otherModes": [
