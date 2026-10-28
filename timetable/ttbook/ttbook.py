@@ -3741,9 +3741,10 @@ class Book:
         R, fs = self.R, self.fs
         pad = 0.5 * fs
         TS, GW, DW = 2.7 * fs, 1.2 * fs, 0.85 * fs
-        NC = max(1, int(self.cw / (2 * TS + GW + 7 * DW + 0.9 * fs)))
+        MW = 0.55 * fs                                      # 시외버스 표지(†) 칸
+        NC = max(1, int(self.cw / (MW + 2 * TS + GW + 7 * DW + 0.9 * fs)))
         colw = self.cw / NC
-        DW = (colw - 0.7 * fs - 2 * TS - GW) / 7                # 남는 폭은 요일 칸에
+        DW = (colw - 0.7 * fs - MW - 2 * TS - GW) / 7           # 남는 폭은 요일 칸에
         TH, CH = 1.5 * R, 0.85 * R                          # 출발 터미널 머리, 칸 머리
         GP = 0.4 * R                                        # 행선지 이름 위 여백
         DH = R + GP
@@ -3851,7 +3852,7 @@ class Book:
             ww = colw
             col = self.bus[k][ci] if ci < len(self.bus[k]) else []
             if not col: rects.append(('box', xx, y0, xx + ww, yB, self.rw[1])); continue
-            xA = xx + 0.15 * fs; xB = xA + TS; xG = xB + TS
+            xM = xx + 0.1 * fs; xA = xM + 0.55 * fs; xB = xA + TS; xG = xB + TS
             xD = xG + GW + (xx + ww - (xG + GW) - 7 * DW) / 2      # 요일 칸은 남은 자리 가운데에
             seg = []                                   # 세로줄을 그을 시각 줄 구간
             st = None; lastT = -1.0
@@ -3907,7 +3908,8 @@ class Book:
                         if X.get('_sub'): y += BG
                     st = y
                 else:
-                    dep, arr, w = it[2]
+                    dep, arr, w = it[2][:3]
+                    if len(it[2]) > 3: tex.append(self.put_box(xM, y, 0.55 * fs, R, self.inl.run('†', Ctx('M', 0.75)), 'c', 'm'))      # 시외버스로 파는 편
                     tex.append(self.put_box(xA, y, TS - 0.25 * fs, R, self.inl.run(dep, Ctx('DM', 1.0)), 'r', 'm'))
                     tex.append(self.put_box(xB, y, TS - 0.25 * fs, R, self.inl.run(arr, Ctx('DM', 1.0)), 'r', 'm'))
                     gs = {g for g in w if g}

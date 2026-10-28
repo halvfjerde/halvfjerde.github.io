@@ -22,6 +22,7 @@ P = {}                                                   # (A, D) → 소요·�
 for O in b['origins']:
     for X in O['dests']:
         P[(O['from'], X['to'])] = {'dur': X['dur'], 'fare': X.get('fare'), 't': {m_(t[0]): t[2] for t in X['times']}}
+SUBN = {(O['from'], m_(t[0]), X['to']) for O in b['origins'] for X in O['dests'] for t in X['times'] if len(t) > 3}      # 시외버스로 파는 편
 byD, byA = collections.defaultdict(list), collections.defaultdict(list)
 for A, D in P: byD[D].append(A); byA[A].append(D)
 
@@ -177,7 +178,7 @@ for nodes in comp.values():
     for A, t, D in nodes:                               # 다니는 요일: 한 차의 어느 구간에서든 그날 다니면 다닌다 (구간마다 팔린 날이 조금씩 빠지기도)
         for d_, g_ in enumerate(P[(A, D)]['t'][t]):
             if g_ and not w[d_]: w[d_] = g_
-    trips.append({'board': board, 'drop': {D: a for D, (a, _) in drop.items()}, 'w': w, 'nodes': nodes})
+    trips.append({'board': board, 'drop': {D: a for D, (a, _) in drop.items()}, 'w': w, 'nodes': nodes, 'sub': any(x in SUBN for x in nodes)})
 
 SEQ = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stop-order.json')))   # 확인한 차례들
 # 표 묶음: 끝 행선지(가장 늦게 닿는 곳)가 같고 타는 곳이 겹치는 차끼리
@@ -223,13 +224,13 @@ for grp in groups.values():
     owned |= pairs
     cols = []
     for tr in grp:
-        cols.append({s: ('d', tr['board'][s]) if s in tr['board'] else ('a', tr['drop'][s]) for s in stops if s in tr['board'] or s in tr['drop']} | {'_w': tr['w']})
+        cols.append({s: ('d', tr['board'][s]) if s in tr['board'] else ('a', tr['drop'][s]) for s in stops if s in tr['board'] or s in tr['drop']} | {'_w': tr['w'], '_sub': tr['sub']})
     used = {(A, t, D) for tr in grp for A, t, D in tr['nodes']}
     for A, D in sorted(pairs):                         # 그 구간의 다른 차(정류장을 거치지 않는 차)도 이 표에
         for t, w in P[(A, D)]['t'].items():
             x = (A, t, D)
             if x in used or (x in par and len(comp.get(f(x), [])) > 1): continue      # 다른 표의 차
-            cols.append({A: ('d', t), D: ('a', (t + P[(A, D)]['dur']) % 1440), '_w': w})
+            cols.append({A: ('d', t), D: ('a', (t + P[(A, D)]['dur']) % 1440), '_w': w, '_sub': x in SUBN})
     def key(c):
         for k_, s in enumerate(stops):
             if s in c: return (c[s][1] - 0) % 1440 + (0 if c[s][1] >= 240 else 1440), k_
@@ -308,6 +309,7 @@ def foot(c):
     g0 = gs.most_common(1)[0][0] if gs else '우'
     diff = [d for d in range(7) if w[d] and w[d] != g0]
     rem_ = ('%s%s' % (''.join(WD[d] for d in diff), GR.get(w[diff[0]], w[diff[0]]))) if diff else '_'
+    if c.get('_sub'): rem_ = '†' if rem_ == '_' else '†' + rem_          # 시외버스로 파는 편
     return g0, wdl([d for d in range(7) if w[d]]), rem_
 BR = {}
 def cells_of(c, st):

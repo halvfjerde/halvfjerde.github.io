@@ -16,6 +16,32 @@ GD = collections.defaultdict(set)                                               
 GD2 = {}
 info = collections.defaultdict(lambda: collections.defaultdict(list))                                 # 소요·요금
 miss = collections.Counter()
+# 시외버스(TAGO 시외버스정보, 한도가 따로): 책의 고속 구간과 그 반대, 전환시외 노선의 터미널 짝. 터미널 이름을 책 이름으로
+SUB = os.path.expanduser('~/.cache/tago-sub')
+SUBNM = {'서울고속버스터미널(경부)': '서울경부', '인천공항2터미널': '인천공항T2', '노포': '부산', '부산서부(사상)': '부산사상', '대구동부': '동대구', '대구서부': '서대구',
+         '안산터미널': '안산', '수원터미널': '수원', '통영터미널': '통영', '거제(고현)': '고현', '전주시외터미널': '전주', '아산(온양)': '아산', '개양(진주)': '진주개양',
+         '진주(경전)': '진주', '진주(경남)': '진주', '진주(경원)': '진주', '진주(부산교통)': '진주', '경주시외': '경주', '경주고속': '경주', '시흥': '시흥시화',
+         '동광양(중마)': '동광양', '임자(대광)': '임자(진리)', '청주북부터미널': '청주북부', '청주': '청주(센트럴)', '교통대학': '교통대', '경북도청(신)': '경북도청',
+         '고한사북공영': '고한사북', '울산(태화)': '울산', '수락산역(직통)': '수락산역', '김해공항국제(세인공항리무진)': '김해공항', '김해공항(태화)국제': '김해공항'}
+SG = {'심야프리': '심야프리미엄', '일반': '고속', '심야일반': '심야고속'}
+SUBT = set()                                              # 시외로 받은 편 (출발, 도착, 분)
+def sub_records(d):
+    import glob as _g
+    for f in _g.glob(os.path.join(SUB, d + '-*.json')):
+        for r in json.load(open(f)):
+            if '광주(경기)' in (r['depPlaceNm'], r['arrPlaceNm']): continue        # 경기 광주: 책의 광주(유·스퀘어)와 다른 곳
+            r = dict(r, depPlaceNm=SUBNM.get(r['depPlaceNm'], r['depPlaceNm']), arrPlaceNm=SUBNM.get(r['arrPlaceNm'], r['arrPlaceNm']),
+                     gradeNm=SG.get(r.get('gradeNm', ''), r.get('gradeNm', '')))
+            yield r
+for d in days:                                            # 시외: 고속과 같은 편(같은 구간·같은 분)이면 고속 쪽을 둔다
+    for r in sub_records(d):
+        o, x = r['depPlaceNm'], r['arrPlaceNm']
+        if o == x: continue
+        t = mins(r['depPlandTime']); du = (mins(r['arrPlandTime']) - t) % 1440
+        SUBT.add((o, x, t))
+        T[o][x][t].add(wd[d]); GD[(o, x, t)].add(r.get('gradeNm', '')); GD2.setdefault((o, x, t, wd[d]), set()).add(r.get('gradeNm', ''))
+        info[o][x].append((du, r.get('charge') or 0))
+EXPT = set()
 for a, b, ia, ib in pairs:
     if '휴게소' in a or '휴게소' in b: continue
     for d in days:
@@ -27,6 +53,8 @@ for a, b, ia, ib in pairs:
             t = mins(r['depPlandTime']); du = (mins(r['arrPlandTime']) - t) % 1440
             T[o][x][t].add(wd[d]); GD[(o, x, t)].add(r.get('gradeNm', '')); GD2.setdefault((o, x, t, wd[d]), set()).add(r.get('gradeNm', ''))
             info[o][x].append((du, r.get('charge') or 0))
+            EXPT.add((o, x, t))
+SUBT -= EXPT
 def wdl(ws):
     ws = sorted(ws)
     if ws == [0, 1, 2, 3, 4]: return '월∼금'
@@ -48,6 +76,10 @@ for a, b_, ia, ib in pairs:
             o, x = r['depPlaceNm'], r['arrPlaceNm']
             if o == x: continue
             PD[(o, x, mins(r['depPlandTime']))][d] = r.get('gradeNm', '')
+for d in days:
+    for r in sub_records(d):
+        o, x = r['depPlaceNm'], r['arrPlaceNm']
+        if o != x: PD[(o, x, mins(r['depPlandTime']))].setdefault(d, r.get('gradeNm', ''))
 origins = []
 nvar = 0
 FILLED = []
@@ -72,7 +104,7 @@ for o in sorted(T):
             for w_, gs in byw.items():
                 w[w_] = '◆' if gvar else (G.get(next(iter(gs)), '') or '우')
             hm = lambda m: '%d%02d' % (m // 60 % 24, m % 60)
-            times.append([hm(t), hm(t + dur), w])
+            times.append([hm(t), hm(t + dur), w] + (['시'] if (o, x, t) in SUBT else []))      # 넷째 칸 「시」: 시외버스로 팔리는 편
             if gvar: var_t.append(t)
         X = {'to': x, 'dur': dur, 'fare': [min(fs), max(fs)] if fs else None, 'times': times}
         if var_t:                                           # 돌아가는 등급: 날마다 몇 편이 무슨 등급인지
