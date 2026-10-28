@@ -647,6 +647,46 @@ for E_ in EXTRA:
                 if (A, sp_) in P or (sp_, D) in P: continue
                 if D == af_ and sp_after: EXREF.append((A, sp_, id(X_), P[(A, D)]['dur'] + mn_))
                 if A == af_ and not sp_after: EXREF.append((sp_, D, id(X_), P[(A, D)]['dur'] + mn_))
+# 지나기만 하는 정류장(through-stops.json): 거기서 끝나거나 비롯하는 차는 없다 → 그 정류장까지만 아는 편은 노선 끝까지, 표에 없던 그 구간 편도 표에
+_THF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'through-stops.json')
+for TS_ in (json.load(open(_THF)) if os.path.exists(_THF) else []):
+    sq_, sp_ = TS_['seq'], TS_['stop']
+    for T_, U_ in both:
+        if not set(sq_) <= set(T_['stops']): continue
+        for X_, fw_ in ((T_, True), (U_, False)):
+            if not X_: continue
+            q_ = [s_ for s_ in (X_['stops'] if fw_ else list(reversed(T_['stops']))) if s_ in sq_]       # 이 방향으로 지나는 차례
+            k_ = q_.index(sp_); before, after = q_[:k_], q_[k_ + 1:]
+            def offs_(a_):
+                c_ = collections.Counter((c[a_][1] - c[sp_][1]) % 1440 for c in X_['cols'] if a_ in c and sp_ in c)
+                return c_.most_common(1)[0][0] if c_ else None
+            ob_ = {a_: offs_(a_) for a_ in before + after}
+            for c in X_['cols']:
+                if sp_ not in c: continue
+                if not any(a_ in c for a_ in after):          # 여기서 끝나는 편 → 끝까지
+                    for a_ in after:
+                        if ob_[a_] is not None: c[a_] = ('a', (c[sp_][1] + ob_[a_]) % 1440)
+                if not any(a_ in c for a_ in before):         # 여기서 비롯하는 편 → 처음부터
+                    for a_ in before:
+                        if ob_[a_] is not None: c[a_] = ('d', (c[sp_][1] + ob_[a_]) % 1440)
+            # 표에 없던 그 정류장 구간 편 (여기서 비롯하거나 끝나는 것으로 보이던 편)
+            have_ = {(A_, c[A_][1], D_) for c in X_['cols'] for A_ in c if not A_.startswith('_') and c[A_][0] == 'd' for D_ in c if not D_.startswith('_') and D_ != A_}
+            for (A_, D_), v_ in list(P.items()):
+                if sp_ not in (A_, D_) or A_ not in q_ or D_ not in q_ or q_.index(A_) > q_.index(D_): continue
+                if not (A_ in before or D_ in before or A_ in after or D_ in after): continue
+                for t_, w_ in v_['t'].items():
+                    if (A_, t_, D_) in have_: continue
+                    t0_ = t_ if A_ == sp_ else (t_ + P[(A_, D_)]['dur']) % 1440       # 그 정류장의 시각
+                    c = {A_: ('d', t_), D_: ('a', (t_ + v_['dur']) % 1440), '_w': w_, '_sub': (A_, t_, D_) in SUBN}
+                    if A_ == sp_:
+                        for a_ in before:
+                            if ob_[a_] is not None: c[a_] = ('d', (t0_ + ob_[a_]) % 1440)
+                    else:
+                        for a_ in after:
+                            if ob_[a_] is not None: c[a_] = ('a', (t0_ + ob_[a_]) % 1440)
+                    X_['cols'].append(c); have_.add((A_, t_, D_))
+                X_['pairs'].add((A_, D_)); X_['board'] = set(X_['board']) | ({A_} | ({a_ for a_ in before} if A_ == sp_ else set()))
+            X_['cols'].sort(key=lambda c: next(((c[s_][1] - 0) % 1440 + (0 if c[s_][1] >= 240 else 1440) for s_ in (X_['stops'] if fw_ else list(reversed(T_['stops']))) if s_ in c), 0))
 BOFF_ = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'board-offsets.json')))
 for T_, U_ in both:                                    # 노선표: TAGO 가 같은 시각을 붙인 타는 곳은 아는 분수만큼 뒤로
     for X_ in (T_, U_):
@@ -707,6 +747,22 @@ for T, U in both:
     T['mids'] = mids
     T['title'] = '%s ― %s' % ('・'.join(nm(x) for x in left), '・'.join(nm(x) for x in right))
     T['title_up'] = '%s ― %s' % ('・'.join(nm(x) for x in right[::-1]), '・'.join(nm(x) for x in left[::-1]))
+# 이름이 같은 표(서울경부 ― 아산온양 둘: 천안운동장 길 · 아산탕정 길)는 저마다 가장 많은 차가 서는 제 정류장을 가운데에
+_tg = collections.defaultdict(list)
+for T, U in both: _tg[T.get('title')].append((T, U))
+for tt_, ps_ in _tg.items():
+    if not tt_ or len(ps_) < 2: continue
+    for T, U in ps_:
+        oth_ = set().union(*(set(T2['stops']) for T2, _ in ps_ if T2 is not T))
+        uq_ = [s_ for s_ in T['stops'] if s_ not in oth_]
+        if not uq_: continue
+        cnt_ = lambda s_: sum(1 for X in (T, U) if X for c in X['cols'] if s_ in c)
+        best_ = max(uq_, key=lambda s_: (cnt_(s_), T['stops'].index(s_)))
+        a_, _, b_ = T['title'].partition(' ― ')
+        T['title'] = '%s ― %s ― %s' % (a_, nm(best_), b_)
+        if T.get('title_up'):
+            a_, _, b_ = T['title_up'].partition(' ― ')
+            T['title_up'] = '%s ― %s ― %s' % (a_, nm(best_), b_)
 ncols = lambda p: len(p[0]['cols']) + (len(p[1]['cols']) if p[1] else 0)
 both.sort(key=lambda p: (-(ncols(p) > W1), -apt(p[0]), p[0]['stops'][0], p[0]['stops'][-1]))
 def foot(c):
@@ -734,6 +790,7 @@ def cells_of(c, st, up=False):
         mid = idx[0] < k < idx[-1]
         if not mid: return 'x'
         if other(s_): return 'i'                                      # 다른 갈래(지선): ║
+        if c.get('_sub'): return 'c'                                  # 시외는 TAGO 가 끝과 끝만 팔아 사이 정류장은 모름 (통과 아님): 빈칸
         return '↿' if up else 'v'                                     # 통과·지나지 않음: レ
     return [cell(k, s_) for k, s_ in enumerate(st)]
 def line(c, st, up=False):
