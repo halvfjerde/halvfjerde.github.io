@@ -173,7 +173,10 @@ for nodes in comp.values():
         a = (t + P[(A, D)]['dur']) % 1440
         if D not in drop or t > drop[D][1]: drop[D] = (a, t)
     first = min(board, key=lambda A: (board[A] - min(board.values())) % 1440)
-    w = P[(first, next(D for A, t, D in nodes if A == first))]['t'][board[first]]
+    w = list(P[(first, next(D for A, t, D in nodes if A == first))]['t'][board[first]])
+    for A, t, D in nodes:                               # 다니는 요일: 한 차의 어느 구간에서든 그날 다니면 다닌다 (구간마다 팔린 날이 조금씩 빠지기도)
+        for d_, g_ in enumerate(P[(A, D)]['t'][t]):
+            if g_ and not w[d_]: w[d_] = g_
     trips.append({'board': board, 'drop': {D: a for D, (a, _) in drop.items()}, 'w': w, 'nodes': nodes})
 
 SEQ = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stop-order.json')))   # 확인한 차례들

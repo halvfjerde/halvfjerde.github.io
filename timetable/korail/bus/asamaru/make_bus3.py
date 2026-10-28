@@ -50,6 +50,7 @@ for a, b_, ia, ib in pairs:
             PD[(o, x, mins(r['depPlandTime']))][d] = r.get('gradeNm', '')
 origins = []
 nvar = 0
+FILLED = []
 for o in sorted(T):
     dests = []
     for x in sorted(T[o]):
@@ -62,6 +63,11 @@ for o in sorted(T):
             byw = collections.defaultdict(set)
             for d, g in pd.items(): byw[wd[d]].add(g)
             gvar = any(len(v) > 1 for v in byw.values())
+            miss_ = set(range(7)) - set(byw)                # 다섯 요일 넘게 다니는데 빠진 요일이 주말꼴(금·토·일)이 아니면 임의 결행으로 보고 날마다
+            if len(byw) >= 5 and miss_ and not miss_ <= {4, 5, 6}:
+                g_all = collections.Counter(g for v in byw.values() for g in v).most_common(1)[0][0]
+                for w_ in miss_: byw[w_] = {g_all}
+                FILLED.append((o, x, t, sorted(miss_)))
             w = [0] * 7
             for w_, gs in byw.items():
                 w[w_] = '◆' if gvar else (G.get(next(iter(gs)), '') or '우')
@@ -91,7 +97,7 @@ for o in sorted(T):
             else: X['gnote'] = '◆ 날마다 등급이 바뀜'                  # 등급이 셋 넘으면 늘어놓지 않는다
         if times: dests.append(X)
     if dests: origins.append({'from': o, 'dests': dests})
-print('grade-rotating times', nvar, file=sys.stderr)
+print('grade-rotating times', nvar, 'filled as daily', len(FILLED), file=sys.stderr)
 json.dump({'days': days, 'origins': origins}, sys.stdout, ensure_ascii=False, indent=0)
 print('origins', len(origins), 'dests', sum(len(o['dests']) for o in origins), 'times', sum(len(x['times']) for o in origins for x in o['dests']),
       'daily', sum(1 for o in origins for x in o['dests'] for t in x['times'] if all(t[2])), 'missing files', dict(miss), file=sys.stderr)
