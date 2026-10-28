@@ -3761,15 +3761,23 @@ class Book:
                     if k_ in X: X[k_] = sh_(X[k_])
                 if 'via' in X: X['via'] = [[sh_(v[0])] + v[1:] for v in X['via']]
                 if 'board' in X: X['board'] = [' '.join([sh_(v.split(' ', 1)[0])] + v.split(' ', 1)[1:]) for v in X['board']]     # 「천안종합운동장 +20분」도 짧은 이름으로
+                if 'mid' in X:                              # 사이 칸 이름: 끝(또는 출발) 터미널 이름을 앞에 단 것은 줄여 (진주개양 → 개양, 원주문막 → 문막, 인천공항T1 → T1)
+                    def _cut(n_, X_=X, O_=O):
+                        for base_ in sorted({X_['to'], O_['from'], re.sub(r'\(.*\)|T\d$', '', X_['to']), re.sub(r'\(.*\)|T\d$', '', O_['from'])}, key=len, reverse=True):
+                            if base_ and n_.startswith(base_) and len(n_) > len(base_): return n_[len(base_):]
+                        return n_
+                    X['mid'] = [[_cut(sh_(m[0]))] + m[1:] for m in X['mid']]
+                if 'lab' in X: X['lab'] = [re.sub(r'^(→)?(\S+)', lambda mo: (mo.group(1) or '') + sh_(mo.group(2)), l_) if l_ else l_ for l_ in X['lab']]
         data['origins'].sort(key=lambda O: O['from'])
         for O in data['origins']: O['dests'].sort(key=lambda X: X['to'])
         R, fs = self.R, self.fs
         pad = 0.5 * fs
-        TS, GW, DW = 2.7 * fs, 1.2 * fs, 0.85 * fs
+        TS, GW, DW = 2.7 * fs, 1.2 * fs, 0.9 * fs
         MW = 0.55 * fs                                      # 시외버스 표지(†) 칸
-        NC = max(1, int(self.cw / (MW + 2 * TS + GW + 7 * DW + 0.9 * fs)))
+        MIDW0 = 3.6 * fs                                    # 발・착 사이: 사이 정류장 시각(둘까지)・이어지는 차 안내・「20분마다」
+        NC = max(1, int(self.cw / (MW + 2 * TS + MIDW0 + GW + 7 * DW + 0.9 * fs)))
         colw = self.cw / NC
-        DW = (colw - 0.7 * fs - MW - 2 * TS - GW) / 7           # 남는 폭은 요일 칸에
+        MIDW = colw - 0.7 * fs - MW - 2 * TS - GW - 7 * DW       # 남는 폭은 사이 칸에
         TH, CH = 1.5 * R, 0.85 * R                          # 출발 터미널 머리, 칸 머리
         GP = 0.4 * R                                        # 행선지 이름 위 여백
         DH = R + GP
@@ -3778,43 +3786,113 @@ class Book:
         ww_ = colw - 1.0 * fs
         wsm = lambda t: self.inl.wc.get(self.inl.run(t, Ctx('M', 0.72).but(hscale=0.82)), len(t)) * fs
         hm_ = self.dur_text
-        def sub_lines(X):
-            """덩이 머리 밑 작은 줄: 「경유 서대구 3:10 19,600∼」, 「승차 평택굿모닝병원・평택대」"""
-            out = []
-            durs = collections.Counter([v[1] for v in X.get('via', [])] + [X['dur']])      # 소요가 같게 적힌 곳은 소요를 빼고 이름만
-            for lab, toks in (('경유', [v[0] + ('' if v[1] in (None, X['dur']) else ' ' + hm_(v[1])) for v in X.get('via', [])]),      # 소요가 끝과 같게 적힌 곳(TAGO)·모르는 곳은 이름만
-                              ('승차', X.get('board', []))):
-                if not toks: continue
-                cur = lab
-                for k_, t_ in enumerate(toks):
-                    sep = '　' if k_ == 0 else '・'
-                    if wsm(cur + sep + t_) > ww_: out.append(cur + sep.strip()); cur = '　　' + t_
-                    else: cur += sep + t_
-                out.append(cur)
-            if X.get('vnote'): out.extend(X['vnote'].split('\n'))       # 일부 편만 서는 곳: 「◇ 원주문막 경유 (원주 발 15분 뒤)」, 둘째 묶음은 다음 줄에 「△ 경유 진주혁신」
-            for vn_ in (X.get('vnote2'), X.get('vnote3')):   # 더 먼 행선지·앞 출발지 덩이에 실은 편: 「이 밖에 배방정류소 행 22편도 섬」「이 밖에 진해 발 3편도 탐」
-                if not vn_: continue
+        mm_ = lambda s_: int(s_[:-2]) * 60 + int(s_[-2:])
+        hmc = lambda m: ('%d:%02d' % divmod(int(m), 60)) if m >= 60 else '%d분' % m        # 띠의 짧은 소요 「3:35」「30분」
+        # 덩이 몸: 발차 시각을 줄줄이. 줄 머리는 요일 점(그 줄의 차가 다니는 날)·등급 네모·시외 †
+        DWg = 0.62 * fs                                     # 요일 점 간격
+        LBW = 7 * DWg + 1.25 * fs                           # 줄 머리 폭 (요일 점 + 등급)
+        SW = 2.38 * fs                                      # 시각 한 칸
+        NT = max(3, int((colw - 2 * pad - LBW) / SW))       # 한 줄 시각 수
+        GORD = {'우': 0, '프': 1, '일': 2, '심': 3, '심프': 4, '심일': 5, '◆': 6}
+        def block_lines(X, O):
+            """덩이: (머리 밑 작은 줄들, 시각 줄들). 시각 줄 = (줄 머리 또는 None, [칸...])"""
+            rows = list(zip(X['times'], X.get('mt') or [[]] * len(X['times']), X.get('lab') or [''] * len(X['times'])))
+            durs = collections.Counter((mm_(t[1]) - mm_(t[0])) % 1440 for t, _, _ in rows if t[1])
+            dur0 = X['dur'] if X['dur'] in durs else (durs.most_common(1)[0][0] if durs else X['dur'])
+            mids = X.get('mid') or []
+            part = [k for k in range(len(mids)) if not all(mt[k] for _, mt, _ in rows if len(mt) > k)]
+            pmk = {k: '◇△'[j] for j, k in enumerate(part[:2])}
+            dlet, dl_ = {}, 'abcdefgh'
+            for d_, _ in sorted(durs.items()):
+                if d_ != dur0 and len(dlet) < len(dl_): dlet[d_] = dl_[len(dlet)]
+            # 띠: 출발 ─ 사이 정류장(시각) ─ 끝
+            el = []
+            for k, m_ in enumerate(mids):
+                offs = collections.Counter((mm_(mt[k]) - mm_(t[0])) % 1440 for t, mt, _ in rows if len(mt) > k and mt[k])
+                if not offs: continue
+                o_ = offs.most_common(1)[0][0]
+                el.append((o_, m_[0] + pmk.get(k, ''), ('+' + hmc(o_)) if m_[1] == 'd' else hmc(o_)))
+            for v in X.get('via', []):
+                el.append((v[1] if v[1] not in (None, X['dur']) else 10 ** 6, v[0], hmc(v[1]) if v[1] not in (None, X['dur']) else ''))
+            for s_ in X.get('board', []):
+                n_, _, r_ = s_.partition(' ')
+                el.append((-1, n_, r_.replace('시간 ', ':').replace('시간', ':00').replace('분', '') if r_ else ''))
+            el.sort(key=lambda e: e[0])
+            sub = []
+            if el:
+                parts_ = [O['from']] + ['%s %s' % (e[1], e[2]) if e[2] else e[1] for e in el] + ['%s %s' % (X['to'], hmc(dur0))]
                 cur = ''
-                for t_ in vn_.split(', '):
-                    if cur and wsm(cur + ', ' + t_) > ww_: out.append(cur + ','); cur = '　' + t_
-                    else: cur = (cur + ', ' + t_) if cur else t_
-                out.append(cur)
-            for tt_ in X.get('tabRefs', []): out.append('이 밖에 노선표 {#%s}' % tt_)      # {#표 이름}: 그 표의 쪽 번호 네모
-            if X.get('gnote'):                              # 돌아가는 등급: 「※ 가운데 날마다 1∼2편 프리미엄, 나머지 우등」
+                for k_, p_ in enumerate(parts_):
+                    sep_ = '' if k_ == 0 else ' ─ '
+                    if cur and wsm(cur + sep_ + p_) > ww_: sub.append(cur + ' ─'); cur = '　' + p_
+                    else: cur += sep_ + p_
+                sub.append(cur)
+            # 이어지는 차・소요가 다른 차 풀이
+            leg = []
+            cont, fromu = collections.defaultdict(collections.Counter), collections.defaultdict(collections.Counter)
+            for t, mt, lab in rows:
+                if lab.startswith('→'):
+                    n_, _, a_ = lab[1:].partition(' ')
+                    if a_ and t[1]: cont[n_][(mm_(a_) - mm_(t[1])) % 1440] += 1
+                elif lab.endswith('발'):
+                    n_, _, d_ = lab[:-1].partition(' ')
+                    if d_: fromu[n_][(mm_(t[0]) - mm_(d_)) % 1440] += 1
+            CM = {}
+            for j_, (n_, c_) in enumerate(sorted(cont.items())):
+                CM['→' + n_] = '→⇒'[min(j_, 1)]; leg.append('%s %s까지 (%s 더)' % (CM['→' + n_], n_, hmc(c_.most_common(1)[0][0])))
+            for j_, (n_, c_) in enumerate(sorted(fromu.items())):
+                CM[n_] = '←⇐'[min(j_, 1)]; leg.append('%s %s 발 (%s 앞)' % (CM[n_], n_, hmc(c_.most_common(1)[0][0])))
+            if dlet: leg.append('　'.join('%s %s' % (l_, hmc(d_)) for d_, l_ in sorted(dlet.items(), key=lambda kv: kv[1])) + ' 걸림')
+            sub += leg
+            if X.get('vnote'): sub.extend(X['vnote'].split('\n'))
+            for tt_ in X.get('tabRefs', []): sub.append('이 밖에 노선표 {#%s}' % tt_)
+            if X.get('gnote'):
                 cur = ''
-                for k_, t_ in enumerate(X['gnote'].split(', ')):
-                    if cur and wsm(cur + ', ' + t_) > ww_: out.append(cur + ','); cur = '　' + t_
+                for t_ in X['gnote'].split(', '):
+                    if cur and wsm(cur + ', ' + t_) > ww_: sub.append(cur + ','); cur = '　' + t_
                     else: cur = (cur + ', ' + t_) if cur else t_
-                out.append(cur)
-            return out
-        items = []                                          # (종류, 높이, 내용)
+                sub.append(cur)
+            # 시각 칸: 요일・등급・시외가 같은 차끼리 한 묶음
+            grp = collections.OrderedDict()
+            for t, mt, lab in rows:
+                w = t[2]; gs_ = {g for g in w if g}
+                gk = (tuple(1 if g else 0 for g in w), next(iter(gs_)) if len(gs_) == 1 else '※')      # 날에 따라 등급이 바뀌는 차(※)는 요일로만 묶는다 (어느 날 무슨 등급인지는 머리의 ◆ 풀이)
+                mk = ''.join(pmk[k] for k in sorted(pmk) if len(mt) > k and mt[k])
+                if lab.startswith('→'): mk += CM.get('→' + lab[1:].partition(' ')[0], '→')
+                elif lab.endswith('발'): mk += CM.get(lab[:-1].partition(' ')[0], '←')
+                if t[1]:
+                    d_ = (mm_(t[1]) - mm_(t[0])) % 1440
+                    if d_ in dlet: mk += dlet[d_]
+                grp.setdefault((gk, '시' in t[3:]), []).append((t[0], mk))
+            def gsort(kv):
+                (gk, sb), toks = kv
+                days = gk[0]
+                return (-sum(days), days[::-1], GORD.get(gk[1], 9), sb, mm_(toks[0][0]))
+            lines = []
+            for (gk, sb), toks in sorted(grp.items(), key=gsort):
+                cells, i = [], 0
+                while i < len(toks):                         # 거의 같은 간격(±5분)으로 다섯 넘게: 첫 차 · 「매 20분」 · 끝 차
+                    j = i; lo = hi = None
+                    while j + 1 < len(toks) and toks[j + 1][1] == toks[i][1]:
+                        g_ = mm_(toks[j + 1][0]) - mm_(toks[j][0])
+                        l2, h2 = min(lo if lo is not None else g_, g_), max(hi if hi is not None else g_, g_)
+                        if g_ < 5 or h2 - l2 > 5: break
+                        lo, hi = l2, h2; j += 1
+                    if j - i + 1 >= 5:
+                        cells += [('t',) + toks[i], ('z', lo, hi), ('t',) + toks[j]]; i = j + 1
+                    else: cells.append(('t',) + toks[i]); i += 1
+                for k_ in range(0, len(cells), NT):
+                    lines.append((((gk, sb) if k_ == 0 else None), cells[k_:k_ + NT]))
+            return sub, lines
+        items = []                                          # (종류, 내용)
         for O in data['origins']:
             items.append(('o', O['from']))
             for X in O['dests']:
                 if 'times' not in X: items.append(('r', X)); continue
-                X['_sub'] = sub_lines(X)
+                X['_sub'], lines_ = block_lines(X, O)
+                X['_nl'] = len(lines_)
                 items.append(('d', X))
-                for tg in X['times']: items.append(('t', tg))
+                for ln_ in lines_: items.append(('g', ln_, X))
         cols, col, y = [], [], 0.0
         cur_o = None
         def head(o, cont):
@@ -3824,7 +3902,7 @@ class Book:
         i = 0
         cap = self.ch
         while i < len(items):
-            k, v = items[i]
+            k, v = items[i][0], items[i][1]
             if k == 'o':
                 cur_o = v
                 if col and y + TH + GP + CH + DH + 3 * R > cap: cols.append(col); col, y = [], 0.0
@@ -3837,17 +3915,17 @@ class Book:
             if k == 'd':
                 cur_x = v
                 hd = DH + SR * len(v['_sub']) + (BG if v['_sub'] else 0)      # 안내 줄 밑에도 덩이 아래만큼 여백
-                need = hd + R * min(3, len(v['times']))        # 머리 밑에 적어도 세 줄
+                need = hd + R * min(2, v['_nl'])               # 머리 밑에 적어도 두 줄
                 if y + need > cap + 1e-6: cols.append(col); col, y = [], 0.0; continue
                 col.append(('d', y, v, False, hd, cur_o)); y += hd; i += 1; continue
             if y + R > cap + 1e-6:
                 cols.append(col); col, y = [], 0.0
                 head(cur_o, True); col.append(('d', y, cur_x, True, DH, cur_o)); y += DH
-            col.append(('t', y, v)); y += R; i += 1
-            if i >= len(items) or items[i][0] != 't': y += BG
+            col.append((k, y, v) + tuple(items[i][2:])); y += R; i += 1
+            if i >= len(items) or items[i][0] != 'g': y += BG
         if col: cols.append(col)
         pages = [cols[k:k + NC] for k in range(0, len(cols), NC)]
-        self._bus = (colw, pad, TS, GW, DW, TH, CH, GP, NC, SR, BG)
+        self._bus = (colw, pad, TS, GW, DW, TH, CH, GP, NC, SR, BG, MIDW, DWg, LBW, SW)
         self.bus_opage = {}                                 # 출발 터미널 → 그 덩이가 시작하는 쪽 (self.pages 의 자리)
         self.bus_dpage = {}                                 # (출발, 행선지) → 그 행선지 덩이가 실린 쪽
         for i, p in enumerate(pages):
@@ -3865,7 +3943,7 @@ class Book:
 
     def bus_page(self, k, x0, recto):
         fs, R = self.fs, self.R
-        colw, pad, TS, GW, DW, TH, CH, GP, NC, SR, BG = self._bus
+        colw, pad, TS, GW, DW, TH, CH, GP, NC, SR, BG, MIDW, DWg, LBW, SW = self._bus
         first = self.cfg.get('firstFolio', 2)
         yB = y0_ = self.mt
         yB = y0_ + self.ch
@@ -3887,28 +3965,25 @@ class Book:
             ww = colw
             col = self.bus[k][ci] if ci < len(self.bus[k]) else []
             if not col: rects.append(('box', xx, y0, xx + ww, yB, self.rw[1])); continue
-            xM = xx + 0.1 * fs; xA = xM + 0.55 * fs; xB = xA + TS; xG = xB + TS
-            xD = xG + GW + (xx + ww - (xG + GW) - 7 * DW) / 2      # 요일 칸은 남은 자리 가운데에
+            xL = xx + pad; xT0 = xx + pad + LBW                 # 줄 머리(요일 점・등급) | 발차 시각 칸들
             seg = []                                   # 세로줄을 그을 시각 줄 구간
             st = None; lastT = -1.0
             for it in col:
                 kd, y = it[0], y0 + it[1]
-                if kd != 't' and st is not None: seg.append((st, lastT if lastT > st else y)); st = None
-                if kd == 't': lastT = y + R
+                if kd != 'g' and st is not None: seg.append((st, lastT if lastT > st else y)); st = None
+                if kd == 'g': lastT = y + R
                 if kd == 'o':
                     if it[1] > 0: rects.append(('h', xx, xx + ww, y, 2))
                     tex.append(self.put_box(xx + pad, y + GP, ww - 2 * pad, TH, self.inl.run('%s 발' % it[2], Ctx('GB', 1.15)), 'l', 'm'))
                 elif kd == 'c':
-                    c = Ctx('G', 0.7)
-                    tex.append(self.put_box(xA, y, TS, CH, self.inl.run('발', c), 'c', 'm'))
-                    tex.append(self.put_box(xB, y, TS, CH, self.inl.run('착', c), 'c', 'm'))
-                    tex.append(self.put_box(xG, y, GW, CH, self.inl.run('등급', c.but(hscale=0.7)), 'c', 'm'))
-                    for d in range(7): tex.append(self.put_box(xD + d * DW, y, DW, CH, self.inl.run(WD[d], c), 'c', 'm'))
+                    c = Ctx('G', 0.62)
+                    for d in range(7): tex.append(self.put_box(xL + d * DWg, y, DWg, CH, self.inl.run(WD[d], c), 'c', 'm'))
+                    tex.append(self.put_box(xT0, y, xx + ww - pad - xT0, CH, self.inl.run('발차 시각', Ctx('G', 0.7)), 'l', 'm'))
                     rects.append(('h', xx, xx + ww, y + CH, 1))
                     st = y
                 elif kd == 'r':                                # 참조 덩이: 머리(이름·소요·요금)는 여느 덩이처럼, 밑줄에 「→ 동대구 행 95」
                     X = it[2]
-                    if it[1] > 0 and col[col.index(it) - 1][0] in ('t', 'r'): rects.append(('h', xx, xx + ww, y, 1))
+                    if it[1] > 0 and col[col.index(it) - 1][0] in ('g', 'r'): rects.append(('h', xx, xx + ww, y, 1))
                     y += GP
                     du = self.dur_text(X['dur']) if X.get('dur') else ''
                     fa = ('{:,}원'.format(X['fare'][0]) + ('∼' if X['fare'][1] != X['fare'][0] else '')) if X.get('fare') else ''
@@ -3928,7 +4003,7 @@ class Book:
                         tex.append(self.put_box(xx + pad, y, ww - 2 * pad, SR, self.inl.run('→ 노선표', rc) + bx2, 'l', 'm'))
                 elif kd == 'd':
                     X = it[2]
-                    if it[1] > 0 and col[col.index(it) - 1][0] in ('t', 'r'): rects.append(('h', xx, xx + ww, y, 1))
+                    if it[1] > 0 and col[col.index(it) - 1][0] in ('g', 'r'): rects.append(('h', xx, xx + ww, y, 1))
                     y += GP
                     du = self.dur_text(X['dur'])
                     fa = ('{:,}원'.format(X['fare'][0]) + ('∼' if X['fare'][1] != X['fare'][0] else '')) if X.get('fare') else ''
@@ -3950,27 +4025,29 @@ class Book:
                             y += SR
                         if X.get('_sub'): y += BG
                     st = y
-                else:
-                    dep, arr, w = it[2][:3]
-                    fl_ = it[2][3:]                       # 표지: 시외버스로 파는 편 †, 일부 편만 서는 곳을 거치는 편 ◇
-                    mk_ = ('†' if '시' in fl_ else '') + ('◇' if '◇' in fl_ else '') + ('△' if '△' in fl_ else '')
-                    if mk_: tex.append(self.put_box(xM - (0.2 * fs if len(mk_) > 1 else 0), y, 0.55 * fs + (0.2 * fs if len(mk_) > 1 else 0), R, self.inl.run(mk_, Ctx('M', 0.75 if len(mk_) == 1 else 0.55)), 'c', 'm'))
-                    tex.append(self.put_box(xA, y, TS - 0.25 * fs, R, self.inl.run(dep, Ctx('DM', 1.0)), 'r', 'm'))
-                    tex.append(self.put_box(xB, y, TS - 0.25 * fs, R, self.inl.run(arr, Ctx('DM', 1.0)), 'r', 'm'))
-                    gs = {g for g in w if g}
-                    if len(gs) == 1:
-                        g = next(iter(gs))
-                        if g != '우': tex.append(self.put_box(xG, y, GW, R, gmark(g, 0.8), 'c', 'm'))
-                        for d in range(7):
-                            if w[d]: dot(xD + (d + 0.5) * DW, y + R / 2)
-                    else:                                  # 날에 따라 등급이 바뀜: 등급 칸에 ※, 요일 칸에 그날 등급
-                        tex.append(self.put_box(xG, y, GW, R, self.inl.run('※', Ctx('M', 0.8)), 'c', 'm'))
-                        for d in range(7):
-                            if w[d]: tex.append(self.put_box(xD + d * DW, y, DW, R, gmark(w[d], 0.64), 'c', 'm'))
+                else:                                          # 시각 줄: 머리(그 묶음 첫 줄만) + 시각 칸들
+                    lab_, cells = it[2]
+                    if lab_ is not None:
+                        (gk, sb) = lab_
+                        for d in range(7):                     # 다니는 날은 점, 쉬는 날은 짧은 줄 (자리를 읽기 쉽게)
+                            if gk[0][d]: dot(xL + (d + 0.5) * DWg, y + R / 2)
+                            else: rects.append(('h', xL + (d + 0.5) * DWg - 0.14 * fs, xL + (d + 0.5) * DWg + 0.14 * fs, y + R / 2, 1))
+                        if gk[1] == '※': tex.append(self.put_box(xL + 7 * DWg + 0.1 * fs, y, 0.8 * fs, R, self.inl.run('◆', Ctx('M', 0.7)), 'c', 'm'))
+                        elif gk[1] != '우': tex.append(self.put_box(xL + 7 * DWg + 0.1 * fs, y, 0.8 * fs, R, gmark(gk[1], 0.72), 'c', 'm'))
+                        if sb: tex.append(self.put_box(xL + 7 * DWg + 0.85 * fs, y, 0.4 * fs, R, self.inl.run('†', Ctx('M', 0.7)), 'c', 'm'))
+                    for k_, c_ in enumerate(cells):
+                        xs = xT0 + k_ * SW
+                        if c_[0] == 'z':                       # 거의 같은 간격: 「매 20분」「15∼20분」
+                            zt = ('매%d분' % c_[1]) if c_[1] == c_[2] else ('%d∼%d분' % (c_[1], c_[2]))
+                            tex.append(self.put_box(xs, y, SW, R, self.inl.run('⋯' + zt + '⋯', Ctx('M', 0.68).but(hscale=0.8)), 'c', 'm'))
+                            continue
+                        _, tm_, mk_ = c_
+                        tex.append(self.put_box(xs, y, SW - 0.42 * fs, R, self.inl.run(tm_, Ctx('DM', 0.95)), 'r', 'm'))
+                        if mk_: tex.append(self.put_box(xs + SW - 0.44 * fs, y, 0.44 * fs, 0.62 * R, self.inl.run(mk_, Ctx('M', 0.62 if len(mk_) == 1 else 0.48)), 'l', 'm'))
             yE = y0 + max(it[1] + (TH + GP if it[0] == 'o' else CH if it[0] == 'c' else it[4] if it[0] == 'd' else R + GP + SR * (2 if it[2].get('alsoTable') else 1) + BG if it[0] == 'r' else R + BG) for it in col)
             if st is not None: seg.append((st, lastT if lastT > st else yE))
             for a, b in seg:
-                for xv in (xB, xG, xG + GW): rects.append(('v', xv, a, b, 1))       # 요일 칸 왼쪽 괘선은 등급 칸에 붙여 (점·글자만 가운데로)
+                rects.append(('v', xT0 - 0.15 * fs, a, b, 1))       # 줄 머리 | 시각
             if yB - yE < R: yE = yB                    # 한 줄도 안 남으면 빈 상자 없이 표를 쪽 끝까지 (아래는 여백으로)
             rects.append(('box', xx, y0, xx + ww, yE, self.rw[1]))
             if yB - yE >= R: rects.append(('box', xx, yE, xx + ww, yB, self.rw[1]))     # 남는 자리: 빈 상자

@@ -869,7 +869,7 @@ for B_, D, *only in SAME['drop']:                      # 셋째 칸이 있으면
             XB = d[B_]; d[D].setdefault('via', []).append([B_, XB['dur'], XB.get('fare')])
             rest_ = [t for t in XB['times'] if t[0] not in ts_(d[D]) or '시' in t[3:]]
             if rest_:
-                n_ = len(XB['times']) - len(rest_); XB['times'] = rest_; XB['vnote2'] = '이 밖에 %s 행 %d편도 섬' % (nm(D), n_)
+                n_ = len(XB['times']) - len(rest_); XB['_v2'] = {D: [t[0] for t in XB['times'] if t not in rest_]}; XB['times'] = rest_; XB['vnote2'] = '이 밖에 %s 행 %d편도 섬' % (nm(D), n_)
                 XB['dur'] = sorted((m_(t[1]) - m_(t[0])) % 1440 for t in rest_)[len(rest_) // 2]      # 남은 편(시외)의 소요・요금으로
                 mf_ = [M_['fare'] for M_ in json.load(open(os.path.join(HERE2_, 'manual-trips.json'))) if M_['from'] == O['from'] and M_['to'] == B_ and M_.get('fare')]
                 if mf_: XB['fare'] = [min(f_[0] for f_ in mf_), max(f_[1] for f_ in mf_)]
@@ -938,6 +938,7 @@ def merge_drop(d, xs):
             X['vnote'] = '◇ 경유 ' + '・'.join('%s %s' % (nm(z), hmd(blocks[z][1])) for z in part)
             if bv_.startswith('◇ 승차 %s' % nm(y)): X['vnote'] += '・승차' + bv_[len('◇ 승차 %s' % nm(y)):]      # 「◇ 경유 황간 30분・승차 +30분」
         also = collections.Counter(far[t] for t in blocks[x][0] if far[t] != x)
+        if also: X['_v2'] = {z: sorted(t for t in blocks[x][0] if far[t] == z) for z in also}
         if also: X['vnote2'] = '이 밖에 ' + ', '.join('%s 행 %d편' % (nm(z), n) for z, n in sorted(also.items(), key=lambda kv: blocks[kv[0]][1])) + '도 섬'
     return True
 def merge_board(D, os_, strict=False):
@@ -986,7 +987,7 @@ def merge_board(D, os_, strict=False):
             Y['vnote'] += '\n△ 승차 %s%s' % (nm(o), ' ' + es if es else ''); Y['_mk2'] = ('b', o, e)
         else: continue
         rest_ = [t for t in X['times'] if m_(t[0]) not in got]
-        if rest_: X['times'] = rest_; X['vnote3'] = '이 밖에 %s 발 %d편도 탐' % (nm(A), len(got))
+        if rest_: X['times'] = rest_; X['vnote3'] = '이 밖에 %s 발 %d편도 탐' % (nm(A), len(got)); X['_v3'] = [A, [((t + e) % 1440, t) for t in tA if (t + e) % 1440 in got]]
         else: du_, fa_ = X['dur'], X.get('fare'); X.clear(); X.update({'to': D, 'seeFrom': A, 'dur': du_, 'fare': fa_})
         n += 1
     return n
@@ -1100,7 +1101,7 @@ for K_ in (json.load(open(KB_)) if os.path.exists(KB_) else []):
                 tt_ = {(m_(t[0]) + dv_) % 1440 for t in hit_}
                 rest_ = [t for t in XB_['times'] if m_(t[0]) not in tt_]
                 if len(rest_) == len(XB_['times']): continue
-                if rest_: XB_['vnote3'] = '이 밖에 %s 발 %d편도 탐' % (nm(K_['from']), len(XB_['times']) - len(rest_)); XB_['times'] = rest_
+                if rest_: XB_['vnote3'] = '이 밖에 %s 발 %d편도 탐' % (nm(K_['from']), len(XB_['times']) - len(rest_)); XB_['times'] = rest_; XB_['_v3'] = [K_['from'], [((m_(t[0]) + dv_) % 1440, m_(t[0])) for t in hit_]]
                 else: du_, fa_ = XB_['dur'], XB_.get('fare'); XB_.clear(); XB_.update({'to': K_['to'], 'seeFrom': K_['from'], 'dur': du_, 'fare': fa_})
 print('auto chains', len(AUTO), 'review', len(REVIEW), file=sys.stderr)
 b['autoChains'] = [[o] + xs for o, xs in AUTO]
@@ -1110,6 +1111,104 @@ b['names'] = SHORT
 b['tableRefs'] = sorted([A, D, title_of[id(T)], P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
 b['tableRefs'] += sorted(map(list, {tuple(x[:3]) + (x[3], tuple(x[4]) if x[4] else None) for x in SKIPREF}))
 b['tableRefs'] += sorted([A, D, title_of[i_], du_, None] for A, D, i_, du_ in set(EXREF) if i_ in title_of)                  # TAGO 에 없는 끝 정류장 (요금 모름)
+# ── 이어진 노선을 목록에서 이어서 보이기 ──
+# 1) 「이 밖에 D 행 n편도 섬」: 그 편들(더 먼 D 까지 가는 차)을 이 덩이에도 싣고 그 줄에 「→D 착」 (D 덩이에도 그대로)
+# 2) 「이 밖에 A 발 n편도 탐」: 앞 출발지 A 에서 오는 차를 이 덩이에 싣고 그 줄에 「A 발 시각」
+# 3) 시각을 아는 사이 정류장(경유 착・승차 발, ◇・△ 편만 서는 곳): 덩이에 칸(둘까지)을 두고 그 편의 시각을 적는다 — ◇・△ 표지와 안내 줄 대신
+_hm4 = lambda x: hm(x % 1440)
+_OD = {(O['from'], X['to']): X for O in b['origins'] for X in O['dests']}
+def _dur_of(s):
+    mo = re.search(r'(?:(\d+)시간)?\s*(?:(\d+)분)?\s*$', s.strip())
+    return (int(mo.group(1) or 0) * 60 + int(mo.group(2) or 0)) if mo and (mo.group(1) or mo.group(2)) else None
+for O in b['origins']:
+    for X in O['dests']:
+        if not X.get('times'): continue
+        X['lab'] = [''] * len(X['times'])
+for O in b['origins']:
+    for X in O['dests']:
+        if not X.get('times'): continue
+        add_ = []
+        for D_, ts0 in (X.pop('_v2', None) or {}).items():
+            YD = _OD.get((O['from'], D_))
+            if not YD or not YD.get('times'): continue
+            for t in YD['times']:
+                if t[0] in ts0:
+                    add_.append(([t[0], _hm4(m_(t[0]) + X['dur']), t[2]] + [f_ for f_ in t[3:] if f_ not in ('◇', '△')], '→%s %s' % (nm(D_), t[1])))
+            X.pop('vnote2', None)
+        v3_ = X.pop('_v3', None)
+        if v3_:
+            A_, prs_ = v3_; YA = _OD.get((A_, X['to']))
+            if YA and YA.get('times'):
+                for tb_, ta_ in prs_:
+                    for t in YA['times']:
+                        if m_(t[0]) == ta_:
+                            add_.append(([_hm4(tb_), t[1], t[2]] + [f_ for f_ in t[3:] if f_ not in ('◇', '△')], '%s %s발' % (nm(A_), t[0])))
+                X.pop('vnote3', None)
+        if add_:
+            rows_ = list(zip(X['times'], X['lab'])) + add_
+            rows_.sort(key=lambda p: m_(p[0][0]))
+            X['times'] = [p[0] for p in rows_]; X['lab'] = [p[1] for p in rows_]
+for O in b['origins']:
+    for X in O['dests']:
+        if not X.get('times'): continue
+        cand = []                                       # (이름, 종류 a/d, 분, 표지 또는 None=모든 편)
+        txt_v, txt_b = [], []
+        tv_ = [v for v in X.get('via', []) if v[1] is not None and v[1] != X['dur']]
+        offs_ = collections.Counter(v[1] for v in tv_)
+        for v in X.get('via', []):
+            if v in tv_ and offs_[v[1]] == 1: cand.append((v[0], 'a', v[1], None))
+            else: txt_v.append(v)
+        for s_ in X.get('board', []):
+            nm_, _, rs_ = s_.partition(' ')
+            dv_ = _dur_of(rs_) if rs_.startswith('+') else None
+            if dv_: cand.append((nm_, 'd', dv_, None))
+            else: txt_b.append(s_)
+        keep_lines, colmk = [], set()
+        for ln in X.get('vnote', '').split('\n') if X.get('vnote') else []:
+            mk, body = ln[0], ln[2:]
+            got_, ok_, kind_, last_ = [], mk in '◇△', None, None
+            for sg in body.split('・'):
+                sg = sg.strip()
+                if sg.startswith('경유 '): kind_ = 'a'; sg = sg[3:]
+                elif sg.startswith('승차'): kind_ = 'd'; sg = sg[2:].strip()
+                if kind_ is None: ok_ = False; break
+                if kind_ == 'a':
+                    nm_, _, rs_ = sg.partition(' '); dv_ = _dur_of(rs_)
+                else:
+                    if sg.startswith('+'): nm_, dv_ = last_, _dur_of(sg[1:])
+                    else: nm_, _, rs_ = sg.partition(' '); dv_ = _dur_of(rs_[1:]) if rs_.startswith('+') else None
+                if not nm_ or dv_ is None: ok_ = False; break
+                got_.append((nm_, kind_, dv_, mk)); last_ = nm_
+            if ok_ and got_: cand += got_; colmk.add(mk)
+            else: keep_lines.append(ln)
+        # 이름이 같으면 한 칸 (내리고 타는 곳: 타는 시각)
+        cols_ = []
+        for nm_, k_, dv_, mk in cand:
+            c_ = next((c for c in cols_ if c[0] == nm_ and (c[3] == mk or c[3] is None or mk is None)), None)
+            if c_:
+                if c_[1] != k_: c_[1] = 'ad'
+                c_[2] = dv_ if k_ == 'd' else c_[2]
+                if mk is None: c_[3] = None
+            else: cols_.append([nm_, k_, dv_, mk])
+        if not cols_: continue
+        if len(cols_) > 2:                               # 칸이 셋 넘으면(서울호남 → 보성 옥과・송광사・벌교) 안내 줄 그대로
+            continue
+        cols_.sort(key=lambda c: c[2])
+        X['mid'] = [[c[0], c[1]] for c in cols_]
+        X['mt'] = [[(_hm4(m_(t[0]) + c[2]) if (c[3] is None or c[3] in t[3:]) else '') for c in cols_] for t in X['times']]
+        for t in X['times']:
+            for mk in colmk:
+                while mk in t: t.remove(mk)
+        cn_ = {c[0] for c in cols_ if c[3] is None}
+        X['via'] = [v for v in txt_v]
+        if not X['via']: X.pop('via')
+        X['board'] = txt_b
+        if not X['board']: X.pop('board')
+        if keep_lines: X['vnote'] = '\n'.join(keep_lines)
+        else: X.pop('vnote', None); X.pop('_part', None)
+for O in b['origins']:
+    for X in O['dests']:
+        if 'lab' in X and not any(X['lab']): X.pop('lab')
 for M_ in json.load(open(os.path.join(HERE2_, 'manual-trips.json'))):     # 시각 모르는 경유지(시각표에 이름만): 「경유 꽃동산・장수」
     for O in b['origins']:
         for X in O['dests']:
