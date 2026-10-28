@@ -652,10 +652,10 @@ for E_ in EXTRA:
         X = next((X for X in O['dests'] if X['to'] == af_ and 'times' in X), None) if O['from'] in E_['lists'] else None
         if X and not any(Y['to'] == sp_ for Y in O['dests']):
             fr_ = P[(sp_, O['from'])]['fare'] if (sp_, O['from']) in P else None          # 요금은 반대 방향(TAGO 에 있으면)과 같게
-            O['dests'].append({'to': sp_, 'dur': X['dur'] + mn_, 'fare': fr_, 'times': [[t[0], hm(m_(t[1]) + mn_)] + t[2:] for t in X['times']]})
+            O['dests'].append({'to': sp_, 'dur': X['dur'] + mn_, 'fare': fr_, 'times': [[t[0], hm(m_(t[1]) + mn_)] + t[2:] for t in X['times']]} | ({'gnote': X['gnote']} if X.get('gnote') else {}))
     OA_ = next((O for O in b['origins'] if O['from'] == af_), None)
     if OA_:
-        new_ = [{'to': X['to'], 'dur': X['dur'] + mn_, 'fare': None, 'times': [[hm(m_(t[0]) - mn_)] + t[1:] for t in X['times']]}
+        new_ = [{'to': X['to'], 'dur': X['dur'] + mn_, 'fare': None, 'times': [[hm(m_(t[0]) - mn_)] + t[1:] for t in X['times']]} | ({'gnote': X['gnote']} if X.get('gnote') else {})
                 for X in OA_['dests'] if X['to'] in E_['lists'] and 'times' in X]
         OS_ = next((O for O in b['origins'] if O['from'] == sp_), None)
         if OS_: OS_['dests'] += [X for X in new_ if not any(Y['to'] == X['to'] for Y in OS_['dests'])]
@@ -789,16 +789,17 @@ def merge_board(D, os_, strict=False):
 OR = {O['from']: O for O in b['origins']}
 def extra_between():                                     # 시각 모르는 경유지(extra-stops.json 의 between)를 경유·승차 줄에 이름만
     for E_ in EXTRA:
-        bt_ = E_.get('between')
-        if not bt_: continue
-        for O in b['origins']:
-            for X in O['dests']:
-                if O['from'] in E_.get('lists', []) and X['to'] == E_['stop'] and 'via' in X:
-                    k_ = next((i for i, v in enumerate(X['via']) if v[0] == bt_['after']), None)
-                    if k_ is not None: X['via'][k_ + 1:k_ + 1] = [[n_, None, None] for n_ in bt_['names']]
-                if O['from'] == E_['stop'] and X['to'] in E_.get('lists', []) and 'board' in X:
-                    k_ = next((i for i, v in enumerate(X['board']) if v.split(' ')[0] == bt_['after']), None)
-                    if k_ is not None: X['board'][k_:k_] = bt_['names'][::-1]
+        bts_ = E_.get('between') or []
+        for bt_ in (bts_ if isinstance(bts_, list) else [bts_]):
+            for O in b['origins']:
+                for X in O['dests']:
+                    if O['from'] in E_.get('lists', []) and O['from'] == bt_.get('with', O['from']) and X['to'] == E_['stop'] and 'via' in X:
+                        k_ = next((i for i, v in enumerate(X['via']) if v[0] == bt_['after']), None)
+                        if k_ is not None: X['via'][k_ + 1:k_ + 1] = [[n_, None, None] for n_ in bt_['names']]
+                    if O['from'] == E_['stop'] and X['to'] in E_.get('lists', []) and X['to'] == bt_.get('with', X['to']) and 'board' in X:
+                        k_ = next((i for i, v in enumerate(X['board']) if v.split(' ')[0] == bt_['after']), None)
+                        if k_ is None: k_ = len(X['board'])          # after 가 ◇ 승차(몇 편만)로 빠졌으면 끝에
+                        X['board'][k_:k_] = bt_['names'][::-1]
 # 사람이 확인한 노선(list-chains.json, 정류장 차례): 목록에서 가장 긴 구간으로 (두 방향)
 LCH = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'list-chains.json')))
 nl = 0
