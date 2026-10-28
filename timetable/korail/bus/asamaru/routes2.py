@@ -112,7 +112,7 @@ for x in LB:
     if not on_way(A, B, D) or not (0.6 * km(A, B) - 8 <= d <= 2.5 * km(A, B) + 30):     # 시속 100km 보다 빠를 수 없다
         sus.append('버림(길에서 벗어남) 타는곳 %s→%s (→%s) δ%d 맞음 %d' % (A, B, D, d, n)); continue
     LB2.append(x)                                        # 사람이 확인하므로 길목·속도만 맞으면 넣고, 반대 방향 등으로 확인 안 된 것은 목록에
-    if not (rev_drop(D, A, B) or near(A, B, d) or pv < 1e-12): unconf.append('%s → %s (%d분 뒤) … %s 행, %d번 맞물림' % (A, B, d, D, n))
+    if not (rev_drop(D, A, B) or near(A, B, d) or pv < 1e-12): unconf.append(((A, B, D), '%s → %s (%d분 뒤) … %s 행, %d번 맞물림' % (A, B, d, D, n)))
 LD2 = []
 for x in LD:
     A, D1, D2, n, pv = x
@@ -121,7 +121,7 @@ for x in LD:
         sus.append('버림(길에서 벗어남) 내리는곳 %s: %s 거쳐 %s 맞음 %d' % (A, D1, D2, n)); continue
     LD2.append(x)
     if not (pv < 1e-12 or rev_board(A, D1, D2) or near(D1, D2, dd) or (n == len(P[(A, D1)]['t']) == len(P[(A, D2)]['t']) and n >= 3)):
-        unconf.append('%s 발 %s 행이 %s 에 들름, 같은 시각 %d번' % (A, D2, D1, n))
+        unconf.append(((A, D1, D2), '%s 발 %s 행이 %s 에 들름, 같은 시각 %d번' % (A, D2, D1, n)))
 LB, LD = LB2, LD2
 
 # 마디 (A, t, D) 를 단서로 잇는다
@@ -214,6 +214,18 @@ def wdl(ws):
     if ws == [0, 1, 2, 3, 4]: return '월∼금'
     if len(ws) >= 3 and ws == list(range(ws[0], ws[-1] + 1)): return WD[ws[0]] + '∼' + WD[ws[-1]]
     return ''.join(WD[w] for w in ws)
+# 노선표에 실을 것만 고른다: 타는 곳이 둘 이상이고 그 시각이 실제로 다른(δ>0) 노선 — 목록으로는 보여 줄 수 없는 것.
+# 정류장이 많은 차례로, 표 칸(차 수)의 합이 CAP 안에서 (두 쪽 안팎)
+CAP = int(os.environ.get('CAP', '40'))           # 한 쪽에 드는 만큼 (조판해 보고 정함)
+def real_board(T):
+    return sum(1 for s_ in T['board'] if any(c.get(s_, ('', 0))[0] == 'd' for c in T['cols'])) >= 2 and \
+        any(len({c[s_][1] for s_ in T['board'] if s_ in c and c[s_][0] == 'd'}) >= 2 for c in T['cols'])
+cand = sorted([T for T in tables if real_board(T)], key=lambda T: (-len(T['stops']), len(T['cols'])))
+pick, tot = [], 0
+for T in cand:
+    if len(T['cols']) <= int(os.environ.get('MAXC', '16')) and tot + len(T['cols']) <= CAP: pick.append(T); tot += len(T['cols'])
+print('candidates', len(cand), 'picked', len(pick), 'cols', tot, file=sys.stderr)
+tables = pick
 out = ["{{시각표테마}}", "'''고속버스''' 노선표. 국토교통부 TAGO 고속버스정보(2026년 10월 24∼30일) 기준.", '', '== 고속버스 ==']
 tables.sort(key=lambda T: (T['stops'][0], T['stops'][-1]))
 for T in tables:
@@ -259,18 +271,18 @@ json.dump(b, open(sys.argv[3], 'w'), ensure_ascii=False, indent=0)
 # 사람이 확인할 목록 (마크다운)
 rep = ['# 고속버스 노선표: 확인할 것', '', '정류장 차례·경유 여부는 TAGO 구간별 시각을 맞물려 짐작한 것. 아래는 근거가 약하거나 따로 확인되지 않은 것.', '']
 rep += ['## 1. 반대 방향·구간 소요로 확인되지 않은 연결 (시각만 맞물림)', '']
-rep += ['- ' + x for x in sorted(set(unconf))]
+inT = lambda *ns: any(all(n_ in T['stops'] for n_ in ns) for T in tables)      # 실은 표에 든 것만
+rep += ['- ' + x for k, x in sorted(set(unconf)) if inT(*k)]
 rep += ['', '## 2. 맞물린 횟수가 적은 연결 (3번 이하)', '']
-rep += ['- %s → %s (%d분 뒤) … %s 행, %d번' % (A, B, d, D, n) for D, A, B, d, n, pv in sorted(LB) if n <= 3]
-rep += ['- %s 발 %s 행이 %s 에 들름, %d번' % (A, D2, D1, n) for A, D1, D2, n, pv in sorted(LD) if n <= 3]
+rep += ['- %s → %s (%d분 뒤) … %s 행, %d번' % (A, B, d, D, n) for D, A, B, d, n, pv in sorted(LB) if n <= 3 and inT(A, B, D)]
+rep += ['- %s 발 %s 행이 %s 에 들름, %d번' % (A, D2, D1, n) for A, D1, D2, n, pv in sorted(LD) if n <= 3 and inT(A, D1, D2)]
 rep += ['', '## 3. 정류장 차례가 방향마다 어긋나는 표 (TAGO 소요가 뒤바뀐 듯)', '']
 for T in tables:
     st = T['stops']
     rv = [U for U in tables if set(U['stops']) == set(st) and U is not T]
     if rv and list(reversed(rv[0]['stops'])) != st and st < rv[0]['stops']:
         rep.append('- %s / 반대: %s' % (' → '.join(st), ' → '.join(rv[0]['stops'])))
-rep += ['', '## 4. 넣지 않은 것: 시각은 맞물리지만 길에서 많이 벗어나거나 그 거리를 그 시간에 갈 수 없음', '']
-rep += ['- ' + x.split(') ', 1)[1] for x in sus if x.startswith('버림(길에서 벗어남)')]
+
 open(sys.argv[4], 'w').write('\n'.join(rep) + '\n')
 open(sys.argv[4] + '.log', 'w').write('\n'.join(sus) + '\n')
 print('links board', len(LB), 'drop', len(LD), 'trips', len(trips), 'tables', len(tables), 'pairs owned', len(own),

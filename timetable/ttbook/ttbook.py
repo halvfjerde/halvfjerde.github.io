@@ -2985,6 +2985,11 @@ class Book:
             if n_ > self.cap(T, 'B', True): T.colW = old_
         for T in tables:
             T.band_left = False; T.fold = False; T.stack_with = None; T.stacked = False; T.side_with = None; T.custom_jobs = None; T.pull_first = False
+            if T.line in self.cfg.get('foldLines', []):      # 펼침면으로 넘기지 않는다: 한 쪽 폭에 안 들면 띠로 접어 아래로, 들면 좁은 표끼리 나란히 (고속버스 노선표)
+                if len(self.blocks(T)[1]) > self.cap(T, 'B', True):
+                    T.band_left = T.head is not None; T.fold = True
+                    continue
+                band_pos(T); continue
             if self.fold != 'off':
                 jt = self.jobs_of(T)
                 T.band_left = T.head is not None; T.fold = True

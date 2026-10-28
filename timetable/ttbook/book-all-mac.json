@@ -203,5 +203,8 @@
  "bus": "bus.json",
  "otherModes": [
   "고속버스"
+ ],
+ "foldLines": [
+  "고속버스"
  ]
 }
