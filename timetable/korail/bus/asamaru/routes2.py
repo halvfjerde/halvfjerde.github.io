@@ -887,13 +887,13 @@ def merge_drop(d, xs):
             y = part[0]
             for t in X['times']:
                 if t[0] in blocks[y][0] and '△' not in t[3:]: t.append('△')
-            X['vnote'] += '\n△ 경유 %s %s' % (nm(y), hmd(blocks[y][1]))
+            X['vnote'] += '\n△ 경유 %s %s' % (nm(y), hmd(blocks[y][1])); X['_mk2'] = ('d', y, 0)
         elif part:
             y = part[0]
             bv_ = X.get('vnote', '')
             for t in X['times']:
                 if t[0] in blocks[y][0] and '◇' not in t[3:]: t.append('◇')
-            X['_part'] = [[z, blocks[z][1], d[z].get('fare')] for z in part]
+            X['_part'] = [[z, blocks[z][1], d[z].get('fare')] for z in part]; X['_mk1'] = ('d', y, 0)
             X['vnote'] = '◇ 경유 ' + '・'.join('%s %s' % (nm(z), hmd(blocks[z][1])) for z in part)
             if bv_.startswith('◇ 승차 %s' % nm(y)): X['vnote'] += '・승차' + bv_[len('◇ 승차 %s' % nm(y)):]      # 「◇ 경유 황간 30분・승차 +30분」
         also = collections.Counter(far[t] for t in blocks[x][0] if far[t] != x)
@@ -935,13 +935,13 @@ def merge_board(D, os_, strict=False):
         elif 'vnote' not in Y:
             for t in Y['times']:
                 if (m_(t[0]) + e) % 1440 in got: t.append('◇')
-            Y['vnote'] = '◇ 승차 %s%s' % (nm(o), ' ' + es if es else '')
+            Y['vnote'] = '◇ 승차 %s%s' % (nm(o), ' ' + es if es else ''); Y['_mk1'] = ('b', o, e)
         elif ' %s ' % nm(o) in Y['vnote'] + ' ' and {m_(t[0]) for t in Y['times'] if '◇' in t[3:]} == {t for t in tA if (t + e) % 1440 in got}:
             Y['vnote'] += '・승차 %s' % es if es else '・승차'      # 같은 ◇ 편이 그 정류장에 내리고 타기도: 「◇ 경유 황간 30분・승차 +30분」
         elif Y['vnote'].startswith('◇ 승차') and '\n' not in Y['vnote'] and ' %s ' % nm(o) not in Y['vnote'] + ' ':      # 둘째 묶음 △ (진주 발: ◇ 승차 진주혁신, △ 승차 진주개양)
             for t in Y['times']:
                 if (m_(t[0]) + e) % 1440 in got: t.append('△')
-            Y['vnote'] += '\n△ 승차 %s%s' % (nm(o), ' ' + es if es else '')
+            Y['vnote'] += '\n△ 승차 %s%s' % (nm(o), ' ' + es if es else ''); Y['_mk2'] = ('b', o, e)
         else: continue
         rest_ = [t for t in X['times'] if m_(t[0]) not in got]
         if rest_: X['times'] = rest_; X['vnote3'] = '이 밖에 %s 발 %d편도 탐' % (nm(A), len(got))
@@ -985,6 +985,27 @@ for O in b['origins']:                                  # ◇ 경유가 남은 �
             vv = {v[0]: v for v in X.get('via', [])}
             for v in X.pop('_part'): vv.setdefault(v[0], v)
             X['via'] = sorted(vv.values(), key=lambda v: v[1]); X.pop('vnote', None)
+# ◇・△ 가 다 붙은 편: 같은 시각이라도 날마다 한 곳만 들른다 (진주개양 또는 진주혁신, 요일에 따라) → 요일로 두 줄로 나눈다
+for O in b['origins']:
+    for X in O['dests']:
+        mk1_, mk2_ = X.pop('_mk1', None), X.pop('_mk2', None)
+        if not (mk1_ and mk2_ and 'times' in X): continue
+        def days_(mk, t0):
+            k_, s_, e_ = mk
+            p_ = (O['from'], s_) if k_ == 'd' else (s_, X['to'])
+            w_ = P.get(p_, {}).get('t', {}).get((t0 + e_) % 1440) if p_ in P else None
+            return {d_: w_[d_] for d_ in range(7) if w_ and w_[d_]}
+        out_ = []
+        for t in X['times']:
+            if not ('◇' in t[3:] and '△' in t[3:]): out_.append(t); continue
+            t0 = m_(t[0]); D1, D2 = days_(mk1_, t0), days_(mk2_, t0)
+            S2 = {d_ for d_ in D2 if d_ not in D1 or (D2[d_] == t[2][d_] != D1[d_])}      # 두 곳 다 그날 있다고 하면 등급이 맞는 쪽 (1830 월: 개양 프, 혁신 우, 진주 우)
+            w2 = [g_ if d_ in S2 else 0 for d_, g_ in enumerate(t[2])]
+            w1 = [0 if d_ in S2 else g_ for d_, g_ in enumerate(t[2])]
+            fl_ = [f_ for f_ in t[3:] if f_ not in '◇△']
+            if any(w1): out_.append(t[:2] + [w1] + fl_ + ['◇'])
+            if any(w2): out_.append(t[:2] + [w2] + fl_ + ['△'])
+        X['times'] = out_
 print('list chains merged', nl, file=sys.stderr)
 # 사람이 확인하지 않은 묶음(chains.py): 같은 차로 볼 만하고(sure) 차례가 시각으로(또는 stop-order.json 으로) 정해지는 것만
 AUTO, REVIEW = [], []
@@ -1024,6 +1045,8 @@ b['names'] = SHORT
 b['tableRefs'] = sorted([A, D, title_of[id(T)], P[(A, D)]['dur'], P[(A, D)]['fare']] for T in tables for A, D in T['pairs'])   # 목록에서 노선표로 보내는 줄
 b['tableRefs'] += sorted(map(list, {tuple(x[:3]) + (x[3], tuple(x[4]) if x[4] else None) for x in SKIPREF}))
 b['tableRefs'] += sorted([A, D, title_of[i_], du_, None] for A, D, i_, du_ in set(EXREF) if i_ in title_of)                  # TAGO 에 없는 끝 정류장 (요금 모름)
+for O in b['origins']:
+    for X in O['dests']: X.pop('_mk1', None); X.pop('_mk2', None)
 json.dump(b, open(sys.argv[3], 'w'), ensure_ascii=False, indent=0)
 # 사람이 확인할 목록 (마크다운)
 rep = ['# 고속버스 노선표: 확인할 것', '', '정류장 차례·경유 여부는 TAGO 구간별 시각을 맞물려 짐작한 것. 아래는 근거가 약하거나 따로 확인되지 않은 것.', '']
