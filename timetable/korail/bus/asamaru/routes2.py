@@ -226,7 +226,12 @@ def bad_(ns):
     for A, t, D in ns:
         if bd_.setdefault(A, t) != t: return True
     return False
-BADN = {x for ns in comp.values() if len(ns) > 1 and bad_(ns) for x in ns}
+FSETS = [set(flat_(q)) for q in FORCE]
+inch_ = lambda ns: any({x[0] for x in ns} | {x[2] for x in ns} <= q for q in FSETS)
+FEDG = {(x_, y_) for x_, y_, dv in EDG if (x_[2], x_[0], y_[0]) in FLB or (x_[0], x_[2], y_[2]) in FLD}
+FEN = {x for e in FEDG for x in e}
+# 사람이 확인한 두 노선의 차가 한 차로 묶인 것(무안 1440 → 영광 1520 이 임자 ― 함평 ― 영광 차와)도 다시 잇는다: 두 노선을 섞는 단서는 뺀다
+BADN = {x for ns in comp.values() if len(ns) > 1 and (bad_(ns) or (not inch_(ns) and any(x in FEN for x in ns))) for x in ns}
 if BADN:
     mem_ = {x: [x] for x in BADN}
     for x in BADN: par[x] = x
@@ -234,6 +239,7 @@ if BADN:
         if x_ not in BADN or dv > 10: continue
         rx, ry = f(x_), f(y_)
         if rx == ry or bad_(mem_[rx] + mem_[ry]): continue
+        if inch_(mem_[rx]) and inch_(mem_[ry]) and not inch_(mem_[rx] + mem_[ry]): continue
         par[rx] = ry; mem_[ry] += mem_.pop(rx)
     comp = collections.defaultdict(list)
     for x in list(par): comp[f(x)].append(x)
@@ -294,7 +300,7 @@ for i, tr in enumerate(trips):
         else: seen[k] = i
     L = last(tr)
     for A in tr['board']:
-        k = (L, A, fk is not None)                      # 사람이 확인한 노선의 차는 그 밖의 차와 (끝·타는 곳이 같아도) 섞지 않는다
+        k = (L, A, fk)                                  # 사람이 확인한 노선의 차는 그 밖의 차와, 다른 노선의 차와도 (끝·타는 곳이 같아도) 섞지 않는다 (임자 노선・진도 노선이 영광에서)
         if k in seen: tp[g(i)] = g(seen[k])
         else: seen[k] = i
 groups = collections.defaultdict(list)
@@ -313,6 +319,13 @@ for grp in groups.values():
         for tr in grp:
             for A, t, D in tr['nodes']: NNF[(A, D)] += 1
 dense_raw = lambda p: len(P[p]['t']) > 3 * NNF[p] + 5
+NNG = collections.defaultdict(collections.Counter)     # 구간 → 확인한 노선마다 그 구간을 다니는 노선 차의 몫: 두 노선 표가 한 구간을 지나면 몫이 큰 노선 표가 그 구간의 다른 차를 갖는다 (서울 → 영광: 임자 노선 표, 무안 노선 표 아님)
+for grp in groups.values():
+    fks_ = {fkey(tr) for tr in grp}
+    if len(fks_) == 1 and None not in fks_:
+        fk_ = fks_.pop()
+        for p_ in {(A, D) for tr in grp for A, t, D in tr['nodes']}:
+            NNG[p_][fk_] += sum(1 for tr in grp if any((A, D) == p_ for A, t, D in tr['nodes'])) / len(grp)     # 노선 차 가운데 그 구간을 다니는 몫
 for grp in groups.values():
     span = lambda tr: (tr['drop'][last(tr)] - min(tr['board'].values())) % 1440
     L = last(max(grp, key=span))                      # 끝 행선지가 여럿이면(확인한 노선) 가장 멀리 가는 것
@@ -350,6 +363,7 @@ for grp in groups.values():
     nn = collections.Counter((A, D) for tr in grp for A, t, D in tr['nodes'])
     dense = {p for p in pairs if len(P[p]['t']) > 3 * nn[p] + 5 and not (NNF[p[::-1]] and not dense_raw(p[::-1]))}   # 반대 방향 표가 그 구간을 다 가지면 이쪽도 (서울경부 ⇄ 강릉)      # 이 노선의 차는 몇 편뿐인 촘촘한 구간(광주→목포 따위): 표가 갖지 않고 목록에 둔다
     if isforce: SKIPOWN.update(dense)                    # 그 목록 덩이에서는 표에 실린 편을 빼고 「이 밖에 노선표」
+    if isforce: fk0_ = fkey(grp[0]); pairs = {p for p in pairs if NNG[p][fk0_] >= max(NNG[p].values())}
     pairs = {p for p in pairs if p not in owned and p not in SHARED and p not in dense}
     owned |= pairs
     cols = []
