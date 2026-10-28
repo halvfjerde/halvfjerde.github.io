@@ -139,7 +139,7 @@ for seq in FORCE:
             for D in seq[seq.index(B) + 1:]:                 # 타는 곳: A 다음 B, 둘 다 D 로
                 if (A, D) in P and (B, D) in P and (D, A, B) not in have:
                     ta, tb = P[(A, D)]['t'], P[(B, D)]['t']
-                    cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb) for d in range(0, 181)}
+                    cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb) for d in range(0, 421)}
                     dd_ = P[(A, D)]['dur'] - P[(B, D)]['dur']
                     d = max(cnt, key=lambda d: (cnt[d], -abs(d - dd_)))          # 같으면 소요 차에 가까운 δ
                     if cnt[d] >= 1 and abs(d - dd_) <= max(15, 0.15 * abs(dd_)): LB.append((D, A, B, d, cnt[d], 0.0)); have.add((D, A, B))   # 소요 차와 아주 다른 δ 는 우연
@@ -385,17 +385,19 @@ for k_, M_ in title_merge.items(): title_of[k_] = title_of[id(M_)]
 open(sys.argv[2], 'w').write('\n'.join(out))
 # 일부 편만 들르는 정류장 (사람이 확인한 것, partial-stops.json: [A, B, D] = A 발 D 행의 몇 편이 B 에도 선다): 목록의 A→D 에 ◇ 표지와 안내 줄.
 # B 의 편 가운데 노선표에 실린 다른 노선의 차는 빼고 맞춘다
-pmark = {}
+pmark, pfold = {}, {}                                    # pfold: B 쪽 덩이의 편이 모두 ◇ 편이면 참조 줄로 (가장 긴 구간에 싣는다)
 intab = lambda X, Y: {c[X][1] for T in tables for c in T['cols'] if X in c and Y in c and c[X][0] == 'd'}
 for A, B_, D in PART:
     if (A, D) in P and (B_, D) in P:                     # 오는 길: A 발 + δ 에 B 발
         ta, tb = P[(A, D)]['t'], set(P[(B_, D)]['t']) - intab(B_, D)
         d = max(range(1, 121), key=lambda d: sum(1 for t in ta if (t + d) % 1440 in tb))
         pmark[(A, D)] = ({t for t in ta if (t + d) % 1440 in tb}, '◇ %s 경유 (%s 발 %d분 뒤)' % (nm(B_), nm(A), d))
+        pfold[(B_, D)] = ('seeFrom', A, {(t + d) % 1440 for t in pmark[(A, D)][0]})
     if (D, A) in P and (D, B_) in P:                     # 가는 길: D 발이 같은 시각이면 B 에 먼저 선다
         ta, tb = P[(D, A)]['t'], set(P[(D, B_)]['t']) - intab(D, B_)
         d = P[(D, A)]['dur'] - P[(D, B_)]['dur']
         pmark[(D, A)] = ({t for t in ta if t in tb}, '◇ %s 경유 (%s 착 %d분 전)' % (nm(B_), nm(A), d))
+        pfold[(D, B_)] = ('see', A, pmark[(D, A)][0])
 own = {p for T in tables for p in T['pairs']}
 for O in b['origins']: O['dests'] = [X for X in O['dests'] if (O['from'], X['to']) not in own]
 b['origins'] = [O for O in b['origins'] if O['dests']]
@@ -407,6 +409,12 @@ for O in b['origins']:
             X['vnote'] = note
             for t in X['times']:
                 if m_(t[0]) in ts: t.append('◇')
+for O in b['origins']:
+    for X in O['dests']:
+        k = (O['from'], X['to'])
+        if k in pfold and 'times' in X and {m_(t[0]) for t in X['times']} <= pfold[k][2]:
+            kind, A_, _ = pfold[k]; du_, fa_ = X['dur'], X.get('fare'); to_ = X['to']
+            X.clear(); X.update({'to': to_, kind: A_ if kind == 'seeFrom' else A_, 'dur': du_, 'fare': fa_})
 # 같은 차 (사람이 확인, same-bus.json): drop [B, D] = B 에 내리는 차는 다 D 까지 간다 → D 덩이에 「경유 B」, B 자리에는 참조 줄.
 # board [A, B] = B 에서 타는 차는 다 A 에서 온다 (TAGO 는 B 에도 A 의 발차 시각을 붙인다) → A 덩이에 「승차 B」, B 발 목록에는 참조 줄
 SAME = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'same-bus.json')))
