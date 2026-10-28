@@ -152,7 +152,7 @@ for seq in FORCE_LIN:
                 if (A, D) in P and (B, D) in P and (D, A, B) not in have and (A, B) not in ALTP:
                     ta, tb = P[(A, D)]['t'], P[(B, D)]['t']
                     arr_ = {t: t + P[(A, B)]['dur'] for t in ta if (A, B) in P and t in P[(A, B)]['t']}    # 같은 차가 B 에 닿는 때: 그보다 먼저 B 에서 떠날 수는 없다
-                    cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb and (t not in arr_ or arr_[t] - 10 <= t + d <= arr_[t] + 30)) for d in range(0, 421)}   # 닿고 30분 넘게 서 있지도 않는다
+                    cnt = {d: sum(1 for t in ta if (t + d) % 1440 in tb and (t not in arr_ or arr_[t] - 10 <= t + d <= arr_[t] + 20)) for d in range(0, 421)}   # 닿고 20분 넘게 서 있지도 않는다 (부산 1110 이 순천에서 20분 넘게 서 있다 여천 1319 동네 시외로: 우연)
                     dd_ = P[(A, D)]['dur'] - P[(B, D)]['dur']
                     d = max(cnt, key=lambda d: (cnt[d], -abs(d - dd_)))          # 같으면 소요 차에 가까운 δ
                     # B→D 가 촘촘하면(20편 넘게: 전주→광주, 원주문막→서울경부 따위) 아무 δ 로나 몇 편은 맞는다 → A 의 편이 (거의) 모두 같은 δ 로 맞을 때만
@@ -165,6 +165,7 @@ for seq in FORCE_LIN:
 
 # 마디 (A, t, D) 를 단서로 잇는다
 par = {}
+EDG = []                                                # 이은 단서 (마디, 마디, 착 어긋남)
 def f(x):
     par.setdefault(x, x)
     while par[x] != x: par[x] = par[par[x]]; x = par[x]
@@ -207,17 +208,35 @@ for D, A, B, d, n, pv in LB:
     tb = P[(B, D)]['t']
     for t in P[(A, D)]['t']:
         if (t + d) % 1440 in tb:
-            if (A, B) in P and t in P[(A, B)]['t'] and not (P[(A, B)]['dur'] - 10 <= d <= P[(A, B)]['dur'] + 30): continue      # B 에 닿기 전(또는 한참 뒤) B 발: 다른 차
+            if (A, B) in P and t in P[(A, B)]['t'] and not (P[(A, B)]['dur'] - 10 <= d <= P[(A, B)]['dur'] + 20): continue      # B 에 닿기 전(또는 한참 뒤) B 발: 다른 차
             x_, y_ = (A, t, D), (B, (t + d) % 1440, D)
             if (D, A, B) not in FLB and (x_ in FN or y_ in FN): continue
-            u(x_, y_)
+            u(x_, y_); EDG.append((x_, y_, abs(d - (P[(A, D)]['dur'] - P[(B, D)]['dur']))))
 for A, D1, D2, n, pv in LD:
     t2 = P[(A, D2)]['t']
     for t in P[(A, D1)]['t']:
         if (A, D1, D2) not in FLD and ((A, t, D1) in FN or (A, t, D2) in FN): continue
-        if t in t2: u((A, t, D1), (A, t, D2))
+        if t in t2: u((A, t, D1), (A, t, D2)); EDG.append(((A, t, D1), (A, t, D2), 0))
 comp = collections.defaultdict(list)
 for x in list(par): comp[f(x)].append(x)
+# 한 차에 같은 곳 발이 둘(엇갈림): 버리지 않고, 착이 잘 맞는 단서부터 다시 이어 엇갈리는 단서(착이 10분 넘게 어긋나는 것)는 뺀다
+#   경포해변 1340 → 강릉 1400 과 강릉 1420 → 관동대 1425 를 경포해변 → 관동대(δ45, 착 20분 어긋남)가 한 차로 묶던 것
+def bad_(ns):
+    bd_ = {}
+    for A, t, D in ns:
+        if bd_.setdefault(A, t) != t: return True
+    return False
+BADN = {x for ns in comp.values() if len(ns) > 1 and bad_(ns) for x in ns}
+if BADN:
+    mem_ = {x: [x] for x in BADN}
+    for x in BADN: par[x] = x
+    for x_, y_, dv in sorted(EDG, key=lambda e: e[2]):
+        if x_ not in BADN or dv > 10: continue
+        rx, ry = f(x_), f(y_)
+        if rx == ry or bad_(mem_[rx] + mem_[ry]): continue
+        par[rx] = ry; mem_[ry] += mem_.pop(rx)
+    comp = collections.defaultdict(list)
+    for x in list(par): comp[f(x)].append(x)
 trips = []
 for nodes in comp.values():
     if len(nodes) < 2: continue
@@ -287,6 +306,13 @@ tables, owned = [], set()
 SKIPOWN = set()
 N2T = {x: tr for tr in trips for x in tr['nodes']}
 ABSORB = set()                                          # 사람이 확인한 노선 표가 가져간 다른 묶음의 차
+NNF = collections.Counter()                             # 사람이 확인한 노선 표의 구간마다 노선 차 수 (반대 방향과 맞추려고)
+for grp in groups.values():
+    fks_ = {fkey(tr) for tr in grp}
+    if len(fks_) == 1 and None not in fks_:
+        for tr in grp:
+            for A, t, D in tr['nodes']: NNF[(A, D)] += 1
+dense_raw = lambda p: len(P[p]['t']) > 3 * NNF[p] + 5
 for grp in groups.values():
     span = lambda tr: (tr['drop'][last(tr)] - min(tr['board'].values())) % 1440
     L = last(max(grp, key=span))                      # 끝 행선지가 여럿이면(확인한 노선) 가장 멀리 가는 것
@@ -322,7 +348,7 @@ for grp in groups.values():
     dset = {D for tr in grp for D in tr['drop']} - bset
     pairs = {(A, D) for tr in grp for A, t, D in tr['nodes']}
     nn = collections.Counter((A, D) for tr in grp for A, t, D in tr['nodes'])
-    dense = {p for p in pairs if len(P[p]['t']) > 3 * nn[p] + 5}      # 이 노선의 차는 몇 편뿐인 촘촘한 구간(광주→목포 따위): 표가 갖지 않고 목록에 둔다
+    dense = {p for p in pairs if len(P[p]['t']) > 3 * nn[p] + 5 and not (NNF[p[::-1]] and not dense_raw(p[::-1]))}   # 반대 방향 표가 그 구간을 다 가지면 이쪽도 (서울경부 ⇄ 강릉)      # 이 노선의 차는 몇 편뿐인 촘촘한 구간(광주→목포 따위): 표가 갖지 않고 목록에 둔다
     if isforce: SKIPOWN.update(dense)                    # 그 목록 덩이에서는 표에 실린 편을 빼고 「이 밖에 노선표」
     pairs = {p for p in pairs if p not in owned and p not in SHARED and p not in dense}
     owned |= pairs
