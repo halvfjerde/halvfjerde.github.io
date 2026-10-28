@@ -3824,9 +3824,9 @@ class Book:
             mids = X.get('mid') or []
             part = [k for k in range(len(mids)) if not all(mt[k] for _, mt, _ in rows if len(mt) > k)]
             pmk = {k: '◇△'[j] for j, k in enumerate(part[:2])}
-            dlet, dl_ = {}, 'abcdefgh'
-            for d_, _ in sorted(durs.items()):
-                if d_ != dur0 and len(dlet) < len(dl_): dlet[d_] = dl_[len(dlet)]
+            # 소요가 다른 차(거의 시외)는 시각마다 표지 대신 머리에 한 줄: 「† 시외는 2:20 걸림」
+            dsub = sorted({(mm_(t[1]) - mm_(t[0])) % 1440 for t, _, _ in rows if t[1] and '시' in t[3:]})
+            dodd = sorted({(mm_(t[1]) - mm_(t[0])) % 1440 for t, _, _ in rows if t[1] and '시' not in t[3:]} - {dur0})
             # 띠: 출발 ─ 사이 정류장(시각) ─ 끝
             el = []
             for k, m_ in enumerate(mids):
@@ -3865,7 +3865,11 @@ class Book:
                 leg.append('%s %s까지%s' % (CM['→' + n_], n_, (' (%s 더)' % hmc(o_)) if o_ is not None else ''))
             for j_, (n_, c_) in enumerate(sorted(fromu.items())):
                 CM[n_] = '←⇐'[min(j_, 1)]; leg.append('%s %s 발 (%s 앞)' % (CM[n_], n_, hmc(c_.most_common(1)[0][0])))
-            if dlet: leg.append('　'.join('%s %s' % (l_, hmc(d_)) for d_, l_ in sorted(dlet.items(), key=lambda kv: kv[1])) + ' 걸림')
+            rg_ = lambda ds: hmc(ds[0]) if len(ds) == 1 else '%s∼%s' % (hmc(ds[0]), hmc(ds[-1]))
+            if dsub and dsub != [dur0]:
+                allsub_ = all('시' in t[3:] for t, _, _ in rows)
+                leg.append(('차에 따라 %s 걸림' % rg_(sorted(set(dsub) | {dur0}))) if allsub_ else '† 시외는 %s 걸림' % rg_(dsub))
+            if dodd: leg.append('고속도 차에 따라 %s 걸림' % rg_(sorted(set(dodd) | {dur0})))
             sub += leg
             if X.get('vnote'): sub.extend(X['vnote'].split('\n'))
             if X.get('inote'): sub.append(X['inote'])          # 다섯 주에 반도 안 다닌 차: 「임시편 일 9편・금토 수시」
@@ -3886,9 +3890,6 @@ class Book:
                 if '◇' in t[3:] and '◇' not in mk: mk += '◇'      # 시각표로 아는 몇 편만 서는 곳 (머리의 「◇ 경주 경유」)
                 if lab.startswith('→'): mk += CM.get('→' + lab[1:].partition(' ')[0], '→')
                 elif lab.endswith('발'): mk += CM.get(lab[:-1].partition(' ')[0], '←')
-                if t[1]:
-                    d_ = (mm_(t[1]) - mm_(t[0])) % 1440
-                    if d_ in dlet: mk += dlet[d_]
                 grp.setdefault((gk, '시' in t[3:]), []).append((t[0], mk, gr_))
             def gsort(kv):
                 (gk, sb), toks = kv
@@ -4072,8 +4073,8 @@ class Book:
                             tex.append(self.put_box(xs, y, SW, R, self.inl.run('⋯' + zt + '⋯', Ctx('M', 0.68).but(hscale=0.8)), 'c', 'm'))
                             continue
                         _, tm_, mk_, gr_ = c_
-                        MKW = 0.6 * fs
-                        tex.append(self.put_box(xs, y, SW - MKW, R, self.inl.run(tm_, Ctx('DM', 0.95)), 'r', 'm'))
+                        MKW, MGAP = 0.6 * fs, 0.12 * fs                  # 시각과 표지 사이를 살짝 띄운다
+                        tex.append(self.put_box(xs, y, SW - MKW - MGAP, R, self.inl.run(tm_, Ctx('DM', 0.95)), 'r', 'm'))
                         if mk_: tex.append(self.put_box(xs + SW - MKW + 0.04 * fs, y, MKW, 0.55 * R, self.inl.run(mk_, Ctx('M', 0.58 if len(mk_) == 1 else 0.46)), 'l', 'm'))
                         if gr_ != '우':                        # 등급: 시각 오른쪽 아래 작은 네모 (◆ 날에 따라 바뀜)
                             gm_ = self.inl.run('◆', Ctx('M', 0.5)) if gr_ == '◆' else gmark(gr_, 0.5)
