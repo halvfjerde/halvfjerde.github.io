@@ -17,6 +17,7 @@ import json, sys, os, collections, math
 b = json.load(open(sys.argv[1]))
 m_ = lambda s: int(s[:-2]) * 60 + int(s[-2:])
 hm = lambda x: '%d%02d' % (x // 60 % 24, x % 60)
+hmd = lambda m: ('%d시간' % (m // 60) if m >= 60 else '') + (' ' if m >= 60 and m % 60 else '') + ('%d분' % (m % 60) if m % 60 or m < 60 else '')
 WD = '월화수목금토일'
 P = {}                                                   # (A, D) → 소요·요금·{발 분: 요일 칸}
 for O in b['origins']:
@@ -200,7 +201,8 @@ def fkey(tr):
     if all(len(P[(A, D)]['t']) > 20 for A, t, D in tr['nodes']): return None     # 촘촘한 구간끼리만 맞물린 차(광주→전주·호남제일 따위)는 그 노선의 차로 보지 않는다
     first = min(tr['board'], key=lambda A: (tr['board'][A] - min(tr['board'].values())) % 1440)
     ks = [i for i, seq in enumerate(FORCE) if st <= set(seq)]
-    return min(ks, key=lambda i: FORCE[i].index(first)) if ks else None
+    agree = lambda q: sum(1 for A in tr['board'] for D in tr['drop'] if A != D and q.index(A) < q.index(D))      # 타는 곳이 내리는 곳보다 앞인 방향 (TAGO 가 같은 시각을 붙여 첫 정류장이 헷갈려도)
+    return min(ks, key=lambda i: (-agree(FORCE[i]), FORCE[i].index(first))) if ks else None
 for i, tr in enumerate(trips):
     fk = fkey(tr)
     if fk is not None:
@@ -340,10 +342,12 @@ def foot(c):
     if c.get('_sub'): rem_ = '†' if rem_ == '_' else '†' + rem_          # 시외버스로 파는 편
     return g0, wdl([d for d in range(7) if w[d]]), rem_
 BR = {}
+ALT = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'alt-stops.json')))
 def cells_of(c, st):
     idx = [k for k, s_ in enumerate(st) if s_ in c]
     def other(s_): return s_ in BR and '_br' in c and BR[s_] != c['_br']        # 다른 갈래의 정류장
-    return [hm(c[s_][1]) if s_ in c else ('i' if other(s_) and idx[0] < k < idx[-1] else 'x' if other(s_) else ('v' if idx[0] < k < idx[-1] else 'x')) for k, s_ in enumerate(st)]
+    def alt(s_): return any(s_ in g and any(o in c for g2 in A_ if g2 is not g for o in g2) for A_ in ALT for g in A_)   # 다른 길로 가는 차(alt-stops.json): 지나지 않음 ‥
+    return [hm(c[s_][1]) if s_ in c else ('i' if other(s_) and idx[0] < k < idx[-1] else 'x' if other(s_) or alt(s_) else ('v' if idx[0] < k < idx[-1] else 'x')) for k, s_ in enumerate(st)]
 def line(c, st):
     g0, dl_, rem_ = foot(c)
     kind = '"◆"' if g0 == '◆' else 'S{%s}' % GR.get(g0, g0)          # 차마다 돌아가는 등급
@@ -437,12 +441,103 @@ for A, B_, *only in SAME['board']:                      # 셋째 칸이 있으�
         tA, tB = {m_(t) for t in ts_(Y)}, {m_(t) for t in ts_(X)}
         d = next((d for d in range(0, 61) if {(t - d) % 1440 for t in tB} <= tA), None)     # B 발 = A 발 + δ (TAGO 가 같은 시각을 붙이면 δ=0)
         if d is not None:
-            Y.setdefault('board', []).append(B_ + (' %d분 뒤' % d if d else ''))
+            Y.setdefault('board', []).append(B_ + (' %s 뒤' % hmd(d) if d else ''))
             to_ = X['to']; X.clear(); X.update({'to': to_, 'seeFrom': A})
-# 겹치는 행선지 묶음(chains.py) 가운데 같은 차로 볼 만하고(sure) 차례가 시각으로 정해지는 것(ordered): 차마다 가장 먼 행선지 덩이에 싣고
-# 그 앞에 서는 곳은 「경유」(모든 편) 또는 ◇(몇 편만, 하나까지). 앞 행선지 덩이에는 남은 편과 「이 밖에 … 행 n편도 섬」, 남은 편이 없으면 참조 줄
+# 겹치는 행선지 묶음: 차마다 가장 먼 행선지 덩이에 싣고, 그 앞에 서는 곳은 「경유」(모든 편) 또는 ◇(몇 편만, 하나까지).
+# 앞 행선지 덩이에는 남은 편과 「이 밖에 … 행 n편도 섬」, 남은 편이 없으면 참조 줄
 import chains
-hmd = lambda m: ('%d시간' % (m // 60) if m >= 60 else '') + (' ' if m >= 60 and m % 60 else '') + ('%d분' % (m % 60) if m % 60 or m < 60 else '')
+def merge_drop(d, xs):
+    """d: 행선지 → 덩이, xs: 가까운 것부터. 되면 True"""
+    blocks = {x: (frozenset(t[0] for t in d[x]['times']), d[x]['dur']) for x in xs}
+    far = {}                                              # 발차 → 가장 먼 행선지
+    for x in xs:
+        for t in blocks[x][0]: far[t] = x
+    plan = {}
+    for j, x in enumerate(xs):
+        mine = sorted(t for t in blocks[x][0] if far[t] == x)
+        vias, part = [], []
+        for y in xs[:j]:
+            k = sum(1 for t in mine if t in blocks[y][0])
+            if k == len(mine) and mine: vias.append(y)
+            elif k: part.append(y)
+        if len({frozenset(t for t in mine if t in blocks[y][0]) for y in part}) > 1 or (part and 'vnote' in d[x]): return False   # ◇ 는 한 묶음(같은 편들)까지
+        plan[x] = (mine, vias, part)
+    for x in xs:
+        mine, vias, part = plan[x]
+        X = d[x]
+        if not mine:                                      # 남은 편이 없으면 참조 줄: 편이 여러 덩이로 갔으면 가장 가까운 덩이로 (그 덩이의 「이 밖에」 줄이 나머지를 알린다)
+            tgt = min({far[t] for t in blocks[x][0]}, key=xs.index)
+            du_, fa_ = X['dur'], X.get('fare'); X.clear(); X.update({'to': x, 'see': tgt, 'dur': du_, 'fare': fa_}); continue
+        X['times'] = [t for t in X['times'] if t[0] in set(mine)]
+        if vias:
+            vv = {v[0]: v for v in X.get('via', [])}
+            for y in vias: vv.setdefault(y, [y, blocks[y][1], d[y].get('fare')])
+            X['via'] = sorted(vv.values(), key=lambda v: (xs.index(v[0]) if v[0] in xs else -1, v[1]))      # 차례대로
+        if part:
+            y = part[0]
+            for t in X['times']:
+                if t[0] in blocks[y][0]: t.append('◇')
+            X['_part'] = [[z, blocks[z][1], d[z].get('fare')] for z in part]
+            X['vnote'] = '◇ 경유 ' + '・'.join('%s %s' % (nm(z), hmd(blocks[z][1])) for z in part)
+        also = collections.Counter(far[t] for t in blocks[x][0] if far[t] != x)
+        if also: X['vnote2'] = '이 밖에 ' + ', '.join('%s 행 %d편' % (nm(z), n) for z, n in sorted(also.items(), key=lambda kv: blocks[kv[0]][1])) + '도 섬'
+    return True
+def merge_board(D, os_):
+    """D 로 가는 덩이들, os_: 먼저 타는 곳부터. 뒤 출발지 B 마다 앞 출발지 A 의 편이 B 에서도 타면(B 발 = A 발 + δ):
+    A 의 편이 모두 그러면 A 덩이에 「승차 B δ 뒤」, 몇 편만이면 그 편에 ◇ 와 「◇ B 에서도 탐 (δ 뒤)」.
+    B 덩이에서는 그 편을 빼고 「이 밖에 A 발 n편도 탐」(남은 편이 없으면 참조 줄)"""
+    blk = {o: next((X for X in OR[o]['dests'] if X['to'] == D and 'times' in X), None) for o in os_ if o in OR}
+    n = 0
+    for i, o in enumerate(os_):
+        X = blk.get(o)
+        if not X or 'times' not in X: continue
+        best = None
+        for A in os_[:i]:
+            Y = blk.get(A)
+            if not Y or 'times' not in Y: continue
+            tA = [m_(t[0]) for t in Y['times']]; tB = {m_(t[0]) for t in X['times']}
+            dd = Y['dur'] - X['dur']
+            for e in range(0, 421):
+                if abs(e - dd) > max(15, 0.2 * abs(dd)): continue
+                k = sum(1 for t in tA if (t + e) % 1440 in tB)
+                key_ = (k == len(tA), k, -abs(e - dd))
+                if k and (best is None or key_ > best[0]): best = (key_, k, e, A, tA)
+        if not best: continue
+        _, k, e, A, tA = best; Y = blk[A]
+        got = {(t + e) % 1440 for t in tA if (t + e) % 1440 in {m_(t[0]) for t in X['times']}}
+        es = (hmd(e) + ' 뒤') if e else ''
+        if k == len(tA): Y.setdefault('board', []).append(o + (' ' + es if es else ''))
+        elif 'vnote' not in Y:
+            for t in Y['times']:
+                if (m_(t[0]) + e) % 1440 in got: t.append('◇')
+            Y['vnote'] = '◇ %s에서도 탐%s' % (nm(o), ' (%s)' % es if es else '')
+        else: continue
+        rest_ = [t for t in X['times'] if m_(t[0]) not in got]
+        if rest_: X['times'] = rest_; X['vnote3'] = '이 밖에 %s 발 %d편도 탐' % (nm(A), len(got))
+        else: du_, fa_ = X['dur'], X.get('fare'); X.clear(); X.update({'to': D, 'seeFrom': A, 'dur': du_, 'fare': fa_})
+        n += 1
+    return n
+OR = {O['from']: O for O in b['origins']}
+# 사람이 확인한 노선(list-chains.json, 정류장 차례): 목록에서 가장 긴 구간으로 (두 방향)
+LCH = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'list-chains.json')))
+nl = 0
+for seq0 in LCH:
+    for seq in (seq0, seq0[::-1]):
+        for i, o in enumerate(seq):
+            if o not in OR: continue
+            d = {X['to']: X for X in OR[o]['dests'] if 'times' in X}
+            xs = [x for x in seq[i + 1:] if x in d]
+            if len(xs) >= 2 and merge_drop(d, xs): nl += 1
+        for k, D in enumerate(seq): nl += merge_board(D, seq[:k])
+for O in b['origins']:                                  # ◇ 경유가 남은 편 모두에 붙었으면(다른 묶음이 편을 가져간 뒤) 「경유」로
+    for X in O['dests']:
+        if X.get('_part') and all('◇' in t for t in X['times']):
+            for t in X['times']: t.remove('◇')
+            vv = {v[0]: v for v in X.get('via', [])}
+            for v in X.pop('_part'): vv.setdefault(v[0], v)
+            X['via'] = sorted(vv.values(), key=lambda v: v[1]); X.pop('vnote', None)
+print('list chains merged', nl, file=sys.stderr)
+# 사람이 확인하지 않은 묶음(chains.py): 같은 차로 볼 만하고(sure) 차례가 시각으로(또는 stop-order.json 으로) 정해지는 것만
 AUTO, REVIEW = [], []
 for O in b['origins']:
     d = {X['to']: X for X in O['dests'] if 'times' in X and 'via' not in X and 'vnote' not in X}
@@ -452,41 +547,11 @@ for O in b['origins']:
         if not chains.sure(blocks, xs): continue
         sq_ = next((q for q in SEQ if O['from'] in q and all(x in q for x in xs)), None)     # 사람이 확인한 차례(stop-order.json)가 있으면 그대로
         if sq_:
-            i0 = sq_.index(O['from'])
-            xs = sorted(xs, key=lambda x: abs(sq_.index(x) - i0))
+            i0_ = sq_.index(O['from'])
+            xs = sorted(xs, key=lambda x: abs(sq_.index(x) - i0_))
         elif not chains.ordered(blocks, xs): REVIEW.append((O['from'], xs)); continue
-        far = {}                                          # 발차 → 가장 먼 행선지
-        for x in xs:
-            for t in blocks[x][0]: far[t] = x
-        plan, ok = {}, True
-        for j, x in enumerate(xs):
-            mine = sorted(t for t in blocks[x][0] if far[t] == x)
-            vias, part = [], []
-            for y in xs[:j]:
-                k = sum(1 for t in mine if t in blocks[y][0])
-                if k == len(mine) and mine: vias.append(y)
-                elif k: part.append(y)
-            if len(part) > 1: ok = False
-            plan[x] = (mine, vias, part)
-        for x in xs:                                      # 남은 편이 없는 앞 행선지: 그 편들이 한 덩이에 다 있어야 참조 줄로
-            if not plan[x][0] and len({far[t] for t in blocks[x][0]}) > 1: ok = False
-        if not ok: REVIEW.append((O['from'], xs)); continue
-        AUTO.append((O['from'], xs))
-        for x in xs:
-            mine, vias, part = plan[x]
-            X = d[x]
-            if not mine:
-                tgt = far[next(iter(blocks[x][0]))]
-                du_, fa_ = X['dur'], X.get('fare'); X.clear(); X.update({'to': x, 'see': tgt, 'dur': du_, 'fare': fa_}); continue
-            X['times'] = [t for t in X['times'] if t[0] in set(mine)]
-            if vias: X['via'] = [[y, d[y]['dur'] if 'dur' in d[y] else blocks[y][1], d[y].get('fare')] for y in vias]
-            if part:
-                y = part[0]
-                for t in X['times']:
-                    if t[0] in blocks[y][0]: t.append('◇')
-                X['vnote'] = '◇ 경유 %s %s' % (nm(y), hmd(blocks[y][1]))
-            also = collections.Counter(far[t] for t in blocks[x][0] if far[t] != x)
-            if also: X['vnote2'] = '이 밖에 ' + ', '.join('%s 행 %d편' % (nm(z), n) for z, n in sorted(also.items(), key=lambda kv: blocks[kv[0]][1])) + '도 섬'
+        if merge_drop(d, xs): AUTO.append((O['from'], xs))
+        else: REVIEW.append((O['from'], xs))
 print('auto chains', len(AUTO), 'review', len(REVIEW), file=sys.stderr)
 b['autoChains'] = [[o] + xs for o, xs in AUTO]
 b['reviewChains'] = [[o] + xs for o, xs in REVIEW]

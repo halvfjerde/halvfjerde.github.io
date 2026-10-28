@@ -3767,9 +3767,10 @@ class Book:
                     else: cur += sep + t_
                 out.append(cur)
             if X.get('vnote'): out.append(X['vnote'])       # 일부 편만 서는 곳: 「◇ 원주문막 경유 (원주 발 15분 뒤)」
-            if X.get('vnote2'):                             # 더 먼 행선지 덩이에 실은 편: 「이 밖에 배방정류소 행 22편도 섬」
+            for vn_ in (X.get('vnote2'), X.get('vnote3')):   # 더 먼 행선지·앞 출발지 덩이에 실은 편: 「이 밖에 배방정류소 행 22편도 섬」「이 밖에 진해 발 3편도 탐」
+                if not vn_: continue
                 cur = ''
-                for t_ in X['vnote2'].split(', '):
+                for t_ in vn_.split(', '):
                     if cur and wsm(cur + ', ' + t_) > ww_: out.append(cur + ','); cur = '　' + t_
                     else: cur = (cur + ', ' + t_) if cur else t_
                 out.append(cur)
