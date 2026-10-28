@@ -544,7 +544,7 @@ def cells_of(c, st, up=False):
     return [cell(k, s_) for k, s_ in enumerate(st)]
 def line(c, st, up=False):
     g0, dl_, rem_ = foot(c)
-    KB = {'우': '우등', '일': '일반', '프': '프리', '심': '우등', '심프': '프리', '심일': '일반'}
+    KB = {'우': '우', '일': '일', '프': '프', '심': '우', '심프': '프', '심일': '일'}          # 목록처럼 한 글자 등급
     kind = '"◆"' if g0 == '◆' else '%s{%s}' % ('BS' if g0.startswith('심') else 'S', KB.get(g0, g0))   # 차마다 돌아가는 등급 ◆, 심야는 검은 네모 (목록과 같이)
     return '%s : %s : %s %s' % (kind, ' '.join(cells_of(c, st, up)), dl_, rem_)
 ORD = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째', '일곱째', '여덟째', '아홉째', '열째', '열한째', '열두째']
@@ -729,7 +729,7 @@ def merge_drop(d, xs):
         also = collections.Counter(far[t] for t in blocks[x][0] if far[t] != x)
         if also: X['vnote2'] = '이 밖에 ' + ', '.join('%s 행 %d편' % (nm(z), n) for z, n in sorted(also.items(), key=lambda kv: blocks[kv[0]][1])) + '도 섬'
     return True
-def merge_board(D, os_):
+def merge_board(D, os_, strict=False):
     """D 로 가는 덩이들, os_: 먼저 타는 곳부터. 뒤 출발지 B 마다 앞 출발지 A 의 편이 B 에서도 타면(B 발 = A 발 + δ):
     A 의 편이 모두 그러면 A 덩이에 「승차 B +δ」, 몇 편만이면 그 편에 ◇ 와 「◇ 승차 B +δ」.
     B 덩이에서는 그 편을 빼고 「이 밖에 A 발 n편도 탐」(남은 편이 없으면 참조 줄)"""
@@ -751,6 +751,7 @@ def merge_board(D, os_):
                 if k and (best is None or key_ > best[0]): best = (key_, k, e, A, tA)
         if not best: continue
         _, k, e, A, tA = best; Y = blk[A]
+        if strict and k < min(len(tA), len(X['times'])): continue      # 사람이 보지 않은 묶음: 한쪽 편이 모두 맞을 때만
         got = {(t + e) % 1440 for t in tA if (t + e) % 1440 in {m_(t[0]) for t in X['times']}}
         if not e: e_ = BOFF.get('%s|%s' % (A, o), 0)
         else: e_ = e
@@ -801,6 +802,8 @@ for O in b['origins']:
         elif not chains.ordered(blocks, xs): REVIEW.append((O['from'], xs)); continue
         if merge_drop(d, xs): AUTO.append((O['from'], xs))
         else: REVIEW.append((O['from'], xs))
+NB_ = sum(merge_board(o, xs[::-1], strict=True) for o, xs in AUTO)      # 반대 방향(오는 길)도: 먼 데서 타는 차가 가까운 데서도 타면 「승차」
+print('auto chains up', NB_, file=sys.stderr)
 print('auto chains', len(AUTO), 'review', len(REVIEW), file=sys.stderr)
 b['autoChains'] = [[o] + xs for o, xs in AUTO]
 b['reviewChains'] = [[o] + xs for o, xs in REVIEW]
