@@ -295,15 +295,35 @@ for T in sorted([T for T in tables if T not in pick and len(T['stops']) >= 4 and
 for T in tables:                                        # 사람이 확인한 노선(force-links)은 늘 싣는다
     if T not in pick and isF(T): pick.append(T)
 print('candidates', len(cand), 'picked', len(pick), 'cols', tot, '+', tot2, file=sys.stderr)
-# 편도 8편 이하: 반대 방향 표(정류장이 같은 것)와 상하 병기 한 표로 (고르지 않았어도 반대 방향은 곁들인다)
+# 상하 병기: 반대 방향 표(겹치는 정류장이 둘 넘고 차례가 거꾸로인 것)가 있으면 웬만하면 한 표로 (고르지 않았어도 반대 방향은 곁들인다).
+# 정류장은 두 방향을 합친 것 (방향마다 서는 곳이 다르기도 하다)
 ALL = tables
+def rev_ok(T, U):
+    cm = [s_ for s_ in T['stops'] if s_ in U['stops']]
+    if len(cm) < 2 or len(cm) < 0.5 * min(len(T['stops']), len(U['stops'])): return 0
+    ui = [U['stops'].index(s_) for s_ in cm]
+    return len(cm) if all(ui[k] > ui[k + 1] for k in range(len(ui) - 1)) else 0
+def merge_stops(a, b):
+    """두 차례 a, b(같은 방향)를 하나로: 겹치는 정류장의 차례는 지키고, 한쪽에만 있는 정류장은 제자리에"""
+    out, i, j = [], 0, 0
+    while i < len(a) or j < len(b):
+        if i < len(a) and j < len(b) and a[i] == b[j]: out.append(a[i]); i += 1; j += 1
+        elif i < len(a) and (j >= len(b) or a[i] not in b[j:]): out.append(a[i]); i += 1
+        elif j < len(b) and (i >= len(a) or b[j] not in a[i:]): out.append(b[j]); j += 1
+        else: out.append(a[i]); i += 1
+    seen_ = set()
+    return [x for x in out if not (x in seen_ or seen_.add(x))]
 both = []
 used_ = set()
 for T in pick:
     if id(T) in used_: continue
-    U = next((U for U in ALL if U is not T and set(U['stops']) == set(T['stops']) and id(U) not in used_), None)
-    if U and len(T['cols']) <= 8 and len(U['cols']) <= 8:
-        both.append((T, U)); used_ |= {id(T), id(U)}
+    cands = [(rev_ok(T, U), len(U['cols']), U) for U in ALL if U is not T and id(U) not in used_]
+    cands = [c for c in cands if c[0]]
+    if cands:
+        U = max(cands, key=lambda c: (c[0], c[1]))[2]
+        st_ = merge_stops(T['stops'], list(reversed(U['stops'])))
+        M = dict(T, stops=st_, title=T.get('title') or None)
+        both.append((M, U)); used_ |= {id(T), id(U)}
     else:
         both.append((T, None)); used_.add(id(T))
 SHORT = {'센트럴시티(서울)': '서울호남', '광주(유·스퀘어)': '광주', '대전청사(샘머리)': '대전청사', '세종터미널(연구)': '세종터미널', '청주(센트럴)': '청주',
@@ -332,7 +352,10 @@ for tail, ps in grp_.items():
     for p in ps: both.remove(p)
     both.append((M, None))
     for T in Ts: title_merge[id(T)] = M
-both.sort(key=lambda p: (-(len(p[0]['cols']) > W1), -apt(p[0]), p[0]['stops'][0], p[0]['stops'][-1]))
+for T, U in both:
+    if U and not T.get('title'): T['title'] = '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1]))
+ncols = lambda p: len(p[0]['cols']) + (len(p[1]['cols']) if p[1] else 0)
+both.sort(key=lambda p: (-(ncols(p) > W1), -apt(p[0]), p[0]['stops'][0], p[0]['stops'][-1]))
 def foot(c):
     w = c['_w']
     gs = collections.Counter(x for x in w if x)
@@ -352,15 +375,20 @@ def line(c, st):
     g0, dl_, rem_ = foot(c)
     kind = '"◆"' if g0 == '◆' else 'S{%s}' % GR.get(g0, g0)          # 차마다 돌아가는 등급
     return '%s : %s : %s %s' % (kind, ' '.join(cells_of(c, st)), dl_, rem_)
-ORD = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째']
+ORD = ['첫째', '둘째', '셋째', '넷째', '다섯째', '여섯째', '일곱째', '여덟째', '아홉째', '열째', '열한째', '열두째']
+def cut(xs, k):
+    sz = [len(xs) // k + (1 if i < len(xs) % k else 0) for i in range(k)]
+    out_, a_ = [], 0
+    for z in sz: out_.append(xs[a_:a_ + z]); a_ += z
+    return out_
 emit = []
-for T, U in both:                                       # 한 쪽 폭을 넘는 표는 같은 이름의 표 여럿으로 나눠 위아래로 (펼침면으로 넘기지 않게)
-    n = len(T['cols'])
-    if U or n <= W1: emit.append((T, U, '', T['cols'])); continue
-    k = -(-n // W1); sz = [n // k + (1 if i < n % k else 0) for i in range(k)]
-    a_ = 0
-    for i, z in enumerate(sz): emit.append((T, None, '（%s）' % ORD[i], T['cols'][a_:a_ + z])); a_ += z
-for T, U, part, cols_ in emit:
+for T, U in both:                                       # 한 쪽 폭을 넘는 표는 같은 이름의 표 여럿으로 나눠 위아래로 (펼침면으로 넘기지 않게). 상하 병기는 두 방향을 같은 몫으로
+    n = len(T['cols']) + (len(U['cols']) if U else 0)
+    if n <= W1: emit.append((T, U, '', T['cols'], U['cols'] if U else [])); continue
+    k = -(-n // W1)
+    pt, pu_ = cut(T['cols'], k), (cut(U['cols'], k) if U else [[]] * k)
+    for i in range(k): emit.append((T, U, '（%s）' % ORD[i], pt[i], pu_[i]))
+for T, U, part, cols_, ucols in emit:
     st = T['stops']
     BR.clear(); BR.update(T.get('branch', {}))
     ttl = T.get('title') or '%s ― %s' % (nm(st[0]), nm(st[-1]))
@@ -381,7 +409,7 @@ for T, U, part, cols_ in emit:
     out += ['', '[trains]'] + [line(c, st) for c in cols_]
     if U:
         rs = list(reversed(st))                        # 상행은 아래(출발)에서 위로 읽는 차례로
-        out += ['', '[trains up]'] + [line(c, rs) for c in U['cols']]
+        out += ['', '[trains up]'] + [line(c, rs) for c in ucols]
     out += ['', '[notes]', '}}', '']
 tables = [T for p in both for T in p if T]
 title_of = {id(X_): T.get('title') or '%s ― %s' % (nm(T['stops'][0]), nm(T['stops'][-1])) for T, U in both for X_ in (T, U) if X_}      # 상하 병기면 상행도 하행 표 이름으로
