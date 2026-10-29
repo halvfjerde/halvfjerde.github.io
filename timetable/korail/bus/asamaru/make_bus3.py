@@ -3,7 +3,7 @@
 출발 터미널마다(가나다) 행선지마다(가나다): 소요(중앙값)·요금, 발차마다 [발, 착, 요일 일곱 칸].
 요일 칸은 안 다니면 0, 다니면 그날의 등급(우·일·프·심·심프·심일). 착은 발 + 소요(TAGO 의 착 시각은 노선마다 소요가 하나).
 휴게소 환승 정류소를 오가는 짝, 이름이 같은 짝은 뺀다. python3 make_bus3.py 20261024 … 20261030 > bus.json"""
-import json, sys, os, collections, statistics, datetime
+import re, json, sys, os, collections, statistics, datetime
 C = os.path.expanduser('~/.cache/tago-bus')
 days = sys.argv[1:]
 WD = '월화수목금토일'
@@ -112,6 +112,7 @@ for d in days:
         if o != x: PD[(o, x, mins(r['depPlandTime']))].setdefault(d, r.get('gradeNm', ''))
 _RG = os.path.join(HERE_, 'regular-days.json')
 _rg = json.load(open(_RG)) if os.path.exists(_RG) else {}
+RULE_SP = {}
 _DF = os.path.join(HERE_, 'day-fixes.json'); DAYFIX = json.load(open(_DF)) if os.path.exists(_DF) else {}
 REG_T, REG_NOTE, REG_N = _rg.get('trips', {}), _rg.get('notes', {}), collections.Counter()
 origins = []
@@ -160,6 +161,11 @@ for o in sorted(T):
                 w2_ = [(('◆' if gvar else rd_[d_]) if rd_[d_] else 0) for d_ in range(7)]
                 if w2_ != w: REG_N['요일・등급 고침'] += 1
                 w = w2_
+            rr_ = DAYFIX.get('%s|%s' % (o, x))                # 구간 규칙 (day-fixes.json 「출발|도착」: keep 에 적은 요일 묶음만 정기, 나머지는 임시편)
+            if rr_ and rk_ not in DAYFIX:
+                ds_ = ''.join(WD[d_] for d_ in range(7) if w[d_])
+                if not (all(w) and '매일' in rr_['keep']) and ds_ not in rr_['keep']:
+                    REG_N['구간 규칙 임시편'] += 1; RULE_SP.setdefault((o, x), set()).update(d_ for d_ in range(7) if w[d_]); continue
             if rk_ in DAYFIX:                                 # 사람이 확인한 요일 (day-fixes.json): 자료보다 앞선다
                 g_ = collections.Counter(g for g in w if g).most_common(1)[0][0] if any(w) else '우'
                 w = [(w[d_] or g_) if WD[d_] in DAYFIX[rk_]['days'] else 0 for d_ in range(7)]; REG_N['사람이 정한 요일'] += 1
@@ -181,6 +187,17 @@ for o in sorted(T):
             k_ += 1
         X = {'to': x, 'dur': dur, 'fare': [min(fs), max(fs)] if fs else None, 'times': times}
         if REG_NOTE.get('%s|%s' % (o, x)): X['inote'] = REG_NOTE['%s|%s' % (o, x)]      # 「임시편 일 9편・금토 수시」
+        if (o, x) in RULE_SP:                               # 구간 규칙으로 뺀 편: 그 요일들을 「수시」로 (다섯 주 판정의 임시편과 합쳐)
+            ws_ = set(RULE_SP[(o, x)])
+            old_ = X.get('inote', '')
+            mo_ = re.search(r'(\S+) 수시', old_)
+            if mo_:
+                tok_ = mo_.group(1)
+                if '∼' in tok_:
+                    a__, b__ = WD.index(tok_[0]), WD.index(tok_[-1]); ws_ |= {(a__ + k__) % 7 for k__ in range((b__ - a__) % 7 + 1)}
+                else: ws_ |= {WD.index(ch) for ch in tok_ if ch in WD}
+            X['inote'] = re.sub(r'・?\S+ 수시', '', old_).replace('임시편 ', '').strip('・ ')
+            X['inote'] = '임시편 ' + '・'.join([p_ for p_ in [X['inote'], wdl(sorted(ws_)) + ' 수시'] if p_])
         if var_t:                                           # 돌아가는 등급: 날마다 몇 편이 무슨 등급인지
             nvar += len(var_t)
             cnt = collections.defaultdict(collections.Counter)
