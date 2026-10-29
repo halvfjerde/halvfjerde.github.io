@@ -28,6 +28,7 @@ for k_, v_ in (json.load(open(_OTF)) if os.path.exists(_OTF) else {}).items():  
             if X['to'] != D_: continue
             if 'times' in v_: X['times'] = [t for t in X['times'] if t[0] in v_['times']]
             if v_.get('nosub'): X['times'] = [t for t in X['times'] if '시' not in t[3:]]      # 시외는 빼고 고속만 (시외 자료가 반쯤 빠진 구간)
+            if v_.get('exp'): X['times'] = [t[:3] + [z for z in t[3:] if z != '시'] for t in X['times']]      # TAGO 시외로만 잡히는 고속 노선 (동서울 → 충주)
             if v_.get('note') and X.get('times'): X['xnote'] = v_['note']
             if 'dur' in v_:
                 X['dur'] = v_['dur']
