@@ -46,7 +46,7 @@ def wdl(ws):
     if len(ws) >= 4 and len(ws) < 7:                     # 넉 날 넘게 이어진 요일은 「금∼월」처럼 (주를 넘어 이어져도). 사흘은 「화・수・목」 (사용자)
         for s0 in ws:
             if sorted((s0 + k) % 7 for k in range(len(ws))) == ws: return WD[s0] + '∼' + WD[(s0 + len(ws) - 1) % 7]
-    return '・'.join(WD[w] for w in ws)
+    return ''.join(WD[w] for w in ws)                     # 요일끼리는 가운뎃점 없이 「월수금」 (사용자)
 def md(d, prev=None): return ('%d일' % d.day) if prev and prev.month == d.month else '%d월 %d일' % (d.month, d.day)
 def label_wk(days):
     """철 전체에 대한 운항일. 매일이면 비운다"""
