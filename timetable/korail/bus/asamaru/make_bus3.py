@@ -199,7 +199,7 @@ for o in sorted(T):
         if (o, x) in RULE_N:                                # 낱편 임시: 「일 1편」이 있으면 「일 2편」으로, 없으면 새로 (수시인 요일은 그대로)
             old_ = X.get('inote', '')
             sus_ = set()
-            mo_ = re.search(r'(\S+) 수시', old_)
+            mo_ = re.search(r'([월화수목금토일∼]+) 수시', old_)
             if mo_:
                 tok_ = mo_.group(1)
                 if '∼' in tok_:
@@ -214,13 +214,14 @@ for o in sorted(T):
         if (o, x) in RULE_SP:                               # 구간 규칙으로 뺀 편: 그 요일들을 「수시」로 (다섯 주 판정의 임시편과 합쳐)
             ws_ = set(RULE_SP[(o, x)])
             old_ = X.get('inote', '')
-            mo_ = re.search(r'(\S+) 수시', old_)
+            mo_ = re.search(r'([월화수목금토일∼]+) 수시', old_)
             if mo_:
                 tok_ = mo_.group(1)
                 if '∼' in tok_:
                     a__, b__ = WD.index(tok_[0]), WD.index(tok_[-1]); ws_ |= {(a__ + k__) % 7 for k__ in range((b__ - a__) % 7 + 1)}
                 else: ws_ |= {WD.index(ch) for ch in tok_ if ch in WD}
-            X['inote'] = re.sub(r'・?\S+ 수시', '', old_).replace('임시편 ', '').strip('・ ')
+            X['inote'] = re.sub(r'・?[월화수목금토일∼]+ 수시', '', old_).replace('임시편 ', '').strip('・ ')
+            X['inote'] = '・'.join(p_ for p_ in X['inote'].split('・') if p_ and not (re.match(r'[월화수목금토일] \d+편$', p_) and WD.index(p_[0]) in ws_))   # 수시인 요일의 「일 1편」은 겹치니 뺀다
             X['inote'] = '임시편 ' + '・'.join([p_ for p_ in [X['inote'], wdl(sorted(ws_)) + ' 수시'] if p_])
         if var_t:                                           # 돌아가는 등급: 날마다 몇 편이 무슨 등급인지
             nvar += len(var_t)
