@@ -3864,8 +3864,12 @@ class Book:
             for j_, (n_, c_) in enumerate(sorted(cont.items())):
                 CM['→' + n_] = '→⇒'[min(j_, 1)]; o_ = c_.most_common(1)[0][0]
                 leg.append('%s %s까지%s' % (CM['→' + n_], n_, (' (%s 더)' % hmc(o_)) if o_ is not None else ''))
-            for j_, (n_, c_) in enumerate(sorted(fromu.items())):
-                CM[n_] = '←⇐'[min(j_, 1)]; leg.append('%s %s 발 (%s 앞)' % (CM[n_], n_, hmc(c_.most_common(1)[0][0])))
+            if len(fromu) == 1 and sum(next(iter(fromu.values())).values()) >= 0.7 * len(rows):
+                # 거의 다(일곱 몫 넘게) 앞에서 떠나는 차면 나머지도 그 차의 일부(임시편으로 빠진 앞 토막・자료에 없는 증편)로 보고 표지 없이 한 줄 (사용자)
+                n_, c_ = next(iter(fromu.items())); CM[n_] = ''; leg.append('모두 %s 발 (%s 앞)' % (n_, hmc(c_.most_common(1)[0][0])))
+            else:
+                for j_, (n_, c_) in enumerate(sorted(fromu.items())):
+                    CM[n_] = '←⇐'[min(j_, 1)]; leg.append('%s %s 발 (%s 앞)' % (CM[n_], n_, hmc(c_.most_common(1)[0][0])))
             rg_ = lambda ds: hmc(ds[0]) if len(ds) == 1 else '%s∼%s' % (hmc(ds[0]), hmc(ds[-1]))
             if dsub and dsub != [dur0]:
                 allsub_ = all('시' in t[3:] for t, _, _ in rows)
