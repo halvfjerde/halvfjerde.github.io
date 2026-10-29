@@ -3893,38 +3893,37 @@ class Book:
                 if lab.startswith('→'): mk += CM.get('→' + lab[1:].partition(' ')[0], '→')
                 elif lab.endswith('발'): mk += CM.get(lab[:-1].partition(' ')[0], '←')
                 grp.setdefault((gk, '시' in t[3:]), []).append((t[0], mk, gr_)); items.append((gk, '시' in t[3:], (t[0], mk, gr_)))
-            # 요일 묶음: 평일과 주말에 시각이 갈리는 구간(광주 → 부산: 월∼목 930・1030 / 금∼일 910・1050)은 묶음마다 그날 다니는 차를 다 적는다
-            # (매일 차도 묶음마다 다시). 묶음 안에서 날이 모자라는 차만 따로 요일을 붙인다. 따로 붙는 차가 줄어드는 만큼 묶음을 나눈다
+            # 요일 묶음: 평일과 주말에 시각이 갈리는 구간(광주 → 부산: 월∼목 930・1030 / 금∼일 910・1050)은 묶음마다 그날 다니는 차를 다 적고
+            # (매일 차도 묶음마다 다시), 묶음에 다 들지 않는 차는 요일 하나씩 따로 적는다 (사용자). 묶음 없이(매일 + 요일 하나씩)도 후보.
+            # 줄 수 + 4 × (하루를 읽으려고 맞춰 볼 줄 묶음 수의 이레 평균) 이 가장 작은 꼴을 쓴다 (예전처럼 요일 모양대로 묶는 꼴도 후보)
             PARTS = [((1,) * 7,), ((1, 1, 1, 1, 0, 0, 0), (0, 0, 0, 0, 1, 1, 1)), ((1, 1, 1, 1, 1, 0, 0), (0, 0, 0, 0, 0, 1, 1)),
                      ((1, 1, 1, 1, 0, 0, 0), (0, 0, 0, 0, 1, 0, 0), (0, 0, 0, 0, 0, 1, 1)), ((1, 1, 1, 1, 1, 0, 0), (0, 0, 0, 0, 0, 1, 0), (0, 0, 0, 0, 0, 0, 1))]
-            def pcost(P_):                                  # 줄 수 + 4 × (하루를 읽으려고 맞춰 볼 묶음 수의 이레 평균)
-                g_ = collections.Counter()
-                for C_ in P_:
-                    for gk, sb, tk_ in items:
-                        m_ = tuple(a & b for a, b in zip(gk, C_))
-                        if any(m_): g_[(C_ if len(P_) > 1 else None, m_, sb)] += 1
-                nl_ = sum(-(-n_ // NT) for n_ in g_.values())
-                return nl_ + 4 * sum(sum(1 for k_ in g_ if k_[1][d_]) for d_ in range(7)) / 7
-            PB = min(PARTS, key=lambda P_: (pcost(P_), len(P_)))
             def gsort(kv):
                 (gk, sb), toks = kv
                 return (-sum(gk), gk[::-1], sb, mm_(toks[0][0]))
-            lines = []
-            if len(PB) == 1:
-                for (gk, sb), toks in sorted(grp.items(), key=gsort):
-                    cells = [('t',) + tk_ for tk_ in toks]
-                    for k_ in range(0, len(cells), NT):
-                        lines.append((((gk, sb) if k_ == 0 else None), cells[k_:k_ + NT]))
-            else:
-                for C_ in PB:
+            cands = [[((gk, sb), toks) for (gk, sb), toks in sorted(grp.items(), key=gsort)]]
+            for P_ in PARTS:
+                lay_ = []
+                for C_ in P_:
                     g2 = collections.OrderedDict()
                     for gk, sb, tk_ in items:
-                        m_ = tuple(a & b for a, b in zip(gk, C_))
-                        if any(m_): g2.setdefault((m_, sb, 'c' if m_ == C_ else ''), []).append(tk_)
-                    for key_ in sorted(g2, key=lambda k_: (k_[2] != 'c', -sum(k_[0]), k_[0][::-1], k_[1], mm_(g2[k_][0][0]))):
-                        cells = [('t',) + tk_ for tk_ in g2[key_]]
-                        for k_ in range(0, len(cells), NT):
-                            lines.append(((key_ if k_ == 0 else None), cells[k_:k_ + NT]))
+                        if all(gk[d_] for d_ in range(7) if C_[d_]): g2.setdefault((C_, sb, 'c'), []).append(tk_)
+                    for d_ in range(7):
+                        if not C_[d_]: continue
+                        for gk, sb, tk_ in items:
+                            if gk[d_] and not all(gk[e_] for e_ in range(7) if C_[e_]):
+                                g2.setdefault((tuple(1 if e_ == d_ else 0 for e_ in range(7)), sb, ''), []).append(tk_)
+                    lay_ += sorted(g2.items(), key=lambda kv: (kv[0][2] != 'c', kv[0][0][::-1] if kv[0][2] != 'c' else (), kv[0][1]))
+                cands.append(lay_)
+            def lcost(lay_):
+                nl_ = sum(-(-len(toks) // NT) for _, toks in lay_)
+                return nl_ + 4 * sum(sum(1 for k_, _ in lay_ if k_[0][d_]) for d_ in range(7)) / 7
+            best = min(range(len(cands)), key=lambda i_: (lcost(cands[i_]), i_))
+            lines = []
+            for key_, toks in cands[best]:
+                cells = [('t',) + tk_ for tk_ in toks]
+                for k_ in range(0, len(cells), NT):
+                    lines.append(((key_ if k_ == 0 else None), cells[k_:k_ + NT]))
             return sub, lines, dur0
         # 구간 덩이: 두 터미널 사이 (A → D 와 D → A) 를 한 덩이로. 왼쪽 터미널은 서울 쪽, 아니면 가나다 앞
         SEOUL = {'서울경부', '서울호남', '동서울', '서울남부', '상봉'}
