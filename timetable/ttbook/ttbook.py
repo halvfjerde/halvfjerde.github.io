@@ -3883,7 +3883,7 @@ class Book:
                     else: cur = (cur + ', ' + t_) if cur else t_
                 sub.append(cur)
             # 시각 칸: 요일・등급・시외가 같은 차끼리 한 묶음
-            grp = collections.OrderedDict()
+            grp = collections.OrderedDict(); items = []
             for t, mt, lab in rows:
                 w = t[2]; gs_ = {g for g in w if g}
                 gk = tuple(1 if g else 0 for g in w)            # 요일로만 묶고 등급은 시각마다 (날에 따라 바뀌는 차는 ◆)
@@ -3892,15 +3892,39 @@ class Book:
                 if '◇' in t[3:] and '◇' not in mk: mk += '◇'      # 시각표로 아는 몇 편만 서는 곳 (머리의 「◇ 경주 경유」)
                 if lab.startswith('→'): mk += CM.get('→' + lab[1:].partition(' ')[0], '→')
                 elif lab.endswith('발'): mk += CM.get(lab[:-1].partition(' ')[0], '←')
-                grp.setdefault((gk, '시' in t[3:]), []).append((t[0], mk, gr_))
+                grp.setdefault((gk, '시' in t[3:]), []).append((t[0], mk, gr_)); items.append((gk, '시' in t[3:], (t[0], mk, gr_)))
+            # 요일 묶음: 평일과 주말에 시각이 갈리는 구간(광주 → 부산: 월∼목 930・1030 / 금∼일 910・1050)은 묶음마다 그날 다니는 차를 다 적는다
+            # (매일 차도 묶음마다 다시). 묶음 안에서 날이 모자라는 차만 따로 요일을 붙인다. 따로 붙는 차가 줄어드는 만큼 묶음을 나눈다
+            PARTS = [((1,) * 7,), ((1, 1, 1, 1, 0, 0, 0), (0, 0, 0, 0, 1, 1, 1)), ((1, 1, 1, 1, 1, 0, 0), (0, 0, 0, 0, 0, 1, 1)),
+                     ((1, 1, 1, 1, 0, 0, 0), (0, 0, 0, 0, 1, 0, 0), (0, 0, 0, 0, 0, 1, 1)), ((1, 1, 1, 1, 1, 0, 0), (0, 0, 0, 0, 0, 1, 0), (0, 0, 0, 0, 0, 0, 1))]
+            def pcost(P_):                                  # 줄 수 + 4 × (하루를 읽으려고 맞춰 볼 묶음 수의 이레 평균)
+                g_ = collections.Counter()
+                for C_ in P_:
+                    for gk, sb, tk_ in items:
+                        m_ = tuple(a & b for a, b in zip(gk, C_))
+                        if any(m_): g_[(C_ if len(P_) > 1 else None, m_, sb)] += 1
+                nl_ = sum(-(-n_ // NT) for n_ in g_.values())
+                return nl_ + 4 * sum(sum(1 for k_ in g_ if k_[1][d_]) for d_ in range(7)) / 7
+            PB = min(PARTS, key=lambda P_: (pcost(P_), len(P_)))
             def gsort(kv):
                 (gk, sb), toks = kv
                 return (-sum(gk), gk[::-1], sb, mm_(toks[0][0]))
             lines = []
-            for (gk, sb), toks in sorted(grp.items(), key=gsort):
-                cells = [('t',) + tk_ for tk_ in toks]
-                for k_ in range(0, len(cells), NT):
-                    lines.append((((gk, sb) if k_ == 0 else None), cells[k_:k_ + NT]))
+            if len(PB) == 1:
+                for (gk, sb), toks in sorted(grp.items(), key=gsort):
+                    cells = [('t',) + tk_ for tk_ in toks]
+                    for k_ in range(0, len(cells), NT):
+                        lines.append((((gk, sb) if k_ == 0 else None), cells[k_:k_ + NT]))
+            else:
+                for C_ in PB:
+                    g2 = collections.OrderedDict()
+                    for gk, sb, tk_ in items:
+                        m_ = tuple(a & b for a, b in zip(gk, C_))
+                        if any(m_): g2.setdefault((m_, sb, 'c' if m_ == C_ else ''), []).append(tk_)
+                    for key_ in sorted(g2, key=lambda k_: (k_[2] != 'c', -sum(k_[0]), k_[0][::-1], k_[1], mm_(g2[k_][0][0]))):
+                        cells = [('t',) + tk_ for tk_ in g2[key_]]
+                        for k_ in range(0, len(cells), NT):
+                            lines.append(((key_ if k_ == 0 else None), cells[k_:k_ + NT]))
             return sub, lines, dur0
         # 구간 덩이: 두 터미널 사이 (A → D 와 D → A) 를 한 덩이로. 왼쪽 터미널은 서울 쪽, 아니면 가나다 앞
         SEOUL = {'서울경부', '서울호남', '동서울', '서울남부', '상봉'}
@@ -4097,13 +4121,14 @@ class Book:
             lab_, cells = ln
             xT0 = xL + LBW
             if lab_ is not None:
-                (gk, sb) = lab_
+                gk, sb = lab_[0], lab_[1]
+                fn_ = 'GB' if len(lab_) > 2 and lab_[2] == 'c' else 'M'      # 요일 묶음의 머리(「월∼목」에 다니는 차 다)는 굵은 고딕, 묶음 안 따로 붙는 요일은 명조
                 dt_ = self.day_text(gk)                # 노선표처럼: 「금∼일」「토일」, 넉・다섯 자는 석 자 폭으로 눌러 (명조), 날마다는 비움
                 if dt_:
-                    ct_ = self.inl.run(dt_, Ctx('M', 0.78))
+                    ct_ = self.inl.run(dt_, Ctx(fn_, 0.78))
                     wd_ = self.inl.wc.get(ct_, len(dt_)) * fs
-                    w3_ = self.inl.wc.get(self.inl.run('월화수', Ctx('M', 0.78)), 3) * fs
-                    if wd_ > w3_ + 0.01: ct_ = self.inl.run(dt_, Ctx('M', 0.78).but(hscale=w3_ / wd_))
+                    w3_ = self.inl.wc.get(self.inl.run('월화수', Ctx(fn_, 0.78)), 3) * fs
+                    if wd_ > w3_ + 0.01: ct_ = self.inl.run(dt_, Ctx(fn_, 0.78).but(hscale=w3_ / wd_))
                     tex.append(self.put_box(xL, y, LBW - 0.8 * fs, R, ct_, 'c', 'm'))
                 if sb: tex.append(self.put_box(xL + LBW - 0.8 * fs, y, 0.4 * fs, R, self.inl.run('†', Ctx('M', 0.7)), 'c', 'm'))      # 오른쪽 줄과 띄워
             for k_, c_ in enumerate(cells):

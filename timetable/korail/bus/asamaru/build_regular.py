@@ -1,4 +1,5 @@
 """다섯 주(공휴일・추석 빼고) 운행으로 요일 다시 정하기 → asamaru/regular-days.json
+· 월∼금은 한 묶음으로도 본다: 연휴 없는 세 주(10/12∼)에 월∼금의 반 넘게 다닌 차는 한 번이라도 다닌 월∼금 요일을 다 다니는 날로
 · 요일마다 다닌 몫 p 가 반 넘으면 그 요일에 다님 (또는 나중 두 주(10/17∼31)의 그 요일에 빠짐없이 다녔으면: 새로 생긴 차)
 · 그런 요일이 없는 차는 임시편: 목록에 싣지 않고 구간 머리에 「임시편 일 9편」(날마다 편수가 ±1 안이면 많은 쪽 하나), 아니면 「금・토에도 있음」"""
 import json, os, collections, datetime
@@ -24,10 +25,13 @@ for k, dg in G.items():
     obs = pdays[k[:2]]
     if min(collections.Counter(wd(d) for d in obs).get(w, 0) for w in range(7)) < 3: continue
     keep = []
+    cw_ = [d for d in obs if d >= '20261012' and wd(d) < 5]
+    blk_ = sum(1 for d in cw_ if d in dg) / len(cw_) if cw_ else 0
     for w in range(7):
         ow = [d for d in obs if wd(d) == w]; rw = [d for d in ow if d in dg]
         lw = [d for d in ow if d in LATE]
         if len(rw) / len(ow) > 0.5 or (len(lw) >= 2 and all(d in dg for d in lw)): keep.append(w)
+        elif w < 5 and rw and blk_ >= 0.5: keep.append(w)       # 월∼금은 한 묶음: 연휴 없는 세 주(10/12∼)에 월∼금 반 넘게 다닌 차는 빠진 날을 결행으로 보고 그 요일도 다님 (사용자: 광주 → 동대구 1215・1725・2005 는 11월 첫 두 주에 날마다 있음)
     if keep:
         days = []
         for w in range(7):
