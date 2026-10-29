@@ -170,6 +170,10 @@ for o in sorted(T):
                         REG_N['구간 규칙 임시편'] += 1; RULE_SP.setdefault((o, x), set()).update(d_ for d_ in range(7) if w[d_]); continue
                 elif not (all(w) and '매일' in rr_['keep']) and ds_ not in rr_['keep']:
                     REG_N['구간 규칙 임시편'] += 1; RULE_SP.setdefault((o, x), set()).update(d_ for d_ in range(7) if w[d_]); continue
+            if rk_ in DAYFIX and DAYFIX[rk_].get('drop'):     # 사람이 뺀 편 (다른 편과 같은 차: 광주 → 전주 0912 = 0910)
+                REG_N['사람이 뺀 편'] += 1; continue
+            if rk_ in DAYFIX and DAYFIX[rk_].get('temp'):     # 사람이 임시편으로 돌린 편
+                REG_N['구간 규칙 임시편'] += 1; RULE_SP.setdefault((o, x), set()).update(d_ for d_ in range(7) if w[d_]); continue
             if rk_ in DAYFIX:                                 # 사람이 확인한 요일 (day-fixes.json): 자료보다 앞선다
                 g_ = collections.Counter(g for g in w if g).most_common(1)[0][0] if any(w) else '우'
                 w = [(w[d_] or g_) if WD[d_] in DAYFIX[rk_]['days'] else 0 for d_ in range(7)]; REG_N['사람이 정한 요일'] += 1
