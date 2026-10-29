@@ -4052,7 +4052,7 @@ class Book:
         def one(ws_):
             if len(ws_) == 7 or not ws_: return ''
             if ws_ == [0, 1, 2, 3, 4]: return '월∼금'
-            if len(ws_) >= 3:
+            if len(ws_) >= 4:                       # 사흘은 「금토일」처럼 늘어놓는다 (사용자)
                 for s0 in ws_:
                     if sorted((s0 + k) % 7 for k in range(len(ws_))) == ws_: return WD[s0] + '∼' + WD[(s0 + len(ws_) - 1) % 7]
             return ''.join(WD[w] for w in ws_)

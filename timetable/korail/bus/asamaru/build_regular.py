@@ -52,7 +52,7 @@ for pr, byw in spor.items():
         else: loose.append(WD[w]); nst['있음'] += 1
     def rng(ws):
         ws = sorted(WD.index(x) for x in ws)
-        if len(ws) >= 3:
+        if len(ws) >= 4:                                   # 사흘은 「금토일」 (사용자)
             for s0 in ws:
                 if sorted((s0 + k) % 7 for k in range(len(ws))) == ws: return WD[s0] + '∼' + WD[(s0 + len(ws) - 1) % 7]
         return ''.join(WD[w] for w in ws)

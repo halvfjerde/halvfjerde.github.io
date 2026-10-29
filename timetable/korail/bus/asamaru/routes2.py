@@ -493,7 +493,7 @@ def wdl(ws):
     ws = sorted(ws)
     if len(ws) == 7: return '_'
     if ws == [0, 1, 2, 3, 4]: return '월∼금'
-    if len(ws) >= 3 and len(ws) < 7:                     # 이어진 요일은 「금∼월」처럼 (주를 넘어 이어져도)
+    if len(ws) >= 4 and len(ws) < 7:                     # 넉 날 넘게 이어진 요일은 「금∼월」처럼 (주를 넘어 이어져도). 사흘은 「금토일」 (사용자)
         for s0 in ws:
             if sorted((s0 + k) % 7 for k in range(len(ws))) == ws: return WD[s0] + '∼' + WD[(s0 + len(ws) - 1) % 7]
     return ''.join(WD[w] for w in ws)
