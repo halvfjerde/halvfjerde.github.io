@@ -35,8 +35,9 @@ for k_, v_ in (json.load(open(_OTF)) if os.path.exists(_OTF) else {}).items():  
                 for t in X['times']:
                     if t[1]: t[1] = '%d%02d' % divmod((m_(t[0]) + v_['dur']) % 1440, 60)
         O['dests'] = [X for X in O['dests'] if X.get('times')]
-_CNT0 = {(O['from'], X['to']): ([sum(1 for t in X['times'] if t[2][d_]) for d_ in range(7)], sum(1 for t in X['times'] if '시' in t[3:]), len(X['times']),
-                                 X.get('inote', ''), X.get('fare'), X.get('dur')) for O in b['origins'] for X in O['dests'] if X.get('times')}      # 검증 목록용 (DUMP_COUNTS)
+_CNT0 = {(O['from'], X['to']): ([sum(1 for t in X['times'] if t[2][d_] and '시' not in t[3:]) for d_ in range(7)],
+                                 [sum(1 for t in X['times'] if t[2][d_] and '시' in t[3:]) for d_ in range(7)], len(X['times']),
+                                 X.get('inote', ''), X.get('fare'), X.get('dur')) for O in b['origins'] for X in O['dests'] if X.get('times')}      # 검증 목록용 (DUMP_COUNTS): 요일별 고속 편수, 시외 편수
 P = {}                                                   # (A, D) → 소요·요금·{발 분: 요일 칸}
 for O in b['origins']:
     for X in O['dests']:
