@@ -114,6 +114,7 @@ for d in days:
 _RG = os.path.join(HERE_, 'regular-days.json')
 _rg = json.load(open(_RG)) if os.path.exists(_RG) else {}
 RULE_SP = {}
+RULE_N = {}                                               # 사람이 임시편으로 돌린 낱편: (출발, 도착) → 요일마다 편수
 _DF = os.path.join(HERE_, 'day-fixes.json'); DAYFIX = json.load(open(_DF)) if os.path.exists(_DF) else {}
 REG_T, REG_NOTE, REG_N = _rg.get('trips', {}), _rg.get('notes', {}), collections.Counter()
 origins = []
@@ -172,8 +173,8 @@ for o in sorted(T):
                     REG_N['구간 규칙 임시편'] += 1; RULE_SP.setdefault((o, x), set()).update(d_ for d_ in range(7) if w[d_]); continue
             if rk_ in DAYFIX and DAYFIX[rk_].get('drop'):     # 사람이 뺀 편 (다른 편과 같은 차: 광주 → 전주 0912 = 0910)
                 REG_N['사람이 뺀 편'] += 1; continue
-            if rk_ in DAYFIX and DAYFIX[rk_].get('temp'):     # 사람이 임시편으로 돌린 편
-                REG_N['구간 규칙 임시편'] += 1; RULE_SP.setdefault((o, x), set()).update(d_ for d_ in range(7) if w[d_]); continue
+            if rk_ in DAYFIX and DAYFIX[rk_].get('temp'):     # 사람이 임시편으로 돌린 편: 머리의 「임시편 일 1편」에 편수로 더한다
+                REG_N['구간 규칙 임시편'] += 1; RULE_N.setdefault((o, x), collections.Counter()).update(d_ for d_ in range(7) if w[d_]); continue
             if rk_ in DAYFIX:                                 # 사람이 확인한 요일 (day-fixes.json): 자료보다 앞선다
                 g_ = collections.Counter(g for g in w if g).most_common(1)[0][0] if any(w) else '우'
                 w = [(w[d_] or g_) if WD[d_] in DAYFIX[rk_]['days'] else 0 for d_ in range(7)]; REG_N['사람이 정한 요일'] += 1
@@ -195,6 +196,21 @@ for o in sorted(T):
             k_ += 1
         X = {'to': x, 'dur': dur, 'fare': [min(fs), max(fs)] if fs else None, 'times': times}
         if REG_NOTE.get('%s|%s' % (o, x)): X['inote'] = REG_NOTE['%s|%s' % (o, x)]      # 「임시편 일 9편・금토 수시」
+        if (o, x) in RULE_N:                                # 낱편 임시: 「일 1편」이 있으면 「일 2편」으로, 없으면 새로 (수시인 요일은 그대로)
+            old_ = X.get('inote', '')
+            sus_ = set()
+            mo_ = re.search(r'(\S+) 수시', old_)
+            if mo_:
+                tok_ = mo_.group(1)
+                if '∼' in tok_:
+                    a__, b__ = WD.index(tok_[0]), WD.index(tok_[-1]); sus_ = {WD[(a__ + k__) % 7] for k__ in range((b__ - a__) % 7 + 1)}
+                else: sus_ = {ch for ch in tok_ if ch in WD}
+            fx_ = collections.OrderedDict((m__.group(1), int(m__.group(2))) for m__ in re.finditer(r'(?:^|・|임시편 )(\S) (\d+)편', old_))
+            for d_, n__ in sorted(RULE_N[(o, x)].items()):
+                if WD[d_] in sus_: continue
+                fx_[WD[d_]] = fx_.get(WD[d_], 0) + n__
+            fx_ = sorted(fx_.items(), key=lambda kv: WD.index(kv[0]))
+            X['inote'] = '임시편 ' + '・'.join(['%s %d편' % kv for kv in fx_] + ([mo_.group(0)] if mo_ else []))
         if (o, x) in RULE_SP:                               # 구간 규칙으로 뺀 편: 그 요일들을 「수시」로 (다섯 주 판정의 임시편과 합쳐)
             ws_ = set(RULE_SP[(o, x)])
             old_ = X.get('inote', '')

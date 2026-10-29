@@ -1373,8 +1373,15 @@ for O in b['origins']:
             continue
         cols_.sort(key=lambda c: c[2])
         X['mid'] = [[c[0], c[1]] for c in cols_]
-        _exp_ = {t[0] for t in X['times'] if '시' not in t[3:]}          # 같은 시각의 고속이 있는 시외(dup)는 그 고속의 경유를 물려받지 않는다
-        X['mt'] = [[(_hm4(m_(t[0]) + c[2]) if ((c[3] is None or c[3] in t[3:]) and not ('시' in t[3:] and t[0] in _exp_)) else '') for c in cols_] for t in X['times']]
+        # 같은 시각에 고속과 시외가 함께 있으면(dup) 경유 표지는 시각으로 붙어 둘 다에 붙는다: 한 시각뿐인 차들 가운데 그 정류장에 서는 차가
+        # 대개 시외인지 고속인지를 보고 그쪽 하나에만 둔다 (전주 → 광주 1020: 고속이 호남제일, 진주 → 서대구 1640: 시외가 합천)
+        _tc_ = collections.Counter(t[0] for t in X['times'])
+        def _keepc_(t, c):
+            if not (c[3] is None or c[3] in t[3:]): return False
+            if _tc_[t[0]] < 2: return True
+            sv_ = collections.Counter('시' in u[3:] for u in X['times'] if _tc_[u[0]] == 1 and (c[3] is None or c[3] in u[3:]))
+            return ('시' in t[3:]) == (sv_[True] > sv_[False])
+        X['mt'] = [[(_hm4(m_(t[0]) + c[2]) if _keepc_(t, c) else '') for c in cols_] for t in X['times']]
         for t in X['times']:
             for mk in colmk:
                 while mk in t: t.remove(mk)
