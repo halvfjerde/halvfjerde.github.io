@@ -15,7 +15,7 @@ def short(nm):
 def wdl(ws):
     ws = sorted(ws)
     if ws == [0, 1, 2, 3, 4]: return '월∼금'
-    if len(ws) >= 3 and ws == list(range(ws[0], ws[-1] + 1)): return WD[ws[0]] + '∼' + WD[ws[-1]]
+    if len(ws) >= 4 and ws == list(range(ws[0], ws[-1] + 1)): return WD[ws[0]] + '∼' + WD[ws[-1]]      # 사흘은 「화・수・목」 (사용자)
     return '・'.join(WD[w] for w in ws)
 def label(days):
     """운항일: 매일이면 비우고, 요일·기간·날짜로. 맞는 꼴이 없으면 요일에 더하고 빼는 날을 붙인다"""
