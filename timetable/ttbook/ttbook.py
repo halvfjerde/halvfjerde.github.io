@@ -3874,6 +3874,7 @@ class Book:
             sub += leg
             if X.get('vnote'): sub.extend(X['vnote'].split('\n'))
             if X.get('inote'): sub.append(X['inote'])          # 다섯 주에 반도 안 다닌 차: 「임시편 일 9편・금토 수시」
+            if X.get('xnote'): sub.extend(X['xnote'].split('\n'))     # 사람이 적은 줄 (only-trips.json 「note」: 「이 밖에 시외도 다님」)
             for tt_ in X.get('tabRefs', []): sub.append('이 밖에 노선표 {#%s}' % tt_)
             if X.get('gnote'):
                 cur = ''

@@ -27,6 +27,8 @@ for k_, v_ in (json.load(open(_OTF)) if os.path.exists(_OTF) else {}).items():  
         for X in O['dests']:
             if X['to'] != D_: continue
             if 'times' in v_: X['times'] = [t for t in X['times'] if t[0] in v_['times']]
+            if v_.get('nosub'): X['times'] = [t for t in X['times'] if '시' not in t[3:]]      # 시외는 빼고 고속만 (시외 자료가 반쯤 빠진 구간)
+            if v_.get('note') and X.get('times'): X['xnote'] = v_['note']
             if 'dur' in v_:
                 X['dur'] = v_['dur']
                 for t in X['times']:

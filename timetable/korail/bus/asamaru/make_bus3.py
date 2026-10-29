@@ -86,6 +86,7 @@ SUBT -= EXPT
 def wdl(ws):
     ws = sorted(ws)
     if ws == [0, 1, 2, 3, 4]: return '월∼금'
+    if len(ws) == 7: return '월∼일'
     if len(ws) >= 3 and len(ws) < 7:                     # 이어진 요일은 「금∼월」처럼 (주를 넘어 이어져도)
         for s0 in ws:
             if sorted((s0 + k) % 7 for k in range(len(ws))) == ws: return WD[s0] + '∼' + WD[(s0 + len(ws) - 1) % 7]
@@ -164,7 +165,10 @@ for o in sorted(T):
             rr_ = DAYFIX.get('%s|%s' % (o, x))                # 구간 규칙 (day-fixes.json 「출발|도착」: keep 에 적은 요일 묶음만 정기, 나머지는 임시편)
             if rr_ and rk_ not in DAYFIX:
                 ds_ = ''.join(WD[d_] for d_ in range(7) if w[d_])
-                if not (all(w) and '매일' in rr_['keep']) and ds_ not in rr_['keep']:
+                if 'tempmin' in rr_:                          # 「tempmin」: 분 끝자리가 이 숫자인 고속 편은 임시편 (광주 ⇄ 전주의 :x1・:x2 편)
+                    if str(t % 10) in rr_['tempmin'] and (o, x, t) not in SUBT:
+                        REG_N['구간 규칙 임시편'] += 1; RULE_SP.setdefault((o, x), set()).update(d_ for d_ in range(7) if w[d_]); continue
+                elif not (all(w) and '매일' in rr_['keep']) and ds_ not in rr_['keep']:
                     REG_N['구간 규칙 임시편'] += 1; RULE_SP.setdefault((o, x), set()).update(d_ for d_ in range(7) if w[d_]); continue
             if rk_ in DAYFIX:                                 # 사람이 확인한 요일 (day-fixes.json): 자료보다 앞선다
                 g_ = collections.Counter(g for g in w if g).most_common(1)[0][0] if any(w) else '우'
