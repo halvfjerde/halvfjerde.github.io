@@ -35,6 +35,8 @@ for k_, v_ in (json.load(open(_OTF)) if os.path.exists(_OTF) else {}).items():  
                 for t in X['times']:
                     if t[1]: t[1] = '%d%02d' % divmod((m_(t[0]) + v_['dur']) % 1440, 60)
         O['dests'] = [X for X in O['dests'] if X.get('times')]
+_CNT0 = {(O['from'], X['to']): ([sum(1 for t in X['times'] if t[2][d_]) for d_ in range(7)], sum(1 for t in X['times'] if '시' in t[3:]), len(X['times']),
+                                 X.get('inote', ''), X.get('fare'), X.get('dur')) for O in b['origins'] for X in O['dests'] if X.get('times')}      # 검증 목록용 (DUMP_COUNTS)
 P = {}                                                   # (A, D) → 소요·요금·{발 분: 요일 칸}
 for O in b['origins']:
     for X in O['dests']:
@@ -1455,3 +1457,25 @@ if os.environ.get('DUMP_SPANS'):                       # 데이터 찾기용: �
         for t in v['t']:
             if (A, t, D) not in cov_: endn_[(A, D)] += 1
     json.dump({'spans': [[a, d, n] for (a, d), n in sp_.items()], 'pairs': [[a, d, len(v['t']), endn_[(a, d)]] for (a, d), v in P.items()]}, open(os.environ['DUMP_SPANS'], 'w'), ensure_ascii=False)
+if os.environ.get('DUMP_COUNTS'):                      # 검증용: 구간마다 요일별 편수와 실린 곳 (목록 덩이 / 노선표)
+    _tabs = collections.defaultdict(list)
+    for T in tables:
+        if id(T) not in title_of: continue
+        for p_ in T['pairs']: _tabs[p_].append(title_of[id(T)])
+        for c in T['cols']:
+            ks_ = [k for k in c if not k.startswith('_')]
+            for A in ks_:
+                if c[A][0] != 'd': continue
+                for D in ks_:
+                    if D != A and 0 < (c[D][1] - c[A][1]) % 1440 < 720: _tabs[(A, D)].append(title_of[id(T)])
+    _lst = {}
+    for O in b['origins']:
+        for X in O['dests']:
+            k_ = (O['from'], X['to'])
+            if X.get('times'): _lst[k_] = '목록'
+            elif X.get('see'): _lst[k_] = '목록 (%s 행에)' % nm(X['see'])
+            elif X.get('seeFrom'): _lst[k_] = '목록 (%s 발에)' % nm(X['seeFrom'])
+            elif X.get('seeTable'): _lst[k_] = '노선표 %s' % X['seeTable']
+    json.dump([[nm(A), nm(D), c[0], c[1], c[2], c[3], c[4], c[5], _lst.get((A, D), ''), sorted(set(_tabs.get((A, D), [])))] for (A, D), c in sorted(_CNT0.items())],
+              open(os.environ['DUMP_COUNTS'], 'w'), ensure_ascii=False)
+
