@@ -302,6 +302,8 @@ _jj = os.path.join(HERE2_, '..', 'suburb', 'jeonhwan.json')
 for q_ in (json.load(open(_jj)) if os.path.exists(_jj) else []):
     for a_ in _jhn(q_[0]):
         for d_ in _jhn(q_[-1]): JHE |= {(a_, d_), (d_, a_)}
+for k_, v_ in (json.load(open(_OTF)) if os.path.exists(_OTF) else {}).items():     # only-trips.json 「keepsub」: 사람이 시각표로 확인한 시외 구간은 동네 시외로 빼지 않는다
+    if v_.get('keepsub'): JHE.add(tuple(k_.split('|')))
 _keepJ = lambda x: (x[0], x[2]) in JHE
 JDROP = set()
 for tr in trips:
@@ -1371,7 +1373,8 @@ for O in b['origins']:
             continue
         cols_.sort(key=lambda c: c[2])
         X['mid'] = [[c[0], c[1]] for c in cols_]
-        X['mt'] = [[(_hm4(m_(t[0]) + c[2]) if (c[3] is None or c[3] in t[3:]) else '') for c in cols_] for t in X['times']]
+        _exp_ = {t[0] for t in X['times'] if '시' not in t[3:]}          # 같은 시각의 고속이 있는 시외(dup)는 그 고속의 경유를 물려받지 않는다
+        X['mt'] = [[(_hm4(m_(t[0]) + c[2]) if ((c[3] is None or c[3] in t[3:]) and not ('시' in t[3:] and t[0] in _exp_)) else '') for c in cols_] for t in X['times']]
         for t in X['times']:
             for mk in colmk:
                 while mk in t: t.remove(mk)
