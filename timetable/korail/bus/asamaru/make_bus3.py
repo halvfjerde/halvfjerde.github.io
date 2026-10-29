@@ -112,6 +112,7 @@ for d in days:
         if o != x: PD[(o, x, mins(r['depPlandTime']))].setdefault(d, r.get('gradeNm', ''))
 _RG = os.path.join(HERE_, 'regular-days.json')
 _rg = json.load(open(_RG)) if os.path.exists(_RG) else {}
+_DF = os.path.join(HERE_, 'day-fixes.json'); DAYFIX = json.load(open(_DF)) if os.path.exists(_DF) else {}
 REG_T, REG_NOTE, REG_N = _rg.get('trips', {}), _rg.get('notes', {}), collections.Counter()
 origins = []
 nvar = 0
@@ -159,6 +160,9 @@ for o in sorted(T):
                 w2_ = [(('◆' if gvar else rd_[d_]) if rd_[d_] else 0) for d_ in range(7)]
                 if w2_ != w: REG_N['요일・등급 고침'] += 1
                 w = w2_
+            if rk_ in DAYFIX:                                 # 사람이 확인한 요일 (day-fixes.json): 자료보다 앞선다
+                g_ = collections.Counter(g for g in w if g).most_common(1)[0][0] if any(w) else '우'
+                w = [(w[d_] or g_) if WD[d_] in DAYFIX[rk_]['days'] else 0 for d_ in range(7)]; REG_N['사람이 정한 요일'] += 1
             times.append([hm(t), hm(t + dur), w] + (['시'] if (o, x, t) in SUBT else []))      # 넷째 칸 「시」: 시외버스로 팔리는 편
             if gvar: var_t.append(t)
         # 1분 차이로 붙은 두 편(17:00·17:01 따위)은 한 편으로: 뒤의 것은 TAGO 의 겹친 편(증차·자료 잘못)으로 보고 요일을 앞 편에 합친다.
