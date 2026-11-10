@@ -1,9 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko" data-lang="ko">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>삼쩌모</title>
+  <script>
+    (function () {
+      var l = null;
+      try { l = new URLSearchParams(location.search).get('lang'); } catch (e) {}
+      if (!l) { try { l = localStorage.getItem('halv-lang'); } catch (e) {} }
+      if (!l) l = (navigator.language || '').slice(0, 2) === 'ja' ? 'ja' : 'ko';
+      if (l === 'ja' || l === 'ko') { document.documentElement.dataset.lang = l; document.documentElement.lang = l; }
+    })();
+  </script>
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-jp.min.css" />
 
   <style>
@@ -515,141 +524,311 @@
          font-size: clamp(2.5rem, 7vw, 3.2rem);
       }
 
+
+/* ── 언어 전환 ── */
+html[data-lang="ko"] [data-l="ja"],
+html[data-lang="ja"] [data-l="ko"] { display: none !important; }
+/* 일본어는 띄어쓰기가 없으므로 keep-all 을 쓰면 줄이 바뀌지 않는다 */
+html[data-lang="ja"] p,
+html[data-lang="ja"] .entry-desc { word-break: normal; line-break: strict; }
+
+.lang-toggle {
+  position: fixed;
+  top: 16px;
+  right: clamp(10px, 2.5vw, 28px);
+  z-index: 210;
+  appearance: none;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #e7e7e7;
+  border-radius: 999px;
+  padding: 3px 11px;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.lang-toggle:hover { color: var(--halv); border-color: var(--halv); }
+.lang-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── 연락하기 아래의 안내 ── */
+.more-hint {
+  display: inline-block;
+  margin-top: 1.6rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+.more-hint:hover { color: var(--halv); }
+
+/* ── 아래로 이어지는 자세한 내용 ── */
+.detail {
+  width: 80%;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 6rem 0 5rem;
+}
+.detail-section { margin-bottom: 4.5rem; scroll-margin-top: 2rem; }
+.detail-section > h2 {
+  font-size: clamp(1.9rem, 4vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.1em;
+  margin-bottom: 0.8rem;
+}
+.detail-section > p { margin: 0 0 0.5rem; }
+.detail-group { margin-top: 1.8rem; }
+.detail-group > h3 { margin: 0 0 0.5rem; }
+
+.entry-list { border-top: 1px solid #e7e7e7; }
+.entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 18px;
+  column-gap: 12px;
+  align-items: baseline;
+  padding: 11px 1px;
+  border-bottom: 1px solid #e7e7e7;
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 0.18s ease, padding-left 0.18s ease;
+}
+a.entry::after {
+  content: "↗";
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  color: #a3a3a3;
+  font-size: 0.92rem;
+  line-height: 1;
+  transition: color 0.18s ease, transform 0.18s ease;
+}
+a.entry:hover {
+  padding-left: 6px;
+  background: linear-gradient(to right, rgba(129, 177, 31, 0.10), rgba(129, 177, 31, 0));
+}
+a.entry:hover::after { color: var(--halv); transform: translate(2px, -2px); }
+a.entry:hover .entry-title { color: var(--halv); }
+a.entry:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.entry-title {
+  grid-column: 1;
+  color: var(--fg);
+  font-size: clamp(0.95rem, 2vw, 1rem);
+  font-weight: 700;
+  line-height: 1.35em;
+  transition: color 0.18s ease;
+}
+.entry-title small { color: var(--muted); font-weight: 600; }
+.entry-period {
+  grid-column: 2;
+  grid-row: 1;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.entry-desc {
+  grid-column: 1 / 3;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  line-height: 1.45em;
+  letter-spacing: -0.01em;
+  word-break: keep-all;
+}
+.entry-sub { padding-left: 1.1rem; }
+.entry-sub .entry-title::before { content: "└ "; color: #c4c4c7; font-weight: 500; }
+
+.org-role { color: var(--fg); font-weight: 600; }
+
+.swatch {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: 3px;
+  margin-right: 0.3em;
+  vertical-align: -0.05em;
+}
+
+.detail-footer {
+  padding-top: 1.5rem;
+  border-top: 1px solid #e7e7e7;
+}
+.detail-footer p { font-size: 0.85rem; margin: 0 0 0.3rem; }
+.detail-footer a { color: var(--fg); font-weight: 600; text-decoration: none; }
+.detail-footer a:hover { color: var(--halv); }
+
+@media (max-width: 820px) {
+  .detail { padding-right: 24px; }
+}
+@media (max-width: 600px) {
+  .detail { width: auto; margin: 0 16px; padding-right: 22px; }
+  .entry { grid-template-columns: minmax(0, 1fr) auto 16px; padding: 12px 4px 12px 0; }
+  .lang-toggle { top: 12px; right: 10px; }
+}
+
 </style>
 </head>
 
 <body>
 
+  <button type="button" class="lang-toggle" id="langToggle" aria-label="언어 바꾸기 / 言語の切り替え"><span data-l="ko">日本語</span><span data-l="ja">한국어</span></button>
+
   <nav class="side-nav" id="sideNav" aria-label="섹션 바로가기"></nav>
 
   <div class="scroll-container">
     <div class="sticky-wrapper">
-      
+
       <div class="content-layer" id="step-1">
-        <h1 class="page-title">안녕하세요! 👋<br><span class="text-slider">
+        <h1 class="page-title"><span data-l="ko">안녕하세요!</span><span data-l="ja">こんにちは！</span> 👋<br><span class="text-slider">
       <span class="text-track" id="name-track">
-        <span class="slide-item">저는 <span class="main-text">삼쩌모</span></span>
+        <span class="slide-item"><span data-l="ko">저는 <span class="main-text">삼쩌모</span></span><span data-l="ja">私は<span class="main-text">和泉流希</span></span></span>
         <span class="main-text slide-item">halvfjerde</span>
-        <span class="slide-item">저는 <span class="main-text">송지후</span></span>
+        <span class="slide-item"><span data-l="ko">저는 <span class="main-text">송지후</span></span><span data-l="ja">私は<span class="main-text">삼쩌모</span></span></span>
       </span>
-    </span>입니다!</h1>
-        <h3><span style="white-space: nowrap;"><span class="accent-text">넓고 깊게</span>를 추구하다.</span></h3>
+    </span><span data-l="ko">입니다!</span><span data-l="ja">です！</span></h1>
+        <h3 data-l="ko"><span style="white-space: nowrap;"><span class="accent-text">넓고 깊게</span>를 추구하다.</span></h3>
+        <h3 data-l="ja"><span style="white-space: nowrap;"><span class="accent-text">広く深く</span>を求めて。</span></h3>
       </div>
 
        <div class="content-layer" id="step-2">
-        <h1>저에 대하여</h1>
-        <p class="personal-info"><span class="accent-text list">출생</span> 2010년 4월 3일<br>
+        <h1><span data-l="ko">저에 대하여</span><span data-l="ja">私について</span></h1>
+        <p class="personal-info" data-l="ko"><span class="accent-text list">출생</span> 2010년 4월 3일<br>
             <span class="accent-text list">국적</span> 대한민국<br>
             <span class="accent-text list">성별·지향</span> 남성, 범성애자<br>
             <span class="accent-text list">언어</span> 한국어, 영어, 일본어, 관화<br>
             <span class="accent-text list">신체</span> 171 cm, 45 kg</p>
-        <p>현재 경기도의 한 외국어고등학교에 재학 중인 학생입니다. 창작과 언어, 개발 등 후술할 여러 분야에 관심을 두고 활동하고 있습니다.</p>
-        <p>본명은 <span class="accent-text">송지후</span>이며, 영어로는 <span class="accent-text">Owen</span><small>(오웬)</small>, 일본어로는 <span class="accent-text">和泉流希</span><small>(이즈미 루키)</small>라는 이름을 사용하고 있습니다. 한편 유천<small>(流泉)</small>이라는 호도 사용하고 있습니다.
-        <p>한편 온라인에서 부르실 때는 닉네임 ‘쩌모’나 ‘<span class="accent-text">삼쩌모</span>’라고 부르시면 됩니다!</p>
+        <p class="personal-info" data-l="ja"><span class="accent-text list">生まれ</span> 2010年4月3日<br>
+            <span class="accent-text list">国籍</span> 大韓民国<br>
+            <span class="accent-text list">性別・指向</span> 男性、汎性愛者<br>
+            <span class="accent-text list">言語</span> 韓国語、英語、日本語、中国語（官話）<br>
+            <span class="accent-text list">身体</span> 171 cm、45 kg</p>
+        <p data-l="ko">현재 경기도의 한 외국어고등학교에 재학 중인 학생입니다. 창작과 언어, 개발 등 후술할 여러 분야에 관심을 두고 활동하고 있습니다.</p>
+        <p data-l="ja">いまは京畿道のとある外国語高校に通う学生です。創作や言語、開発など、このあと紹介するいろいろな分野に関心を持って活動しています。</p>
+        <p data-l="ko">본명은 <span class="accent-text">송지후</span>이며, 영어로는 <span class="accent-text">Owen</span><small>(오웬)</small>, 일본어로는 <span class="accent-text">和泉流希</span><small>(이즈미 루키)</small>라는 이름을 사용하고 있습니다. 한편 유천<small>(流泉)</small>이라는 호도 사용하고 있습니다.</p>
+        <p data-l="ja">日本語では<span class="accent-text">和泉流希</span><small>（いずみ るき）</small>という名前を使っています。本名は<span class="accent-text">송지후</span><small>（ソン・ジフ）</small>で、英語では<span class="accent-text">Owen</span>と名乗っています。また、流泉<small>（ユチョン）</small>という号もあります。</p>
+        <p data-l="ko">한편 온라인에서 부르실 때는 닉네임 ‘쩌모’나 ‘<span class="accent-text">삼쩌모</span>’라고 부르시면 됩니다!</p>
+        <p data-l="ja">オンラインでは、ニックネームの「쩌모<small>（チョモ）</small>」や「<span class="accent-text">삼쩌모</span><small>（サムチョモ）</small>」で呼んでください！</p>
        </div>
 
       <div class="content-layer" id="step-3">
-        <h1>관심을 두는 것</h1>
-        <p><span class="accent-text">언어학</span> /
+        <h1><span data-l="ko">관심을 두는 것</span><span data-l="ja">関心のあること</span></h1>
+        <p data-l="ko"><span class="accent-text">언어학</span> /
             <span class="accent-text">도시학</span> / <span class="accent-text">사회학</span> / <span class="accent-text">수학</span> /
             <span class="accent-text">지구과학</span> ...</p>
-        <p>‘넓고 깊게’를 추구합니다. 새로운 분야를 접하는 것도 좋아하고, 한 번 관심을 가진 것은 가능한 한 깊이 이해해 보고 싶어 해 배우는 과정 자체를 즐기는 편입니다.
-        
-        <p>학문적으로는 문리과, 사회, 공학에 걸쳐 여러 분야에 관심이 있습니다만 아직은 아주 많은 지식을 가지고 있는 것은 아닙니다.</p>
-        
-        <p><span class="accent-text">창작</span> / <span class="accent-text">프로그래밍</span> /
+        <p data-l="ja"><span class="accent-text">言語学</span> /
+            <span class="accent-text">都市学</span> / <span class="accent-text">社会学</span> / <span class="accent-text">数学</span> /
+            <span class="accent-text">地球科学</span> ...</p>
+        <p data-l="ko">‘넓고 깊게’를 추구합니다. 새로운 분야를 접하는 것도 좋아하고, 한 번 관심을 가진 것은 가능한 한 깊이 이해해 보고 싶어 해 배우는 과정 자체를 즐기는 편입니다.</p>
+        <p data-l="ja">「広く深く」を大事にしています。新しい分野に触れるのも好きですし、一度関心を持ったことはできるだけ深く理解したくなるので、学ぶ過程そのものを楽しむほうです。</p>
+
+        <p data-l="ko">학문적으로는 문리과, 사회, 공학에 걸쳐 여러 분야에 관심이 있습니다만 아직은 아주 많은 지식을 가지고 있는 것은 아닙니다.</p>
+        <p data-l="ja">学問では文理・社会・工学にまたがっていろいろな分野に関心がありますが、まだそれほど多くの知識があるわけではありません。</p>
+
+        <p data-l="ko"><span class="accent-text">창작</span> / <span class="accent-text">프로그래밍</span> /
         <span class="accent-text">디자인</span> / <span class="accent-text">사진</span> /
         <span class="accent-text">그림</span> / <span class="accent-text">만년필</span> / <span class="accent-text">마작</span> ...</p>
-        
-        <p>한편 여러 취미가 있습니다. 오래 갈 취미는 아주 오래 가고, 금방 사라질 취미는 며칠도 안 가는 편이라, 이곳에는 꽤나 오래 가고 있는 취미를 적어두었습니다.</p>
+        <p data-l="ja"><span class="accent-text">創作</span> / <span class="accent-text">プログラミング</span> /
+        <span class="accent-text">デザイン</span> / <span class="accent-text">写真</span> /
+        <span class="accent-text">絵</span> / <span class="accent-text">万年筆</span> / <span class="accent-text">麻雀</span> ...</p>
+
+        <p data-l="ko">한편 여러 취미가 있습니다. 오래 갈 취미는 아주 오래 가고, 금방 사라질 취미는 며칠도 안 가는 편이라, 이곳에는 꽤나 오래 가고 있는 취미를 적어두었습니다.</p>
+        <p data-l="ja">趣味もいろいろあります。続く趣味はとても長く続き、すぐ飽きる趣味は数日ももたないほうなので、ここにはかなり長く続いている趣味を書いておきました。</p>
 
       </div>
 
   <div class="content-layer" id="step-4">
-  <h1>제작한 것</h1>
+  <h1><span data-l="ko">제작한 것</span><span data-l="ja">作ったもの</span></h1>
   <div class="project-grid">
     <a href="https://w.halv.kr/" target="_blank" class="project-card">
       <img src="images/icons/wiki.png" alt="icon" class="project-icon">
       <div class="project-info">
-        <span class="project-title">쩌모위키</span>
-        <span class="project-desc">소규모 창작 위키</span>
+        <span class="project-title"><span data-l="ko">쩌모위키</span><span data-l="ja">チョモウィキ <small>쩌모위키</small></span></span>
+        <span class="project-desc"><span data-l="ko">소규모 창작 위키</span><span data-l="ja">小規模な創作ウィキ</span></span>
       </div>
     </a>
     <a href="https://w.halv.kr/Vierthalb" target="_blank" class="project-card">
       <img src="images/icons/vierthalb.png" alt="icon" class="project-icon">
       <div class="project-info">
         <span class="project-title">Vierthalb <small>피어탈브</small></span>
-        <span class="project-desc">미디어위키 테마</span>
+        <span class="project-desc"><span data-l="ko">미디어위키 테마</span><span data-l="ja">MediaWikiのテーマ</span></span>
       </div>
     </a>
     <a href="https://c.halv.kr/" target="_blank" class="project-card">
       <img src="images/icons/curlybrace.png" alt="icon" class="project-icon">
       <div class="project-info">
         <span class="project-title">CurlyBrace <small>컬리브레이스</small></span>
-        <span class="project-desc">웹 마크다운·LaTeX 편집기</span>
-        </span>
+        <span class="project-desc"><span data-l="ko">웹 마크다운·LaTeX 편집기</span><span data-l="ja">ウェブのMarkdown・LaTeXエディタ</span></span>
       </div>
     </a>
     <a href="https://b.halv.kr" target="_blank" class="project-card">
       <div class="project-icon">💬</div>
       <div class="project-info">
         <span class="project-title">blóγue <small>블로구</small></span>
-        <span class="project-desc">개인 블로그</span>
+        <span class="project-desc"><span data-l="ko">개인 블로그</span><span data-l="ja">個人ブログ</span></span>
       </div>
     </a>
     <a href="https://d.halv.kr" target="_blank" class="project-card">
       <div class="project-icon">📗</div>
       <div class="project-info">
-        <span class="project-title">인공어 사전</span>
-        <span class="project-desc">개인 인공어 사전</span>
+        <span class="project-title"><span data-l="ko">인공어 사전</span><span data-l="ja">人工言語辞典</span></span>
+        <span class="project-desc"><span data-l="ko">개인 인공어 사전</span><span data-l="ja">個人の人工言語辞典</span></span>
       </div>
     </a>
   </div>
 </div>
 
       <div class="content-layer" id="step-5">
-  <h1>창작하는 것</h1>
+  <h1><span data-l="ko">창작하는 것</span><span data-l="ja">創作しているもの</span></h1>
   <div class="project-grid">
     <a href="https://w.halv.kr/차샤" target="_blank" class="project-card">
       <div class="project-icon">🀄️</div>
       <div class="project-info">
         <span class="project-title">trácaic <small>차샤</small></span>
-        <span class="project-desc">인공어 #8 (2022~)</span>
+        <span class="project-desc"><span data-l="ko">인공어 #8 (2022~)</span><span data-l="ja">人工言語 #8（2022〜）</span></span>
       </div>
     </a>
     <a href="https://w.halv.kr/맑은 빛으로" target="_blank" class="project-card">
       <img src="images/icons/tcl.png" alt="icon" class="project-icon">
       <div class="project-info">
         <span class="project-title">맑은 빛으로</span>
-        <span class="project-desc">합작 가상도시 세계 (2024~)</span>
+        <span class="project-desc"><span data-l="ko">합작 가상도시 세계 (2024~)</span><span data-l="ja">合作の架空都市世界（2024〜）</span></span>
       </div>
     </a>
     <a href="https://w.halv.kr/회밀어" target="_blank" class="project-card">
       <div class="project-icon">⭐️</div>
       <div class="project-info">
         <span class="project-title">Ӫмирэся <small>회밀어</small></span>
-        <span class="project-desc">인공어 #17 (2026~)</span>
+        <span class="project-desc"><span data-l="ko">인공어 #17 (2026~)</span><span data-l="ja">人工言語 #17（2026〜）</span></span>
       </div>
     </a>
   </div>
 </div>
 
       <div class="content-layer" id="step-6">
-  <h1>다른 모습</h1>
+  <h1><span data-l="ko">다른 모습</span><span data-l="ja">別の顔</span></h1>
   <div class="project-grid">
     <a href="https://j.halv.kr/" target="_blank" class="project-card">
       <div class="project-icon">🍡</div>
       <div class="project-info">
-        <span class="project-title">JUN: 純 <small>쥰</small></span>
-        <span class="project-desc">시라타마 고양이 콘셉트 퍼소나</span>
+        <span class="project-title">JUN: 純 <small data-l="ko">쥰</small><small data-l="ja">じゅん</small></span>
+        <span class="project-desc"><span data-l="ko">시라타마 고양이 콘셉트 퍼소나</span><span data-l="ja">白玉ねこがコンセプトのペルソナ</span></span>
       </div>
     </a>
   </div>
 </div>
 
       <div class="content-layer" id="step-8">
-        <h1>연락하기</h1>
-        <p style="margin-bottom: 1rem;">상황에 따라 답장이 늦을 수 있습니다.</p>
+        <h1><span data-l="ko">연락하기</span><span data-l="ja">連絡する</span></h1>
+        <p data-l="ko">재밌어 보이는 게 있었다면 부담 없이 말을 걸어 주세요!</p>
+        <p data-l="ja">気になるものがあったら、気軽に話しかけてください！</p>
+        <p style="margin-bottom: 1rem;"><span data-l="ko">상황에 따라 답장이 늦을 수 있습니다.</span><span data-l="ja">状況によっては返信が遅くなることがあります。</span></p>
 <div class="social-links">
   <div class="social-items">
     <a href="https://x.com/halvfjerde/" class="link-twitter social-links-service">Twitter</a>
@@ -671,12 +850,281 @@
     <a href="https://github.com/halvfjerde/" class="social-links-id">halvfjerde</a>
   </div>
 </div>
+        <a href="#more" class="more-hint"><span data-l="ko">↓ 더 알아보기</span><span data-l="ja">↓ もっと詳しく</span></a>
       </div>
 
     </div>
   </div>
 
+  <main class="detail" id="more">
+
+    <!-- 소속 -->
+    <section class="detail-section" id="sec-org">
+      <h2><span data-l="ko">소속</span><span data-l="ja">所属</span></h2>
+      <div class="entry-list">
+        <a href="https://l.halv.kr/" target="_blank" class="entry">
+          <span class="entry-title"><span data-l="ko">유천서적편집소</span><span data-l="ja">流泉書籍編集所 <small>유천서적편집소</small></span></span>
+          <span class="entry-period">2026. 11. ~</span>
+          <span class="entry-desc">
+            <span data-l="ko"><span class="org-role">대표 · 발행인 · 편집인</span><br>2026년 11월에 세운 작은 출판사입니다. 철도를 중심으로 항공·해운·고속버스까지 한 권에 담은 『월간휴대시각표』를 매달 펴내고 있으며, 앞으로는 시각표뿐만 아니라 여러 단행본도 낼 생각입니다.</span>
+            <span data-l="ja"><span class="org-role">代表・発行人・編集人</span><br>2026年11月に立ち上げた小さな出版社です。鉄道を中心に、航空・海運・高速バスまで一冊にまとめた『月刊携帯時刻表』（월간휴대시각표）を毎月発行しています。これからは時刻表だけでなく、いろいろな単行本も出していくつもりです。</span>
+          </span>
+        </a>
+        <a href="https://w.halv.kr/쩌모위키" target="_blank" class="entry">
+          <span class="entry-title"><span data-l="ko">쩌모위키</span><span data-l="ja">チョモウィキ <small>쩌모위키</small></span></span>
+          <span class="entry-period">2025. 1. ~</span>
+          <span class="entry-desc">
+            <span data-l="ko"><span class="org-role">설립자 · 사무관</span><br>가상국가·가상도시·인공어 같은 창작물을 연재하기 좋은 환경을 만들기 위해 세운 소규모 창작 위키입니다. 2만 건이 넘는 편집을 하며 문서뿐만 아니라 틀과 스킨까지 직접 만들고 있습니다.</span>
+            <span data-l="ja"><span class="org-role">設立者・ビューロクラット</span><br>架空国家・架空都市・人工言語などの創作を連載しやすい環境を作るために立ち上げた、小規模な創作ウィキです。2万件を超える編集をしながら、記事だけでなくテンプレートやスキンも自分で作っています。</span>
+          </span>
+        </a>
+        <div class="entry">
+          <span class="entry-title"><span data-l="ko">녹색당</span><span data-l="ja">緑の党 <small>녹색당</small></span></span>
+          <span class="entry-desc"><span data-l="ko">소속 정당</span><span data-l="ja">所属政党</span></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 활동 -->
+    <section class="detail-section" id="sec-act">
+      <h2><span data-l="ko">활동</span><span data-l="ja">活動</span></h2>
+      <p data-l="ko">하나를 하면 다른 하나를 쉬는 것이 아니라 여러 가지를 겹쳐서 하고 있어, 시기 대신 갈래로 나누어 적었습니다.</p>
+      <p data-l="ja">ひとつをやるからといって別のことを休むわけではなく、いくつも重ねてやっているので、時期ではなく分野ごとに分けて書きました。</p>
+
+      <div class="detail-group">
+        <h3><span data-l="ko">세계</span><span data-l="ja">世界</span></h3>
+        <div class="entry-list">
+          <a href="https://w.halv.kr/바샤" target="_blank" class="entry">
+            <span class="entry-title">바샤</span>
+            <span class="entry-period">2026. 3. ~</span>
+            <span class="entry-desc"><span data-l="ko">가상세계 · 연재</span><span data-l="ja">架空世界・連載</span></span>
+          </a>
+          <a href="https://w.halv.kr/맑은 빛으로" target="_blank" class="entry">
+            <span class="entry-title">맑은 빛으로</span>
+            <span class="entry-period">2025. 1. ~</span>
+            <span class="entry-desc"><span data-l="ko">합작 가상도시 · 연재와 지원</span><span data-l="ja">合作の架空都市・連載と支援</span></span>
+          </a>
+          <a href="https://w.halv.kr/맑은 빛으로#Project_晴光" target="_blank" class="entry entry-sub">
+            <span class="entry-title">Project 晴光</span>
+            <span class="entry-period">2025. 1. ~</span>
+            <span class="entry-desc"><span data-l="ko">연재</span><span data-l="ja">連載</span></span>
+          </a>
+          <a href="https://w.halv.kr/Project 松雁" target="_blank" class="entry entry-sub">
+            <span class="entry-title">Project 松雁</span>
+            <span class="entry-period">2025. 1. ~</span>
+            <span class="entry-desc"><span data-l="ko">지원</span><span data-l="ja">支援</span></span>
+          </a>
+          <a href="https://w.halv.kr/대력계" target="_blank" class="entry">
+            <span class="entry-title">대력계</span>
+            <span class="entry-period">2025. 6. ~</span>
+            <span class="entry-desc"><span data-l="ko">대체역사 · 연재</span><span data-l="ja">代替歴史・連載</span></span>
+          </a>
+          <a href="https://w.halv.kr/금빛 독수리 속 황혼" target="_blank" class="entry entry-sub">
+            <span class="entry-title">금빛 독수리 속 황혼</span>
+            <span class="entry-period">2025. 12. ~</span>
+            <span class="entry-desc"><span data-l="ko">중편 · 러일전쟁에서 러시아가 이겼다면?</span><span data-l="ja">中編・日露戦争でロシアが勝っていたら？</span></span>
+          </a>
+          <a href="https://w.halv.kr/雪原の彼方" target="_blank" class="entry entry-sub">
+            <span class="entry-title">雪原の彼方</span>
+            <span class="entry-period">2025. 6. ~</span>
+            <span class="entry-desc"><span data-l="ko">중단편</span><span data-l="ja">中短編</span></span>
+          </a>
+          <a href="https://w.halv.kr/하" target="_blank" class="entry">
+            <span class="entry-title">하</span>
+            <span class="entry-period">2026. 2. ~</span>
+            <span class="entry-desc"><span data-l="ko">가상국가 · 기여</span><span data-l="ja">架空国家・寄稿</span></span>
+          </a>
+          <a href="https://w.halv.kr/내란세계" target="_blank" class="entry">
+            <span class="entry-title">내란세계</span>
+            <span class="entry-period">2025. 9. ~</span>
+            <span class="entry-desc"><span data-l="ko">정치물 · 지원 (보조 내용과 틀 제작)</span><span data-l="ja">政治もの・支援（補助的な記事とテンプレート作り）</span></span>
+          </a>
+        </div>
+      </div>
+
+      <div class="detail-group">
+        <h3><span data-l="ko">인공어</span><span data-l="ja">人工言語</span></h3>
+        <div class="entry-list">
+          <a href="https://w.halv.kr/차샤" target="_blank" class="entry">
+            <span class="entry-title">trácaic <small>차샤</small></span>
+            <span class="entry-period">#8 · 2022. ~</span>
+            <span class="entry-desc"><span data-l="ko">차샤-하제크 문화의 근간이 되는 언어. 사전과 블로그 강좌도 함께 만들고 있습니다.</span><span data-l="ja">차샤-하제크文化の根幹となる言語。辞典やブログの講座も一緒に作っています。</span></span>
+          </a>
+          <a href="https://w.halv.kr/동안어" target="_blank" class="entry">
+            <span class="entry-title">同安語 <small>동안어</small></span>
+            <span class="entry-period">#15</span>
+            <span class="entry-desc"><span data-l="ko">동안도에서 쓰이는 한국어족 언어</span><span data-l="ja">동안도で話される韓国語族の言語</span></span>
+          </a>
+          <a href="https://w.halv.kr/하다어" target="_blank" class="entry">
+            <span class="entry-title">하다어</span>
+            <span class="entry-period">#16</span>
+            <span class="entry-desc"><span data-l="ko">스치와 함께 만든 인공어</span><span data-l="ja">스치さんと一緒に作った人工言語</span></span>
+          </a>
+          <a href="https://w.halv.kr/회밀어" target="_blank" class="entry">
+            <span class="entry-title">Ӫмирэся <small>회밀어</small></span>
+            <span class="entry-period">#17 · 2026. ~</span>
+            <span class="entry-desc"><span data-l="ko">회밀의 공용어. 키릴 문자로 적습니다.</span><span data-l="ja">회밀の公用語。キリル文字で書きます。</span></span>
+          </a>
+        </div>
+      </div>
+
+      <div class="detail-group">
+        <h3><span data-l="ko">캐릭터</span><span data-l="ja">キャラクター</span></h3>
+        <div class="entry-list">
+          <a href="https://w.halv.kr/사용자:삼쩌모" target="_blank" class="entry">
+            <span class="entry-title">삼쩌모</span>
+            <span class="entry-desc"><span data-l="ko">본캐</span><span data-l="ja">メインのキャラクター</span></span>
+          </a>
+          <a href="https://w.halv.kr/JUN" target="_blank" class="entry">
+            <span class="entry-title">JUN: 純</span>
+            <span class="entry-desc"><span data-l="ko">시라타마 고양이 콘셉트 퍼소나</span><span data-l="ja">白玉ねこがコンセプトのペルソナ</span></span>
+          </a>
+          <a href="https://w.halv.kr/신유천" target="_blank" class="entry">
+            <span class="entry-title">신유천</span>
+            <span class="entry-desc"><span data-l="ko">바샤 세계 안에서 삼쩌모에 대응하는 오너 캐릭터</span><span data-l="ja">바샤の世界の中で삼쩌모にあたるオーナーキャラクター</span></span>
+          </a>
+          <a href="https://w.halv.kr/소세 (캐릭터)" target="_blank" class="entry">
+            <span class="entry-title">소세</span>
+            <span class="entry-desc"><span data-l="ko">세계관 없이 두루 쓰는 오너 캐릭터</span><span data-l="ja">世界観に属さず広く使っているオーナーキャラクター</span></span>
+          </a>
+        </div>
+      </div>
+
+      <div class="detail-group">
+        <h3><span data-l="ko">출판</span><span data-l="ja">出版</span></h3>
+        <div class="entry-list">
+          <a href="https://l.halv.kr/" target="_blank" class="entry">
+            <span class="entry-title"><span data-l="ko">월간휴대시각표</span><span data-l="ja">月刊携帯時刻表 <small>월간휴대시각표</small></span></span>
+            <span class="entry-period">2026. 11. ~</span>
+            <span class="entry-desc"><span data-l="ko">유천서적편집소에서 펴내는 월간 시각표</span><span data-l="ja">流泉書籍編集所が発行する月刊の時刻表</span></span>
+          </a>
+        </div>
+      </div>
+
+      <div class="detail-group">
+        <h3><span data-l="ko">웹 · 게임</span><span data-l="ja">ウェブ・ゲーム</span></h3>
+        <div class="entry-list">
+          <a href="https://w.halv.kr/Vierthalb" target="_blank" class="entry">
+            <span class="entry-title">Vierthalb</span>
+            <span class="entry-desc"><span data-l="ko">쩌모위키에서 쓰고 있는 미디어위키 스킨</span><span data-l="ja">チョモウィキで使っているMediaWikiのスキン</span></span>
+          </a>
+          <a href="https://c.halv.kr/" target="_blank" class="entry">
+            <span class="entry-title">CurlyBrace</span>
+            <span class="entry-desc"><span data-l="ko">웹에서 쓰는 마크다운·LaTeX 편집기</span><span data-l="ja">ウェブで使うMarkdown・LaTeXエディタ</span></span>
+          </a>
+          <a href="https://b.halv.kr" target="_blank" class="entry">
+            <span class="entry-title">blóγue</span>
+            <span class="entry-desc"><span data-l="ko">국한문혼용과 한글전용을 오갈 수 있는 개인 블로그</span><span data-l="ja">国漢文混用とハングル専用を切り替えられる個人ブログ</span></span>
+          </a>
+          <a href="https://d.halv.kr" target="_blank" class="entry">
+            <span class="entry-title"><span data-l="ko">인공어 사전</span><span data-l="ja">人工言語辞典</span></span>
+            <span class="entry-desc"><span data-l="ko">차샤 등 인공어의 온라인 사전</span><span data-l="ja">차샤などの人工言語のオンライン辞典</span></span>
+          </a>
+          <a href="https://g.halv.kr/ilodici" target="_blank" class="entry">
+            <span class="entry-title">ilódici <small>일로디스</small></span>
+            <span class="entry-desc"><span data-l="ko">차샤-하제크 문화의 카드 게임. 웹에서 CPU와 겨룰 수 있습니다.</span><span data-l="ja">차샤-하제크文化のカードゲーム。ウェブでCPUと対戦できます。</span></span>
+          </a>
+        </div>
+      </div>
+
+      <div class="detail-group">
+        <h3><span data-l="ko">설계</span><span data-l="ja">設計</span></h3>
+        <div class="entry-list">
+          <a href="https://w.halv.kr/카르니셀레체" target="_blank" class="entry">
+            <span class="entry-title">cuarniceléte <small>카르니셀레체</small></span>
+            <span class="entry-desc"><span data-l="ko">36키 무선 기계식 키보드. 이름은 차샤로 크립톤(원자번호 36)이라는 뜻입니다.</span><span data-l="ja">36キーのワイヤレスメカニカルキーボード。名前は차샤で「クリプトン」（原子番号36）という意味です。</span></span>
+          </a>
+          <a href="https://w.halv.kr/イズミ30×3" target="_blank" class="entry">
+            <span class="entry-title">イズミ30×3</span>
+            <span class="entry-desc"><span data-l="ko">문자 키 30개로 일본어를 가나로 바로 치는 자판 배열</span><span data-l="ja">文字キー30個で日本語を仮名で直接入力するキー配列</span></span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- 어학 -->
+    <section class="detail-section" id="sec-lang">
+      <h2><span data-l="ko">어학</span><span data-l="ja">語学</span></h2>
+      <div class="entry-list">
+        <div class="entry">
+          <span class="entry-title"><span data-l="ko">한국어</span><span data-l="ja">韓国語</span></span>
+          <span class="entry-period">C2</span>
+          <span class="entry-desc"><span data-l="ko">모어</span><span data-l="ja">母語</span></span>
+        </div>
+        <div class="entry">
+          <span class="entry-title"><span data-l="ko">영어</span><span data-l="ja">英語</span></span>
+          <span class="entry-period">C1</span>
+          <span class="entry-desc"><span data-l="ko">TOEFL iBT 105점 · 발음과 표기는 영국식을 좋아합니다.</span><span data-l="ja">TOEFL iBT 105点・発音と綴りはイギリス式が好みです。</span></span>
+        </div>
+        <div class="entry">
+          <span class="entry-title"><span data-l="ko">중국어(관화)</span><span data-l="ja">中国語（官話）</span></span>
+          <span class="entry-period">B1</span>
+          <span class="entry-desc"><span data-l="ko">HSK 3급</span><span data-l="ja">HSK 3級</span></span>
+        </div>
+        <div class="entry">
+          <span class="entry-title"><span data-l="ko">일본어</span><span data-l="ja">日本語</span></span>
+          <span class="entry-period">A2</span>
+          <span class="entry-desc"><span data-l="ko">배우는 중</span><span data-l="ja">勉強中</span></span>
+        </div>
+      </div>
+      <p style="margin-top: 0.7rem; font-size: 0.8rem;"><span data-l="ko">공인 성적이 없는 언어는 스스로 가늠한 수준입니다.</span><span data-l="ja">公式な成績がない言語のレベルは自己評価です。</span></p>
+    </section>
+
+    <!-- 프로필 -->
+    <section class="detail-section" id="sec-prof">
+      <h2><span data-l="ko">프로필</span><span data-l="ja">プロフィール</span></h2>
+      <div class="entry-list">
+        <div class="entry">
+          <span class="entry-title"><span data-l="ko">이름</span><span data-l="ja">名前</span></span>
+          <span class="entry-desc"><span data-l="ko">송지후<small>(宋智厚)</small> · Owen Jihu Song · 和泉流希<small>(いずみ るき)</small></span><span data-l="ja">和泉流希<small>（いずみ るき）</small>・송지후<small>（宋智厚、ソン・ジフ）</small>・Owen Jihu Song</span></span>
+        </div>
+        <div class="entry">
+          <span class="entry-title"><span data-l="ko">닉네임</span><span data-l="ja">ニックネーム</span></span>
+          <span class="entry-desc"><span data-l="ko">삼쩌모 · 쩌모 · halvfjerde · 葉流泉<small>(はるいずみ)</small></span><span data-l="ja">삼쩌모<small>（サムチョモ）</small>・쩌모<small>（チョモ）</small>・halvfjerde・葉流泉<small>（はるいずみ）</small></span></span>
+        </div>
+        <div class="entry">
+          <span class="entry-title"><span data-l="ko">호</span><span data-l="ja">号</span></span>
+          <span class="entry-desc"><span data-l="ko">유천<small>(流泉)</small> — 흐르는 샘물처럼 맑고 진실되되, 과거에 갇히지 않고 멈추지 않는 삶을 살자는 뜻입니다.</span><span data-l="ja">流泉<small>（ユチョン）</small>— 流れる泉のように澄んで偽りなく、それでいて過去に囚われず止まらない人生を生きよう、という意味です。</span></span>
+        </div>
+        <div class="entry">
+          <span class="entry-title"><span data-l="ko">인공어 이름</span><span data-l="ja">人工言語での名前</span></span>
+          <span class="entry-desc">lýiteni tómoc <small data-l="ko">(차샤)</small><small data-l="ja">（차샤）</small> · Halvfërde Ütchön Çomo <small data-l="ko">(자소크)</small><small data-l="ja">（자소크）</small></span>
+        </div>
+        <div class="entry">
+          <span class="entry-title"><span data-l="ko">출생지</span><span data-l="ja">出身</span></span>
+          <span class="entry-desc"><span data-l="ko">경기도 성남시</span><span data-l="ja">京畿道 城南市</span></span>
+        </div>
+        <div class="entry">
+          <span class="entry-title"><span data-l="ko">상징색</span><span data-l="ja">象徴色</span></span>
+          <span class="entry-desc"><span class="swatch" style="background:#81B11F"></span><span data-l="ko">유록색</span><span data-l="ja">柳緑色</span> #81B11F · <span class="swatch" style="background:#00A99D"></span><span data-l="ko">암옥색</span><span data-l="ja">暗玉色</span> #00A99D</span>
+        </div>
+        <div class="entry">
+          <span class="entry-title"><span data-l="ko">활동 시작</span><span data-l="ja">活動のはじまり</span></span>
+          <span class="entry-desc"><span data-l="ko">트위터 2020년 · 제이위키 2024년 · 쩌모위키 2025년</span><span data-l="ja">Twitter 2020年・제이위키 2024年・チョモウィキ 2025年</span></span>
+        </div>
+      </div>
+    </section>
+
+    <footer class="detail-footer">
+      <p data-l="ko">더 자세한 이야기는 <a href="https://w.halv.kr/사용자:삼쩌모" target="_blank">쩌모위키의 사용자 문서</a>에 있습니다.</p>
+      <p data-l="ja">もっと詳しいことは<a href="https://w.halv.kr/葉流泉" target="_blank">チョモウィキのユーザーページ</a>にあります。</p>
+      <p>© 삼쩌모 halvfjerde</p>
+    </footer>
+
+  </main>
+
   <script>
+    /* ── 언어 ── */
+    const langToggle = document.getElementById('langToggle');
+    function setLang(lang, save) {
+      document.documentElement.dataset.lang = lang;
+      document.documentElement.lang = lang;
+      if (save) { try { localStorage.setItem('halv-lang', lang); } catch (e) {} }
+    }
+    langToggle.addEventListener('click', () => {
+      setLang(document.documentElement.dataset.lang === 'ja' ? 'ko' : 'ja', true);
+    });
+
     const track = document.getElementById('name-track');
   let currentIndex = 0;
 
@@ -688,45 +1136,55 @@
 
     const container = document.querySelector('.scroll-container');
     const steps = document.querySelectorAll('.content-layer');
+    const sections = document.querySelectorAll('.detail-section');
 
     const navLabels = {
-      'step-1': '인사',
-      'step-2': '소개',
-      'step-3': '관심',
-      'step-4': '제작',
-      'step-5': '창작',
-      'step-6': '활동',
-      'step-8': '연락'
+      'step-1': ['인사', '挨拶'],
+      'step-2': ['소개', '紹介'],
+      'step-3': ['관심', '関心'],
+      'step-4': ['제작', '制作'],
+      'step-5': ['창작', '創作'],
+      'step-6': ['모습', '別の顔'],
+      'step-8': ['연락', '連絡'],
+      'sec-org': ['소속', '所属'],
+      'sec-act': ['활동', '活動'],
+      'sec-lang': ['어학', '語学'],
+      'sec-prof': ['프로필', 'プロフィール']
     };
 
     const sideNav = document.getElementById('sideNav');
     const totalSteps = steps.length;
 
-    steps.forEach((step, index) => {
-      const label = navLabels[step.id] || `섹션 ${index + 1}`;
+    function addNavItem(id, onClick) {
+      const [ko, ja] = navLabels[id] || [id, id];
 
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'side-nav-item';
-      item.setAttribute('aria-label', label);
+      item.setAttribute('aria-label', ko + ' / ' + ja);
 
       const labelSpan = document.createElement('span');
       labelSpan.className = 'side-nav-label';
-      labelSpan.textContent = label;
+      labelSpan.innerHTML = '<span data-l="ko">' + ko + '</span><span data-l="ja">' + ja + '</span>';
 
       const dot = document.createElement('span');
       dot.className = 'side-nav-dot';
 
       item.appendChild(labelSpan);
       item.appendChild(dot);
+      item.addEventListener('click', onClick);
+      sideNav.appendChild(item);
+    }
 
-      item.addEventListener('click', () => {
+    steps.forEach((step, index) => {
+      addNavItem(step.id, () => {
         const height = container.offsetHeight - window.innerHeight;
         const targetProgress = (index + 0.5) / totalSteps;
         window.scrollTo({ top: targetProgress * height, behavior: 'smooth' });
       });
-
-      sideNav.appendChild(item);
+    });
+    sections.forEach((sec) => {
+      addNavItem(sec.id, () => sec.scrollIntoView({ behavior: 'smooth' }));
     });
 
     const navItems = document.querySelectorAll('.side-nav-item');
@@ -736,11 +1194,17 @@
       const height = container.offsetHeight - window.innerHeight;
       const progress = height > 0 ? scrollY / height : 0;
 
+      // 아래 내용 가운데 화면 위쪽 40% 선을 넘은 마지막 절
+      let activeSection = -1;
+      sections.forEach((sec, i) => {
+        if (sec.getBoundingClientRect().top <= window.innerHeight * 0.4) activeSection = i;
+      });
+
       steps.forEach((step, index) => {
         const start = index / totalSteps;
         const end = (index + 1) / totalSteps;
         const isLast = index === totalSteps - 1;
-        const isActive = progress >= start && (progress < end || (isLast && progress <= 1));
+        const isActive = progress >= start && (progress < end || isLast);
 
         if (isActive) {
           step.classList.add('active');
@@ -752,7 +1216,11 @@
           step.classList.remove('active', 'exit');
         }
 
-        navItems[index].classList.toggle('active', isActive);
+        navItems[index].classList.toggle('active', isActive && activeSection < 0);
+      });
+
+      sections.forEach((sec, i) => {
+        navItems[totalSteps + i].classList.toggle('active', i === activeSection);
       });
     }
 
