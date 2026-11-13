@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
   <title>삼쩌모</title>
   <script>
     (function () {
@@ -326,126 +327,6 @@
     padding-right: 6px;
 }
 
-      .side-nav {
-        position: fixed;
-        right: clamp(10px, 2.5vw, 28px);
-        top: 50%;
-        transform: translateY(-50%);
-        z-index: 200;
-
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 10px;
-      }
-
-      .side-nav-item {
-        appearance: none;
-        background: none;
-        border: none;
-        margin: 0;
-        padding: 4px;
-
-        display: flex;
-        align-items: center;
-        gap: 8px;
-
-        cursor: pointer;
-      }
-
-      .side-nav-label {
-        font-size: 0.78rem;
-        font-weight: 600;
-        color: var(--muted);
-        white-space: nowrap;
-
-        opacity: 0;
-        transform: translateX(4px);
-
-        transition:
-          opacity 0.25s ease,
-          transform 0.25s ease,
-          color 0.25s ease;
-      }
-
-      .side-nav-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-
-        background: var(--muted);
-        opacity: 0.32;
-        transform: scale(1);
-
-        transition:
-          opacity 0.25s ease,
-          background 0.25s ease,
-          transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-          box-shadow 0.25s ease;
-
-        flex-shrink: 0;
-      }
-
-      .side-nav-item:hover .side-nav-label {
-        opacity: 1;
-        transform: translateX(-5px);
-      }
-
-      .side-nav-item:hover .side-nav-dot {
-        background: var(--halv);
-        opacity: 0.75;
-      }
-
-      .side-nav-item.active .side-nav-label {
-        opacity: 1;
-        transform: translateX(-5px);
-        color: var(--fg);
-      }
-
-      .side-nav-item.active .side-nav-dot {
-        background: var(--halv);
-        opacity: 1;
-        transform: scale(1.35);
-        box-shadow: 0 0 0 3px #81b11f1f;
-      }
-
-      .side-nav-item:focus-visible .side-nav-dot {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
-      }
-
-@media (max-width: 600px) {
-  .side-nav {
-    right: 8px;
-    gap: 12px;
-  }
-
-  .side-nav-label {
-    display: none;
-  }
-
-  .side-nav-item {
-    padding: 5px;
-  }
-
-  .side-nav-dot {
-    width: 6px;
-    height: 6px;
-  }
-
-  .side-nav-item.active .side-nav-dot {
-    transform: scale(1.5);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .side-nav-dot,
-  .side-nav-label {
-    transition: none;
-  }
-}
-
-
 @media (max-width: 600px) {
   .project-grid {
     grid-template-columns: 1fr;
@@ -591,6 +472,186 @@ div.project-card:hover .project-title { color: var(--fg); }
   .content-layer .project-grid { width: 100%; max-width: none; }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   2026-11 다듬기. 짜임(장면·스크롤)은 그대로 두고 글자·색·옆 내비를 손본다.
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  --text: #4b4b50;          /* 본문: 예전 회색(#86868b)보다 짙게 */
+  --rule: #e6e6e8;
+  --tile: #f5f5f7;
+  --halv-ink: #6c9616;      /* 흰 바탕 위 글자로 쓸 때의 유록 */
+  --halv-wash: rgba(129, 177, 31, 0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161617;
+    --fg: #f5f5f7;
+    --text: #b9b9bf;
+    --muted: #86868b;
+    --rule: #303033;
+    --tile: #242426;
+    --halv: #97c93a;
+    --halv-ink: #a5d44a;
+    --halv-wash: rgba(151, 201, 58, 0.14);
+    --accent: #4aa3ff;
+  }
+}
+
+/* ── 글자 ── */
+body { font-feature-settings: "ss05", "tnum" 0; }
+h1 {
+  font-size: clamp(2rem, 4.2vw, 2.6rem);
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin-bottom: 1.1rem;
+  text-wrap: balance;
+}
+.page-title {
+  font-size: clamp(2.5rem, 6.4vw, 4rem);
+  line-height: 1.12;
+  margin-bottom: 1.2rem;
+}
+h3 { font-size: clamp(1.05rem, 2.1vw, 1.2rem); margin: 0; }
+p {
+  color: var(--text);
+  font-weight: 450;
+  line-height: 1.62;
+  margin: 0 0 0.7rem;
+  max-width: 34em;
+  text-wrap: pretty;
+}
+p small, .facts small, .project-title small { color: var(--muted); font-weight: 500; }
+.accent-text { font-size: 1em; }
+.main-text { color: var(--halv); text-shadow: none; }
+
+/* 이름 슬라이더 */
+.text-slider { height: 1.1em; }
+.slide-item { margin-bottom: 0.5em; }
+
+/* ── 장면 ── */
+.content-layer {
+  max-width: 520px;
+  transform: translateY(14px);
+  transition: opacity 0.45s ease, transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s linear 0.45s;
+}
+.content-layer.active { transition-delay: 0.12s, 0.12s, 0s; }
+.content-layer.exit { transform: translateY(-14px); }
+
+/* ── 두 열로 맞춘 정보 목록 ── */
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.42rem 1.4rem;
+  margin: 0.2rem 0 1.3rem;
+  padding: 0.95rem 0;
+  border-block: 1px solid var(--rule);
+  font-size: clamp(0.95rem, 2vw, 1rem);
+  line-height: 1.5;
+}
+.facts-k { color: var(--muted); font-weight: 600; }
+.facts-v { color: var(--fg); font-weight: 500; font-variant-numeric: tabular-nums; word-break: keep-all; }
+
+/* ── 목록 카드 ── */
+.project-grid { border-top-color: var(--rule); margin-top: 1.2rem; }
+.project-card { border-bottom-color: var(--rule); grid-template-columns: 34px minmax(0, 1fr) 18px; gap: 14px; }
+.project-card::after { color: var(--muted); opacity: 0.7; }
+.project-card:hover { background: linear-gradient(to right, var(--halv-wash), transparent); }
+.project-card:hover .project-title,
+.project-card:hover::after { color: var(--halv-ink); opacity: 1; }
+.project-icon { margin-left: 2px; background: var(--tile); }
+.project-info { margin-left: 0; }
+.project-desc { font-size: 0.82rem; letter-spacing: -0.01em; }
+.inline-link:hover, .accent-text:hover { color: var(--halv-ink); }
+.social-links .social-links-service { background-image: linear-gradient(0deg, var(--fg), var(--fg)); }
+
+/* ── 언어 단추 ── */
+.lang-toggle { background: color-mix(in srgb, var(--bg) 85%, transparent); border-color: var(--rule); }
+.lang-toggle:hover { color: var(--halv-ink); border-color: var(--halv); }
+
+/* ── 옆 내비: 흐르는 한 줄 ──
+   가는 세로줄 위에 장면마다 눈금을 두고, 스크롤한 만큼 유록색이 위에서부터 차오른다. */
+.side-nav {
+  --p: 0;
+  position: fixed;
+  right: clamp(12px, 2.6vw, 30px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.side-nav::before,
+.side-nav-fill {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1.5px;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--rule);
+  pointer-events: none;
+}
+.side-nav-fill {
+  width: 2px;
+  right: -0.25px;
+  background: var(--halv);
+  transform-origin: top;
+  transform: scaleY(var(--p));
+}
+.side-nav-item {
+  appearance: none;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 0 0 0 12px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+}
+.side-nav-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(4px);
+  transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease;
+}
+.side-nav-tick {
+  width: 7px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--muted);
+  opacity: 0.45;
+  flex-shrink: 0;
+  transition: width 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+}
+.side-nav-item:hover .side-nav-label,
+.side-nav-item.active .side-nav-label { opacity: 1; transform: none; }
+.side-nav-item.active .side-nav-label { color: var(--fg); }
+.side-nav-item:hover .side-nav-tick { width: 11px; opacity: 0.9; }
+.side-nav-item.active .side-nav-tick { width: 15px; background: var(--halv); opacity: 1; }
+.side-nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+@media (max-width: 820px) {
+  .side-nav-label { display: none; }
+  .side-nav-item { height: 26px; padding-left: 14px; }
+}
+@media (max-width: 600px) {
+  .side-nav { right: 9px; }
+  .facts { gap: 0.38rem 1.1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content-layer, .content-layer.exit { transform: none; transition: opacity 0.2s linear, visibility 0s; }
+  .text-track, .side-nav-label, .side-nav-tick, .project-card, .project-card::after { transition: none; }
+}
+
 </style>
 </head>
 
@@ -617,32 +678,40 @@ div.project-card:hover .project-title { color: var(--fg); }
 
       <div class="content-layer" id="step-2">
         <h1><span data-l="ko">저에 대하여</span><span data-l="ja">私について</span></h1>
-        <p class="personal-info" data-l="ko"><span class="accent-text list">출생</span> 2010년 4월 3일, 경기도 성남시<br>
-            <span class="accent-text list">국적</span> 대한민국<br>
-            <span class="accent-text list">성별·지향</span> 남성, 범성애자<br>
-            <span class="accent-text list">신체</span> 171 cm, 45 kg<br>
-            <span class="accent-text list">상징색</span> <span class="swatch" style="background:#81B11F"></span>유록색 <small>#81B11F</small></p>
-        <p class="personal-info" data-l="ja"><span class="accent-text list">生まれ</span> 2010年4月3日、京畿道城南市<br>
-            <span class="accent-text list">国籍</span> 大韓民国<br>
-            <span class="accent-text list">性別・指向</span> 男性、汎性愛者<br>
-            <span class="accent-text list">身体</span> 171 cm、45 kg<br>
-            <span class="accent-text list">象徴色</span> <span class="swatch" style="background:#81B11F"></span>柳緑色 <small>#81B11F</small></p>
+        <div class="facts" data-l="ko">
+          <span class="facts-k">출생</span><span class="facts-v">2010년 4월 3일, 경기도 성남시</span>
+          <span class="facts-k">국적</span><span class="facts-v">대한민국</span>
+          <span class="facts-k">성별·지향</span><span class="facts-v">남성, 범성애자</span>
+          <span class="facts-k">신체</span><span class="facts-v">171 cm, 45 kg</span>
+          <span class="facts-k">상징색</span><span class="facts-v"><span class="swatch" style="background:#81B11F"></span>유록색 <small>#81B11F</small></span>
+        </div>
+        <div class="facts" data-l="ja">
+          <span class="facts-k">生まれ</span><span class="facts-v">2010年4月3日、京畿道城南市</span>
+          <span class="facts-k">国籍</span><span class="facts-v">大韓民国</span>
+          <span class="facts-k">性別・指向</span><span class="facts-v">男性、汎性愛者</span>
+          <span class="facts-k">身体</span><span class="facts-v">171 cm、45 kg</span>
+          <span class="facts-k">象徴色</span><span class="facts-v"><span class="swatch" style="background:#81B11F"></span>柳緑色 <small>#81B11F</small></span>
+        </div>
         <p data-l="ko">현재 경기도의 한 외국어고등학교에 재학 중인 학생입니다. 창작과 언어, 개발 등 후술할 여러 분야에 관심을 두고 활동하고 있습니다.</p>
         <p data-l="ja">いまは京畿道のとある外国語高校に通う学生です。創作や言語、開発など、このあと紹介するいろいろな分野に関心を持って活動しています。</p>
       </div>
 
       <div class="content-layer" id="step-3">
         <h1><span data-l="ko">여러 이름</span><span data-l="ja">いくつもの名前</span></h1>
-        <p class="personal-info" data-l="ko"><span class="accent-text list">본명</span> 송지후 <small>(宋智厚)</small><br>
-            <span class="accent-text list">영어</span> Owen <small>(오웬)</small><br>
-            <span class="accent-text list">일본어</span> 和泉流希 <small>(이즈미 루키)</small><br>
-            <span class="accent-text list">호</span> 유천 <small>(流泉)</small><br>
-            <span class="accent-text list">차샤</span> lýiteni tómoc</p>
-        <p class="personal-info" data-l="ja"><span class="accent-text list">本名</span> 송지후 <small>（宋智厚、ソン・ジフ）</small><br>
-            <span class="accent-text list">英語</span> Owen<br>
-            <span class="accent-text list">日本語</span> 和泉流希 <small>（いずみ るき）</small><br>
-            <span class="accent-text list">号</span> 流泉 <small>（ユチョン）</small><br>
-            <span class="accent-text list">チャシャ</span> lýiteni tómoc</p>
+        <div class="facts" data-l="ko">
+          <span class="facts-k">본명</span><span class="facts-v">송지후 <small>(宋智厚)</small></span>
+          <span class="facts-k">영어</span><span class="facts-v">Owen <small>(오웬)</small></span>
+          <span class="facts-k">일본어</span><span class="facts-v">和泉流希 <small>(이즈미 루키)</small></span>
+          <span class="facts-k">호</span><span class="facts-v">유천 <small>(流泉)</small></span>
+          <span class="facts-k">차샤</span><span class="facts-v">lýiteni tómoc</span>
+        </div>
+        <div class="facts" data-l="ja">
+          <span class="facts-k">本名</span><span class="facts-v">송지후 <small>（宋智厚、ソン・ジフ）</small></span>
+          <span class="facts-k">英語</span><span class="facts-v">Owen</span>
+          <span class="facts-k">日本語</span><span class="facts-v">和泉流希 <small>（いずみ るき）</small></span>
+          <span class="facts-k">号</span><span class="facts-v">流泉 <small>（ユチョン）</small></span>
+          <span class="facts-k">チャシャ</span><span class="facts-v">lýiteni tómoc</span>
+        </div>
         <p data-l="ko">호 유천은 흐르는 샘물처럼 맑고 진실되되, 과거에 갇히지 않고 멈추지 않는 삶을 살자는 뜻으로 지었습니다.</p>
         <p data-l="ja">号の流泉には、流れる泉のように澄んで偽りなく、それでいて過去に囚われず止まらない人生を生きよう、という意味を込めました。</p>
         <p data-l="ko">온라인에서 부르실 때는 닉네임 ‘쩌모’나 ‘<span class="accent-text">삼쩌모</span>’라고 부르시면 됩니다!</p>
@@ -776,14 +845,18 @@ div.project-card:hover .project-title { color: var(--fg); }
 
       <div class="content-layer" id="step-8">
         <h1><span data-l="ko">구사하는 언어</span><span data-l="ja">話せる言語</span></h1>
-        <p class="personal-info" data-l="ko"><span class="accent-text list">한국어</span> C2 · 모어<br>
-            <span class="accent-text list">영어</span> C1 · TOEFL iBT 105점<br>
-            <span class="accent-text list">관화</span> B1 · HSK 3급<br>
-            <span class="accent-text list">일본어</span> A2</p>
-        <p class="personal-info" data-l="ja"><span class="accent-text list">韓国語</span> C2・母語<br>
-            <span class="accent-text list">英語</span> C1・TOEFL iBT 105点<br>
-            <span class="accent-text list">中国語</span> B1・HSK 3級<br>
-            <span class="accent-text list">日本語</span> A2</p>
+        <div class="facts" data-l="ko">
+          <span class="facts-k">한국어</span><span class="facts-v">C2 · 모어</span>
+          <span class="facts-k">영어</span><span class="facts-v">C1 · TOEFL iBT 105점</span>
+          <span class="facts-k">관화</span><span class="facts-v">B1 · HSK 3급</span>
+          <span class="facts-k">일본어</span><span class="facts-v">A2</span>
+        </div>
+        <div class="facts" data-l="ja">
+          <span class="facts-k">韓国語</span><span class="facts-v">C2・母語</span>
+          <span class="facts-k">英語</span><span class="facts-v">C1・TOEFL iBT 105点</span>
+          <span class="facts-k">中国語</span><span class="facts-v">B1・HSK 3級</span>
+          <span class="facts-k">日本語</span><span class="facts-v">A2</span>
+        </div>
         <p data-l="ko">영어는 영국식 발음과 표기를 좋아합니다. 공인 성적이 없는 언어는 스스로 가늠한 수준입니다.</p>
         <p data-l="ja">英語はイギリス式の発音と綴りが好みです。公式な成績がない言語のレベルは自己評価です。</p>
       </div>
@@ -939,7 +1012,7 @@ div.project-card:hover .project-title { color: var(--fg); }
 
   setInterval(() => {
     currentIndex = (currentIndex + 1) % 3;
-    const offset = currentIndex * -1.1;
+    const offset = currentIndex * -1.6;   // .slide-item 높이 1.1em + 아래 여백 0.5em
     track.style.transform = `translateY(${offset}em)`;
   }, 2500);
 
@@ -978,13 +1051,17 @@ div.project-card:hover .project-title { color: var(--fg); }
       labelSpan.innerHTML = '<span data-l="ko">' + ko + '</span><span data-l="ja">' + ja + '</span>';
 
       const dot = document.createElement('span');
-      dot.className = 'side-nav-dot';
+      dot.className = 'side-nav-tick';
 
       item.appendChild(labelSpan);
       item.appendChild(dot);
       item.addEventListener('click', onClick);
       sideNav.appendChild(item);
     }
+
+    const navFill = document.createElement('span');
+    navFill.className = 'side-nav-fill';
+    sideNav.appendChild(navFill);
 
     steps.forEach((step, index) => {
       addNavItem(step.id, () => {
@@ -1019,6 +1096,7 @@ div.project-card:hover .project-title { color: var(--fg); }
 
         navItems[index].classList.toggle('active', isActive);
       });
+      sideNav.style.setProperty('--p', Math.min(1, Math.max(0, progress)).toFixed(4));
     }
 
     window.addEventListener('scroll', updateScroll);
