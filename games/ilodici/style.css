@@ -1,15 +1,15 @@
 /*
  * 일로디스 — 블로그(b.halv.kr)와 같은 紙面: 종이 빛, 草綠 한 가지, 子持ち罫, 目次의 點線, 가운데 짧은 줄.
- * 글꼴: 라틴 Newsreader, 漢字·가나 寫硏(石井明朝 オールド R / 石井ゴシック), 한글 은바탕·은돋움.
+ * 글꼴: 라틴 Newsreader(고딕 자리는 Alegreya Sans), 漢字·가나 寫硏(石井明朝 オールド R / 石井ゴシック), 한글 은바탕·은돋움.
  */
 :root {
   --bg: #fdfcf9; --bg2: #f3f0e8; --ink: #1c1b18; --muted: #736e65; --faint: #a19b90;
   --rule: #bdb6a6; --line: #d5cfc1; --accent: #639c59; --red: #b0302a; --paper: #fffefb;
   --ink-rule: color-mix(in srgb, var(--ink) 72%, var(--bg));
   --mincho: "Newsreader", "IshiiMincho Old R", "UnBatang", "Zen Old Mincho", "Hiragino Mincho ProN", "AppleMyungjo", serif;
-  /* 고딕 자리의 라틴 문자·숫자도 Newsreader (石井ゴシック 의 라틴은 덧붙인 다른 글꼴이라) */
-  --gothic: "Newsreader", "IshiiGothic R", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-  --gothic-b: "Newsreader", "IshiiGothic B", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  /* 고딕 자리의 라틴 문자·숫자는 Alegreya Sans (石井ゴシック 의 라틴은 덧붙인 다른 글꼴이라) */
+  --gothic: "Halv Sans", "IshiiGothic R", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --gothic-b: "Halv Sans B", "IshiiGothic B", "UnDotum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --cw: 2.15rem; --ch: 3.01rem;
   /* 패: 종이 위에 놓인 한 장. 밝은 모드는 종이보다 희끗한 회백, 어두운 모드도 흰 패 그대로 */
   --card: #f6f5f0; --card-edge: #bfb8a8; --card-ink: #1c1b18; --card-red: #b0302a; --card-green: #4f8a46; --card-back: #639c59;
