@@ -2,29 +2,49 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>RSVP リーダー</title>
 <meta name="description" content="日本語の文章を、文節ごとに一か所へ次々と表示して読む（RSVP）">
-<link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-jp.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Zen+Old+Mincho:wght@400&display=swap" rel="stylesheet">
+<!-- 고딕 자리의 라틴 文字·數字: Halv Sans (Alegreya Sans) -->
+<link rel="stylesheet" href="/fonts/sans/sans.css?v=1">
+<!-- 寫硏 書體 (TypeSquare): 本文 石井明朝 オールド R, UI 石井ゴシック R. 登錄한 도메인에서만 나오고, 없으면 Zen Old Mincho 로 -->
+<script type="text/javascript" src="//typesquare.com/accessor/ko/script/typesquare.js?ee85a1e0da0743cc9ca6031dd3b19c5d" charset="utf-8"></script>
 <style>
-/* ── tokens ── */
-:root {
-  --bg: #ffffff;
-  --fg: #1d1d1f;
-  --text: #4b4b50;
-  --muted: #86868b;
-  --rule: #e6e6e8;
-  --tile: #f5f5f7;
-  --halv: #81b11f;
-  --halv-ink: #6c9616;
-  --halv-wash: rgba(129, 177, 31, 0.10);
-  --accent: #0071e3;
+/* ══════════════════════════════════════════════════════════════
+   블로그(b.halv.kr)·사전(d.halv.kr)과 같은 紙面: 종이 빛, 먹, 草綠 한 가지.
+   本文은 明朝, UI 는 고딕. 상자 대신 가는 줄, 단추 대신 글자.
+   ══════════════════════════════════════════════════════════════ */
 
-  --font: "Pretendard JP", -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
-  --fs-s: 0.82rem;
-  --fs-m: 0.95rem;
-  --fs-word: clamp(2rem, 7.5vw, 3.4rem);
+/* ── tokens (블로그 style.css 와 같은 값) ── */
+:root {
+  color-scheme: light dark;
+  --color-bg: #fdfcf9;
+  --color-bg-alt: #f3f0e8;
+  --color-text: #1c1b18;
+  --accent-l: 0.56;
+  --accent-c: 0.10;
+  --color-accent: oklch(var(--accent-l) var(--accent-c) 141);
+  --color-border: #e9e5db;
+  --color-border-strong: #d5cfc1;
+  --color-rule: #bdb6a6;
+  --color-muted-2: #736e65;
+  --color-muted-3: #78736a;
+  --color-muted-4: #a19b90;
+
+  --font-mincho: "Newsreader", "IshiiMincho Old R", "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  /* 입력欄用: TypeSquare 는 textarea 의 글꼴을 다루지 못하고 이름을 바꿔 버리므로, 寫硏 書體를 빼고 Zen Old Mincho 로 */
+  --font-mincho-plain: "Newsreader", "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-gothic: "Halv Sans", "IshiiGothic R", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --weight-regular: 350;
+
+  --fs-caption: 0.85rem;
+  --fs-ui: 0.875rem;
+  --fs-body: 0.926rem;
+  --fs-word: clamp(1.9rem, 6.8vw, 2.9rem);
 
   --sp-1: 4px;
   --sp-2: 8px;
@@ -33,228 +53,392 @@
   --sp-5: 28px;
   --sp-6: 44px;
 
-  --radius: 8px;
-  --width: 680px;
+  --pill: 999px;
+  --measure: 34rem;
+  --bar-h: 64px;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #161617;
-    --fg: #f5f5f7;
-    --text: #b9b9bf;
-    --rule: #303033;
-    --tile: #242426;
-    --halv: #97c93a;
-    --halv-ink: #a5d44a;
-    --halv-wash: rgba(151, 201, 58, 0.14);
-    --accent: #4aa3ff;
+    --color-bg: #16161a;
+    --color-bg-alt: #201f24;
+    --color-text: #e7e5e0;
+    --accent-l: 0.78;
+    --accent-c: 0.085;
+    --color-border: #2c2c30;
+    --color-border-strong: #3d3c41;
+    --color-rule: #4a494e;
+    --color-muted-2: #9a9994;
+    --color-muted-3: #85837e;
+    --color-muted-4: #706e69;
   }
 }
 
 /* ── base ── */
 * { box-sizing: border-box; }
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 html, body { margin: 0; }
 body {
-  font-family: var(--font);
-  background: var(--bg);
-  color: var(--fg);
+  min-height: 100svh;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-gothic);
+  font-weight: var(--weight-regular);
   line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
 }
-button, input, textarea, select { font: inherit; color: inherit; }
-a { color: inherit; }
+button, input, textarea { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
 
 /* ── page ── */
 .page {
-  max-width: var(--width);
+  width: min(var(--measure), calc(100% - 2 * var(--sp-4)));
   margin: 0 auto;
-  padding: var(--sp-5) var(--sp-4) var(--sp-6);
+  padding: var(--sp-5) 0 var(--sp-6);
 }
+.page.is-reading { padding-bottom: 0; }
 
-/* ── header ── */
+/* ── 柱: 위 끝의 작은 글자 한 줄과 그 아래 가는 줄 ── */
 .head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--sp-3);
-  margin-bottom: var(--sp-4);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border-strong);
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--color-muted-3);
 }
-.head h1 { margin: 0; font-size: 1.25rem; letter-spacing: -0.02em; }
-.head h1 small { margin-left: var(--sp-2); color: var(--muted); font-size: var(--fs-s); font-weight: 500; letter-spacing: 0; }
-.head a { color: var(--muted); font-size: var(--fs-s); text-decoration: none; }
-.head a:hover { color: var(--halv-ink); }
+.head__title { color: var(--color-text); }
+.head a { color: inherit; text-decoration: none; }
+.head a:hover { color: var(--color-accent); }
+.head__time { font-variant-numeric: tabular-nums; }
 
-/* ── text input ── */
+/* ── 글자 단추 ── */
+.tbtn {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-muted-2);
+  font-family: var(--font-gothic);
+  font-size: var(--fs-ui);
+  line-height: 2rem;
+  cursor: pointer;
+  transition: color .15s ease;
+}
+.tbtn:hover { color: var(--color-text); }
+.tbtn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.tbtn--go { color: var(--color-accent); }
+.tbtn--go:hover { color: var(--color-accent); text-decoration: underline; text-underline-offset: .25em; }
+.head .tbtn { font-size: 13px; line-height: 16px; color: var(--color-muted-3); }
+.head .tbtn:hover { color: var(--color-accent); }
+
+/* ── 本文 입력: 상자 없이 밑줄 하나. 누르면 밑줄만 草綠 ── */
 .source {
   display: block;
   width: 100%;
   min-height: 15rem;
-  padding: var(--sp-3);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--fg);
-  font-size: var(--fs-m);
-  line-height: 1.7;
+  margin-top: var(--sp-4);
+  padding: 0 0 var(--sp-3);
+  border: 0;
+  border-bottom: 1px solid var(--color-border-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-mincho-plain);
+  font-size: var(--fs-body);
+  line-height: 1.85;
+  word-break: normal;
+  line-break: strict;
   resize: vertical;
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
-.source:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.source::placeholder { color: var(--color-muted-4); }
+.source:focus { outline: none; border-bottom-color: var(--color-accent); box-shadow: 0 1px 0 var(--color-accent); }
 
-/* ── settings ── */
-.settings {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr) 5.5em;
+/* ── 本文 아래 한 줄: 區切り 수·걸리는 時間 / 例文·消す ── */
+.meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: var(--sp-1);
+  font-size: var(--fs-caption);
+  color: var(--color-muted-3);
+  font-variant-numeric: tabular-nums;
+}
+.meta__acts { display: flex; gap: var(--sp-4); }
+
+/* ── 設定 줄: 이름 — 값 (− ＋) ── */
+.prefs { display: grid; gap: 2px; }
+.prefs__row {
+  display: flex;
   align-items: center;
-  gap: var(--sp-2) var(--sp-3);
-  margin: var(--sp-4) 0;
-  font-size: var(--fs-m);
+  justify-content: space-between;
+  gap: var(--sp-5);
 }
-.settings label { color: var(--text); }
-.settings output { color: var(--fg); font-variant-numeric: tabular-nums; text-align: right; }
-input[type="range"] { width: 100%; accent-color: var(--halv); }
-
-/* ── buttons ── */
-.row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
-.btn {
+.prefs__k { font-size: 12.5px; color: var(--color-muted-3); white-space: nowrap; }
+.stepper { display: inline-flex; align-items: center; gap: 2px; }
+.stepper__v {
+  min-width: 4.6em;
+  font-size: var(--fs-ui);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.stepper__v small { margin-left: .2em; color: var(--color-muted-3); font-size: 12px; }
+.round {
+  -webkit-appearance: none;
   appearance: none;
-  padding: var(--sp-2) var(--sp-4);
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  background: var(--bg);
-  font-size: var(--fs-m);
-  font-weight: 600;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--pill);
+  background: none;
+  color: var(--color-muted-3);
+  font-family: var(--font-gothic);
+  font-size: 1.15rem;
+  line-height: 1;
   cursor: pointer;
+  transition: color .15s ease, background-color .15s ease;
 }
-.btn:hover { border-color: var(--halv); color: var(--halv-ink); }
-.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.btn.primary { border-color: var(--halv); background: var(--halv); color: #fff; }
-.btn.primary:hover { background: var(--halv-ink); color: #fff; }
-.btn.icon { display: inline-grid; place-items: center; width: 2.75rem; height: 2.75rem; padding: 0; }
-.btn.step { font-size: 1.3rem; line-height: 1; }
-.btn:disabled { opacity: 0.4; cursor: default; }
-.note { margin: var(--sp-3) 0 0; color: var(--muted); font-size: var(--fs-s); }
+.round:hover { background: var(--color-bg-alt); color: var(--color-accent); }
+.round:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.round:disabled { opacity: .28; cursor: default; }
+.round:disabled:hover { background: none; color: var(--color-muted-3); }
 
-/* ── stage (reading area) ── */
+/* 入力 畫面의 設定: 가는 줄 사이에 */
+.edit-prefs {
+  margin-top: var(--sp-5);
+  padding: var(--sp-2) 0;
+  border-block: 1px solid var(--color-border);
+}
+
+.go { margin-top: var(--sp-4); }
+.keys {
+  margin: var(--sp-5) 0 0;
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: var(--color-muted-4);
+}
+.keys kbd {
+  display: inline-block;
+  min-width: 1.35rem;
+  padding: 0 .3em;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  color: var(--color-muted-3);
+  font: 12px/1.35 var(--font-gothic);
+  text-align: center;
+}
+
+/* ── 表示面: 가운데 한 줄. 위아래 끝에 草綠의 짧은 눈금 ── */
 .stage {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 46vh;
-  margin-bottom: var(--sp-4);
-  border-block: 1px solid var(--rule);
+  height: calc(100svh - var(--sp-5) - 23px - var(--bar-h));
+  min-height: 14rem;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
-.stage:focus { outline: none; }   /* 読んでいる間はずっとここにフォーカスがあるので枠を出さない */
+.stage:focus { outline: none; }   /* 읽는 동안 내내 여기에 포커스가 있으므로 테두리를 내지 않는다 */
 .stage::before,
 .stage::after {
   content: "";
   position: absolute;
   left: 50%;
-  width: 2px;
-  height: var(--sp-4);
-  background: var(--halv);
-  transform: translateX(-50%);
+  width: 1px;
+  height: 14px;
+  background: var(--color-accent);
 }
-.stage::before { top: 0; }
-.stage::after { bottom: 0; }
+.stage::before { top: calc(50% - 3.2rem); }
+.stage::after { bottom: calc(50% - 3.2rem); }
 .word {
-  padding: 0 var(--sp-3);
+  font-family: var(--font-mincho);
   font-size: var(--fs-word);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-weight: 400;
   line-height: 1.3;
-  text-align: center;
+  letter-spacing: .03em;
   white-space: nowrap;
 }
-.word.end { color: var(--muted); font-size: var(--fs-m); font-weight: 500; letter-spacing: 0; }
+.word.is-end { font-family: var(--font-gothic); font-size: var(--fs-ui); letter-spacing: 0; color: var(--color-muted-3); }
 
-/* ── progress ── */
-.progress {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
+/* ── 아래 넘김 줄 (사전과 같은 꼴): ‹ ▶ › 막대 쪽수 ── */
+.statusbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-3);
-  color: var(--muted);
-  font-size: var(--fs-s);
-  font-variant-numeric: tabular-nums;
+  justify-content: center;
+  gap: 9px;
+  height: var(--bar-h);
+  padding: 0 var(--sp-4) max(6px, env(safe-area-inset-bottom));
+  font-size: var(--fs-caption);
+  color: var(--color-muted-3);
+}
+.statusbar .round--play { color: var(--color-text); font-size: .85rem; }
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: min(220px, 34vw);
+  height: 3px;
+  border-radius: var(--pill);
+  accent-color: var(--color-accent);
+  background: linear-gradient(var(--color-rule), var(--color-rule)) 0 0 / var(--p, 0%) 100% no-repeat, var(--color-border);
+  cursor: pointer;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--color-bg);
+  border-radius: var(--pill);
+  background: var(--color-accent);
+}
+.slider::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--color-bg);
+  border-radius: var(--pill);
+  background: var(--color-accent);
+}
+.slider::-moz-range-track { background: transparent; }
+.slider::-moz-range-progress { height: 3px; border-radius: var(--pill); background: var(--color-rule); }
+.folio { min-width: 4.5em; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.folio b { color: var(--color-text); font-weight: var(--weight-regular); }
+.folio i { margin: 0 .3em; font-style: normal; color: var(--color-muted-4); }
+
+/* ── 設定 (읽는 畫面): 글자 하나의 단추, 가는 테두리의 종이 한 장 ── */
+.popprefs { position: relative; flex: none; }
+.popprefs .tbtn { font-size: 14px; }
+.popprefs .tbtn[aria-expanded="true"] { color: var(--color-text); }
+.popprefs__panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  min-width: 15rem;
+  padding: 10px 14px 12px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg);
+  box-shadow: 0 6px 18px -10px rgb(0 0 0 / .25);
+}
+@media (min-width: 600px) {
+  .popprefs {
+    position: fixed;
+    right: max(1.25rem, env(safe-area-inset-right));
+    bottom: max(1.1rem, env(safe-area-inset-bottom));
+    z-index: 40;
+  }
 }
 
-/* ── reader controls ── */
-.controls { justify-content: space-between; }
-.speed { color: var(--text); font-size: var(--fs-m); font-variant-numeric: tabular-nums; }
-.keys { margin-top: var(--sp-4); color: var(--muted); font-size: var(--fs-s); }
-.keys kbd {
-  display: inline-block;
-  min-width: 1.6em;
-  padding: 0 var(--sp-1);
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  background: var(--tile);
-  font: inherit;
-  text-align: center;
+/* TypeSquare 가 미리 받아 둘 글자 (보이지 않게. display:none 은 쓰지 않는다) */
+.ts-glyphs {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
+.ts-glyphs--m { font-family: "IshiiMincho Old R"; }
+.ts-glyphs--g { font-family: "IshiiGothic R"; }
 
-@media (max-width: 520px) {
-  .settings { grid-template-columns: minmax(0, 1fr) 5em; }
-  .settings label { grid-column: 1 / -1; margin-bottom: calc(-1 * var(--sp-2)); }
+@media (max-width: 480px) {
+  .statusbar { gap: 6px; }
+  .slider { flex: 1 1 auto; width: auto; min-width: 0; }
   .keys { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tbtn, .round, .source { transition: none; }
 }
 </style>
 </head>
 <body>
-<main class="page">
-  <header class="head">
-    <h1>RSVP リーダー<small>日本語</small></h1>
-    <a href="/">halv.kr</a>
-  </header>
+<main class="page" id="page">
 
   <!-- 入力 -->
   <section id="editView">
-    <textarea id="source" class="source" placeholder="ここに文章を貼り付けてください。" spellcheck="false"></textarea>
-    <div class="settings">
-      <label for="cpm">速さ（文字／分）</label>
-      <input type="range" id="cpm" min="200" max="2000" step="50" value="600">
-      <output id="cpmOut" for="cpm">600</output>
-      <label for="maxLen">一度に出す最大文字数</label>
-      <input type="range" id="maxLen" min="3" max="14" step="1" value="8">
-      <output id="maxLenOut" for="maxLen">8</output>
+    <header class="head">
+      <span class="head__title">RSVP リーダー</span>
+      <a href="/">halv.kr</a>
+    </header>
+    <textarea id="source" class="source" placeholder="ここに文章を貼り付けてください。" spellcheck="false" aria-label="読む文章"></textarea>
+    <div class="meta">
+      <span id="info"></span>
+      <span class="meta__acts">
+        <button type="button" class="tbtn" id="btnSample">例文</button>
+        <button type="button" class="tbtn" id="btnClear">消す</button>
+      </span>
     </div>
-    <div class="row">
-      <button type="button" class="btn primary" id="btnStart">読み始める</button>
-      <button type="button" class="btn" id="btnSample">例文</button>
-      <button type="button" class="btn" id="btnClear">消す</button>
-    </div>
-    <p class="note" id="info"></p>
+    <div class="prefs edit-prefs" data-prefs></div>
+    <div class="go"><button type="button" class="tbtn tbtn--go" id="btnStart">読み始める →</button></div>
+    <p class="keys">読んでいる間は <kbd>Space</kbd> 再生・停止　<kbd>←</kbd><kbd>→</kbd> 前後　<kbd>↑</kbd><kbd>↓</kbd> 速さ　<kbd>Esc</kbd> 文章に戻る</p>
   </section>
 
   <!-- 表示 -->
   <section id="readView" hidden>
-    <div class="stage" id="stage" tabindex="0" title="クリックで再生／一時停止">
+    <header class="head">
+      <button type="button" class="tbtn" id="btnEdit">← 文章に戻る</button>
+      <span class="head__time">残り <span id="remain"></span></span>
+    </header>
+    <div class="stage" id="stage" tabindex="0" title="クリックで再生・停止">
       <div class="word" id="word"></div>
     </div>
-    <div class="progress">
-      <input type="range" id="seek" min="0" max="0" value="0" aria-label="位置">
-      <span id="remain"></span>
-    </div>
-    <div class="row controls">
-      <div class="row">
-        <button type="button" class="btn icon step" id="btnPrev" aria-label="前へ" title="前へ（←）">‹</button>
-        <button type="button" class="btn primary icon" id="btnPlay" aria-label="再生" title="再生／一時停止（Space）">▶</button>
-        <button type="button" class="btn icon step" id="btnNext" aria-label="次へ" title="次へ（→）">›</button>
-      </div>
-      <div class="row">
-        <button type="button" class="btn icon" id="btnSlower" aria-label="遅く" title="遅く（↓）">−</button>
-        <span class="speed" id="speed"></span>
-        <button type="button" class="btn icon" id="btnFaster" aria-label="速く" title="速く（↑）">＋</button>
-      </div>
-      <button type="button" class="btn" id="btnEdit">文章に戻る</button>
-    </div>
-    <p class="keys"><kbd>Space</kbd> 再生／停止　<kbd>←</kbd><kbd>→</kbd> 前後　<kbd>↑</kbd><kbd>↓</kbd> 速さ　<kbd>Esc</kbd> 文章に戻る</p>
   </section>
 </main>
+
+<footer class="statusbar" id="statusbar" hidden>
+  <button type="button" class="round" id="btnPrev" aria-label="前へ" title="前へ（←）">‹</button>
+  <button type="button" class="round round--play" id="btnPlay" aria-label="再生" title="再生・停止（Space）">▶&#xFE0E;</button>
+  <button type="button" class="round" id="btnNext" aria-label="次へ" title="次へ（→）">›</button>
+  <input type="range" class="slider" id="seek" min="0" max="0" value="0" step="1" aria-label="位置">
+  <span class="folio"><b id="posNow">1</b><i>/</i><span id="posAll">1</span></span>
+  <div class="popprefs">
+    <button type="button" class="tbtn" id="btnPrefs" aria-expanded="false" aria-controls="prefsPanel">設定</button>
+    <div class="popprefs__panel prefs" id="prefsPanel" data-prefs hidden></div>
+  </div>
+</footer>
+
+<template id="prefsRows">
+  <div class="prefs__row">
+    <span class="prefs__k">速さ</span>
+    <span class="stepper">
+      <button type="button" class="round" data-step="cpm" data-d="-50" aria-label="遅く">−</button>
+      <span class="stepper__v"><span data-val="cpm"></span><small>字/分</small></span>
+      <button type="button" class="round" data-step="cpm" data-d="50" aria-label="速く">+</button>
+    </span>
+  </div>
+  <div class="prefs__row">
+    <span class="prefs__k">一度に出す字数</span>
+    <span class="stepper">
+      <button type="button" class="round" data-step="maxLen" data-d="-1" aria-label="短く">−</button>
+      <span class="stepper__v"><span data-val="maxLen"></span><small>字まで</small></span>
+      <button type="button" class="round" data-step="maxLen" data-d="1" aria-label="長く">+</button>
+    </span>
+  </div>
+</template>
+
+<!-- TypeSquare 는 처음 읽을 때 문서에 있는 글자만 받아 온다. 붙여 넣은 글은 script 가 여기에 보태고 다시 부른다 -->
+<div class="ts-glyphs ts-glyphs--m" id="tsMincho" aria-hidden="true">吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ</div>
+<div class="ts-glyphs ts-glyphs--g" aria-hidden="true">RSVPリーダー読む文章例文消す速さ一度に出す字数分まで始める→間は再生停止前後に戻る残り設定遅く短く長くここを貼り付けてください区切り約おわりでもう</div>
 
 <script>
 /* ════════════════════════════════════════════════════════════
@@ -421,46 +605,68 @@ const RSVP = (() => {
 (() => {
   const $ = (id) => document.getElementById(id);
   const el = {
-    editView: $('editView'), readView: $('readView'), source: $('source'),
-    cpm: $('cpm'), cpmOut: $('cpmOut'), maxLen: $('maxLen'), maxLenOut: $('maxLenOut'), info: $('info'),
-    stage: $('stage'), word: $('word'), seek: $('seek'), remain: $('remain'), speed: $('speed'),
-    btnPlay: $('btnPlay'),
+    page: $('page'), editView: $('editView'), readView: $('readView'), statusbar: $('statusbar'),
+    source: $('source'), info: $('info'), stage: $('stage'), word: $('word'),
+    seek: $('seek'), remain: $('remain'), posNow: $('posNow'), posAll: $('posAll'),
+    btnPlay: $('btnPlay'), btnPrefs: $('btnPrefs'), prefsPanel: $('prefsPanel'), tsMincho: $('tsMincho'),
   };
   const STORE = 'halv-rsvp-v1';
+  const LIMITS = { cpm: [200, 2000], maxLen: [3, 14] };
   const SAMPLE = '吾輩は猫である。名前はまだ無い。\nどこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。\n（夏目漱石『吾輩は猫である』より）';
 
+  const set = { cpm: 600, maxLen: 8 };
   let chunks = [], pos = 0, timer = null, playing = false;
-  const cpm = () => Number(el.cpm.value);
+
+  // 設定 줄: 入力 畫面과 읽는 畫面의 設定 창에 같은 것을 넣는다
+  document.querySelectorAll('[data-prefs]').forEach((box) => box.append($('prefsRows').content.cloneNode(true)));
 
   // 保存（この端末のこのブラウザだけ）
   function load() {
     try {
       const s = JSON.parse(localStorage.getItem(STORE) || '{}');
       if (typeof s.text === 'string') el.source.value = s.text;
-      if (s.cpm) el.cpm.value = s.cpm;
-      if (s.maxLen) el.maxLen.value = s.maxLen;
+      for (const k of Object.keys(set)) if (Number.isFinite(s[k])) set[k] = clamp(k, s[k]);
     } catch (e) {}
   }
   function save() {
-    try { localStorage.setItem(STORE, JSON.stringify({ text: el.source.value, cpm: cpm(), maxLen: Number(el.maxLen.value) })); } catch (e) {}
+    try { localStorage.setItem(STORE, JSON.stringify({ text: el.source.value, ...set })); } catch (e) {}
+  }
+  function clamp(k, v) { return Math.min(Math.max(v, LIMITS[k][0]), LIMITS[k][1]); }
+
+  // TypeSquare: 새 글자가 생기면 보이지 않는 칸에 보태고, 잠시 뒤 한 번 다시 받게 한다
+  const tsSeen = new Set(el.tsMincho.textContent);
+  let tsTimer = 0;
+  function tsFeed(text) {
+    let add = '';
+    for (const ch of text) if (ch > 'ÿ' && !tsSeen.has(ch)) { tsSeen.add(ch); add += ch; }
+    if (!add) return;
+    el.tsMincho.textContent += add;
+    clearTimeout(tsTimer);
+    tsTimer = setTimeout(() => { if (window.Ts && Ts.loadFont) Ts.loadFont(); }, 900);
   }
 
   function fmtTime(ms) {
     const s = Math.max(0, Math.round(ms / 1000));
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
+  function showPrefs() {
+    document.querySelectorAll('[data-val]').forEach((n) => { n.textContent = set[n.dataset.val]; });
+    document.querySelectorAll('[data-step]').forEach((b) => {
+      const k = b.dataset.step, d = Number(b.dataset.d);
+      b.disabled = d < 0 ? set[k] <= LIMITS[k][0] : set[k] >= LIMITS[k][1];
+    });
+  }
   function updateInfo() {
-    el.cpmOut.textContent = el.cpm.value;
-    el.maxLenOut.textContent = el.maxLen.value;
+    showPrefs();
     const text = el.source.value;
-    if (!text.trim()) { el.info.textContent = RSVP.hasSegmenter ? '' : 'このブラウザでは語の区切りを文字の種類で推定します。'; return; }
-    const cs = RSVP.chunk(text, Number(el.maxLen.value));
-    const total = cs.reduce((a, c) => a + RSVP.duration(c, cpm()), 0);
+    if (!text.trim()) { el.info.textContent = RSVP.hasSegmenter ? '' : 'このブラウザでは語の区切りを文字の種類で推定します'; return; }
+    const cs = RSVP.chunk(text, set.maxLen);
+    const total = cs.reduce((a, c) => a + RSVP.duration(c, set.cpm), 0);
     el.info.textContent = cs.length + ' 区切り・約 ' + fmtTime(total);
   }
   function remainingMs() {
     let ms = 0;
-    for (let i = pos; i < chunks.length; i++) ms += RSVP.duration(chunks[i], cpm());
+    for (let i = pos; i < chunks.length; i++) ms += RSVP.duration(chunks[i], set.cpm);
     return ms;
   }
 
@@ -472,18 +678,20 @@ const RSVP = (() => {
       el.word.style.fontSize = (parseFloat(getComputedStyle(el.word).fontSize) * room / need * 0.96) + 'px';
     }
   }
-  window.addEventListener('resize', () => { if (!el.readView.hidden) fit(); });
 
   function render() {
     const atEnd = pos >= chunks.length;
-    el.word.classList.toggle('end', atEnd);
-    el.word.textContent = atEnd ? 'おわり（Space でもう一度）' : chunks[pos].text;
+    el.word.classList.toggle('is-end', atEnd);
+    el.word.textContent = atEnd ? 'おわり ― Space でもう一度' : chunks[pos].text;
     fit();
-    el.seek.max = Math.max(chunks.length - 1, 0);
-    el.seek.value = Math.min(pos, chunks.length - 1);
+    const last = Math.max(chunks.length - 1, 0), at = Math.min(pos, last);
+    el.seek.max = last;
+    el.seek.value = at;
+    el.seek.style.setProperty('--p', (last ? at / last * 100 : 0) + '%');
+    el.posNow.textContent = Math.min(pos + 1, chunks.length);
+    el.posAll.textContent = chunks.length;
     el.remain.textContent = fmtTime(remainingMs());
-    el.speed.textContent = cpm() + ' 字/分';
-    el.btnPlay.textContent = playing ? '❚❚' : '▶';
+    el.btnPlay.textContent = playing ? '❚❚' : '▶︎';
     el.btnPlay.setAttribute('aria-label', playing ? '一時停止' : '再生');
   }
 
@@ -491,7 +699,7 @@ const RSVP = (() => {
     if (!playing) return;
     if (pos >= chunks.length) { stop(); return; }
     render();
-    timer = setTimeout(() => { pos++; tick(); }, RSVP.duration(chunks[pos], cpm()));
+    timer = setTimeout(() => { pos++; tick(); }, RSVP.duration(chunks[pos], set.cpm));
   }
   function play() {
     if (!chunks.length) return;
@@ -507,46 +715,77 @@ const RSVP = (() => {
     pos = Math.min(Math.max(pos + d, 0), chunks.length - 1);
     render();
   }
-  function setSpeed(d) {
-    el.cpm.value = Math.min(Math.max(cpm() + d, Number(el.cpm.min)), Number(el.cpm.max));
-    save(); updateInfo(); render();
+  function change(k, d) {
+    set[k] = clamp(k, set[k] + d);
+    save();
+    updateInfo();
+    if (!el.readView.hidden) {
+      if (k === 'maxLen') {   // 区切り直す。いま読んでいる所はおおよそ同じ割合の位置に
+        const ratio = chunks.length ? pos / chunks.length : 0;
+        chunks = RSVP.chunk(el.source.value, set.maxLen);
+        pos = Math.min(Math.round(ratio * chunks.length), chunks.length - 1);
+      }
+      render();
+    }
+  }
+
+  function togglePrefs(open) {
+    const show = open ?? el.prefsPanel.hidden;
+    el.prefsPanel.hidden = !show;
+    el.btnPrefs.setAttribute('aria-expanded', String(show));
   }
 
   function openReader() {
-    chunks = RSVP.chunk(el.source.value, Number(el.maxLen.value));
+    chunks = RSVP.chunk(el.source.value, set.maxLen);
     if (!chunks.length) { el.source.focus(); return; }
     save();
+    tsFeed(el.source.value);
     pos = 0;
     el.editView.hidden = true;
     el.readView.hidden = false;
+    el.statusbar.hidden = false;
+    el.page.classList.add('is-reading');
     render();
     el.stage.focus();
     timer = setTimeout(play, 600);   // 最初の区切りに目を合わせる間（その間に止めれば始まらない）
   }
   function closeReader() {
     stop();
+    togglePrefs(false);
     el.readView.hidden = true;
+    el.statusbar.hidden = true;
+    el.page.classList.remove('is-reading');
     el.editView.hidden = false;
     updateInfo();
     el.source.focus();
   }
 
   $('btnStart').addEventListener('click', openReader);
-  $('btnSample').addEventListener('click', () => { el.source.value = SAMPLE; save(); updateInfo(); });
+  $('btnSample').addEventListener('click', () => { el.source.value = SAMPLE; save(); tsFeed(SAMPLE); updateInfo(); });
   $('btnClear').addEventListener('click', () => { el.source.value = ''; save(); updateInfo(); el.source.focus(); });
   $('btnEdit').addEventListener('click', closeReader);
   $('btnPrev').addEventListener('click', () => step(-1));
   $('btnNext').addEventListener('click', () => step(1));
-  $('btnSlower').addEventListener('click', () => setSpeed(-50));
-  $('btnFaster').addEventListener('click', () => setSpeed(50));
   el.btnPlay.addEventListener('click', toggle);
+  el.btnPrefs.addEventListener('click', () => togglePrefs());
+  el.stage.addEventListener('click', () => { if (!el.prefsPanel.hidden) togglePrefs(false); else toggle(); });
+  document.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => change(b.dataset.step, Number(b.dataset.d))));
   // マウスで押した後はフォーカスを表示面へ移す（Space がボタンにも効いて二度切り替わらないように）
-  el.readView.querySelectorAll('button').forEach((b) => b.addEventListener('click', (e) => { if (e.detail > 0 && !el.readView.hidden) el.stage.focus(); }));
-  el.stage.addEventListener('click', toggle);
+  el.statusbar.querySelectorAll('button').forEach((b) => b.addEventListener('click', (e) => {
+    if (e.detail > 0 && !el.readView.hidden && b !== el.btnPrefs && !el.prefsPanel.contains(b)) el.stage.focus();
+  }));
+  document.addEventListener('click', (e) => {
+    if (!el.prefsPanel.hidden && !e.target.closest('.popprefs')) togglePrefs(false);
+  });
   el.seek.addEventListener('input', () => { const v = Number(el.seek.value); stop(); pos = v; render(); });
-  el.source.addEventListener('input', () => { save(); updateInfo(); });
-  el.cpm.addEventListener('input', () => { save(); updateInfo(); });
-  el.maxLen.addEventListener('input', () => { save(); updateInfo(); });
+  let srcTimer = 0;
+  el.source.addEventListener('input', () => {
+    save();
+    updateInfo();
+    clearTimeout(srcTimer);
+    srcTimer = setTimeout(() => tsFeed(el.source.value), 1200);
+  });
+  window.addEventListener('resize', () => { if (!el.readView.hidden) fit(); });
 
   document.addEventListener('keydown', (e) => {
     if (el.readView.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -556,13 +795,14 @@ const RSVP = (() => {
     if (k === ' ' || k === 'Spacebar') { e.preventDefault(); toggle(); }
     else if (k === 'ArrowLeft') { e.preventDefault(); step(-1); }
     else if (k === 'ArrowRight') { e.preventDefault(); step(1); }
-    else if (k === 'ArrowUp') { e.preventDefault(); setSpeed(50); }
-    else if (k === 'ArrowDown') { e.preventDefault(); setSpeed(-50); }
-    else if (k === 'Escape') { e.preventDefault(); closeReader(); }
+    else if (k === 'ArrowUp') { e.preventDefault(); change('cpm', 50); }
+    else if (k === 'ArrowDown') { e.preventDefault(); change('cpm', -50); }
+    else if (k === 'Escape') { e.preventDefault(); if (!el.prefsPanel.hidden) togglePrefs(false); else closeReader(); }
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden && playing) stop(); });
 
   load();
+  tsFeed(el.source.value);
   updateInfo();
 })();
 </script>
