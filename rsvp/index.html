@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>RSVP リーダー</title>
+<meta name="description" content="日本語の文章を、文節ごとに一か所へ次々と表示して読む（RSVP）">
+<link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-jp.min.css">
+<style>
+/* ── tokens ── */
+:root {
+  --bg: #ffffff;
+  --fg: #1d1d1f;
+  --text: #4b4b50;
+  --muted: #86868b;
+  --rule: #e6e6e8;
+  --tile: #f5f5f7;
+  --halv: #81b11f;
+  --halv-ink: #6c9616;
+  --halv-wash: rgba(129, 177, 31, 0.10);
+  --accent: #0071e3;
+
+  --font: "Pretendard JP", -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+  --fs-s: 0.82rem;
+  --fs-m: 0.95rem;
+  --fs-word: clamp(2rem, 7.5vw, 3.4rem);
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 18px;
+  --sp-5: 28px;
+  --sp-6: 44px;
+
+  --radius: 8px;
+  --width: 680px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161617;
+    --fg: #f5f5f7;
+    --text: #b9b9bf;
+    --rule: #303033;
+    --tile: #242426;
+    --halv: #97c93a;
+    --halv-ink: #a5d44a;
+    --halv-wash: rgba(151, 201, 58, 0.14);
+    --accent: #4aa3ff;
+  }
+}
+
+/* ── base ── */
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, textarea, select { font: inherit; color: inherit; }
+a { color: inherit; }
+[hidden] { display: none !important; }
+
+/* ── page ── */
+.page {
+  max-width: var(--width);
+  margin: 0 auto;
+  padding: var(--sp-5) var(--sp-4) var(--sp-6);
+}
+
+/* ── header ── */
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.head h1 { margin: 0; font-size: 1.25rem; letter-spacing: -0.02em; }
+.head h1 small { margin-left: var(--sp-2); color: var(--muted); font-size: var(--fs-s); font-weight: 500; letter-spacing: 0; }
+.head a { color: var(--muted); font-size: var(--fs-s); text-decoration: none; }
+.head a:hover { color: var(--halv-ink); }
+
+/* ── text input ── */
+.source {
+  display: block;
+  width: 100%;
+  min-height: 15rem;
+  padding: var(--sp-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: var(--fs-m);
+  line-height: 1.7;
+  resize: vertical;
+}
+.source:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── settings ── */
+.settings {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) 5.5em;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin: var(--sp-4) 0;
+  font-size: var(--fs-m);
+}
+.settings label { color: var(--text); }
+.settings output { color: var(--fg); font-variant-numeric: tabular-nums; text-align: right; }
+input[type="range"] { width: 100%; accent-color: var(--halv); }
+
+/* ── buttons ── */
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.btn {
+  appearance: none;
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: var(--fs-m);
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--halv); color: var(--halv-ink); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.primary { border-color: var(--halv); background: var(--halv); color: #fff; }
+.btn.primary:hover { background: var(--halv-ink); color: #fff; }
+.btn.icon { display: inline-grid; place-items: center; width: 2.75rem; height: 2.75rem; padding: 0; }
+.btn.step { font-size: 1.3rem; line-height: 1; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.note { margin: var(--sp-3) 0 0; color: var(--muted); font-size: var(--fs-s); }
+
+/* ── stage (reading area) ── */
+.stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 46vh;
+  margin-bottom: var(--sp-4);
+  border-block: 1px solid var(--rule);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.stage:focus { outline: none; }   /* 読んでいる間はずっとここにフォーカスがあるので枠を出さない */
+.stage::before,
+.stage::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 2px;
+  height: var(--sp-4);
+  background: var(--halv);
+  transform: translateX(-50%);
+}
+.stage::before { top: 0; }
+.stage::after { bottom: 0; }
+.word {
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-word);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+}
+.word.end { color: var(--muted); font-size: var(--fs-m); font-weight: 500; letter-spacing: 0; }
+
+/* ── progress ── */
+.progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  color: var(--muted);
+  font-size: var(--fs-s);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── reader controls ── */
+.controls { justify-content: space-between; }
+.speed { color: var(--text); font-size: var(--fs-m); font-variant-numeric: tabular-nums; }
+.keys { margin-top: var(--sp-4); color: var(--muted); font-size: var(--fs-s); }
+.keys kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--tile);
+  font: inherit;
+  text-align: center;
+}
+
+@media (max-width: 520px) {
+  .settings { grid-template-columns: minmax(0, 1fr) 5em; }
+  .settings label { grid-column: 1 / -1; margin-bottom: calc(-1 * var(--sp-2)); }
+  .keys { display: none; }
+}
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="head">
+    <h1>RSVP リーダー<small>日本語</small></h1>
+    <a href="/">halv.kr</a>
+  </header>
+
+  <!-- 入力 -->
+  <section id="editView">
+    <textarea id="source" class="source" placeholder="ここに文章を貼り付けてください。" spellcheck="false"></textarea>
+    <div class="settings">
+      <label for="cpm">速さ（文字／分）</label>
+      <input type="range" id="cpm" min="200" max="2000" step="50" value="600">
+      <output id="cpmOut" for="cpm">600</output>
+      <label for="maxLen">一度に出す最大文字数</label>
+      <input type="range" id="maxLen" min="3" max="14" step="1" value="8">
+      <output id="maxLenOut" for="maxLen">8</output>
+    </div>
+    <div class="row">
+      <button type="button" class="btn primary" id="btnStart">読み始める</button>
+      <button type="button" class="btn" id="btnSample">例文</button>
+      <button type="button" class="btn" id="btnClear">消す</button>
+    </div>
+    <p class="note" id="info"></p>
+  </section>
+
+  <!-- 表示 -->
+  <section id="readView" hidden>
+    <div class="stage" id="stage" tabindex="0" title="クリックで再生／一時停止">
+      <div class="word" id="word"></div>
+    </div>
+    <div class="progress">
+      <input type="range" id="seek" min="0" max="0" value="0" aria-label="位置">
+      <span id="remain"></span>
+    </div>
+    <div class="row controls">
+      <div class="row">
+        <button type="button" class="btn icon step" id="btnPrev" aria-label="前へ" title="前へ（←）">‹</button>
+        <button type="button" class="btn primary icon" id="btnPlay" aria-label="再生" title="再生／一時停止（Space）">▶</button>
+        <button type="button" class="btn icon step" id="btnNext" aria-label="次へ" title="次へ（→）">›</button>
+      </div>
+      <div class="row">
+        <button type="button" class="btn icon" id="btnSlower" aria-label="遅く" title="遅く（↓）">−</button>
+        <span class="speed" id="speed"></span>
+        <button type="button" class="btn icon" id="btnFaster" aria-label="速く" title="速く（↑）">＋</button>
+      </div>
+      <button type="button" class="btn" id="btnEdit">文章に戻る</button>
+    </div>
+    <p class="keys"><kbd>Space</kbd> 再生／停止　<kbd>←</kbd><kbd>→</kbd> 前後　<kbd>↑</kbd><kbd>↓</kbd> 速さ　<kbd>Esc</kbd> 文章に戻る</p>
+  </section>
+</main>
+
+<script>
+/* ════════════════════════════════════════════════════════════
+   文節づくり
+   Intl.Segmenter（なければ文字種の切れ目）で細かく切った語を、
+   「自立語 + 後ろに付く助詞・助動詞・送り仮名」のまとまりに寄せる。
+   ════════════════════════════════════════════════════════════ */
+const RSVP = (() => {
+  // 前のまとまりに付ける記号（読点・句点・閉じ括弧など）
+  const CLOSE = /^[、。，．,.!?！？…‥」』）)】〕〉》］\]｝}〟’”:：;；]+$/u;
+  // 次のまとまりの頭に付ける記号
+  const OPEN = /^[「『（(【〔〈《［\[｛{〝‘“]+$/u;
+  const STOP = /[。．.!?！？…‥]/u;
+  const COMMA = /[、，,:：;；]/u;
+  const PUNCT = /[\s、。，．,.!?！？…‥「」『』（）()【】〔〕〈〉《》［］\[\]｛｝{}〝〟‘’“”:：;；・]/gu;
+
+  // 前に付く語（助詞・助動詞の切れ端）。完全一致で見る
+  const FUNC = new Set(('は が を に へ と で も の や か ね よ な ぞ さ わ や ' +
+    'から まで より ので のに けど けれど けれども だけ しか ばかり など ほど くらい ぐらい ずつ ' +
+    'では には とは でも にも とも への での からは までは だって って ' +
+    'です でし だ だっ だろ でしょ じゃ ます まし ませ ない なかっ なく ぬ ず ん ' +
+    'た て ば れ られ れる られる せ させ せる させる う よう たい たかっ たく そう らしい みたい ' +
+    'し して した する される ま まし ましょ いる いた いて ある あっ おり ください').split(' '));
+  // 文節を閉じる助詞。この後に来る、FUNC でない平仮名は新しい文節を始める
+  const ENDERS = new Set(('は が を に へ と も の や か ね よ ' +
+    'から まで より ので のに けど けれど けれども だけ しか など ほど ' +
+    'では には とは でも にも とも への での からは までは').split(' '));
+
+  const kindOfChar = (ch) => {
+    if (/[ぁ-ゟ]/u.test(ch)) return 'hira';
+    if (/[゠-ヿㇰ-ㇿｦ-ﾟ]/u.test(ch)) return 'kata';
+    if (/[一-鿿㐀-䶿豈-﫿々〆ヶ]/u.test(ch)) return 'kanji';
+    if (/[0-9０-９]/u.test(ch)) return 'digit';
+    if (/[A-Za-zＡ-Ｚａ-ｚ]/u.test(ch)) return 'latin';
+    return 'other';
+  };
+  const kindOf = (s) => {
+    let k = null;
+    for (const ch of s) { const c = kindOfChar(ch); if (k === null) k = c; else if (k !== c) return 'mixed'; }
+    return k || 'other';
+  };
+  const visible = (s) => [...s.replace(PUNCT, '')].length;
+  // 前のまとまりから離さない語（長さの上限を少し超えてもよい）
+  const SMALL = /^[っゃゅょぁぃぅぇぉゎんーッャュョァィゥェォヮン]/u;
+  const dependent = (t) => FUNC.has(t) || SMALL.test(t);
+  const SLACK = 4;
+
+  // Segmenter がないとき: 長い平仮名の並びを、2 文字以上の助詞（から・では など）の前後で切る。
+  // 1 文字の助詞で切ると「と|ても」のように語の中で切れてしまうので使わない
+  const KNOWN = [...ENDERS].filter((w) => w.length >= 2).sort((a, b) => b.length - a.length);
+  function splitHira(run) {
+    const out = [];
+    let i = 0, buf = '';
+    while (i < run.length) {
+      const m = KNOWN.find((w) => run.startsWith(w, i));
+      if (m) { if (buf) { out.push(buf); buf = ''; } out.push(m); i += m.length; }
+      else { buf += run[i]; i++; }
+    }
+    if (buf) out.push(buf);
+    return out;
+  }
+
+  let segmenter = null;
+  try { segmenter = new Intl.Segmenter('ja', { granularity: 'word' }); } catch (e) {}
+
+  // 語に切る。Segmenter がないときは文字種が変わるところで切る
+  function tokens(line) {
+    if (segmenter) return [...segmenter.segment(line)].map((s) => s.segment);
+    const out = [];
+    let buf = '', prev = null;
+    for (const ch of line) {
+      const k = /\s/u.test(ch) ? 'space' : (CLOSE.test(ch) || OPEN.test(ch) || ch === '・') ? 'punct:' + ch : kindOfChar(ch);
+      if (buf && (k !== prev || k.startsWith('punct'))) { out.push(buf); buf = ''; }
+      buf += ch; prev = k;
+    }
+    if (buf) out.push(buf);
+    return out.flatMap((t) => (t.length > 2 && kindOf(t) === 'hira' ? splitHira(t) : [t]));
+  }
+
+  // cur（いまのまとまり）に語 t を付けてよいか
+  function attaches(cur, t, kind) {
+    if (cur.end === 'comma' || cur.end === 'stop') return false;
+    if (SMALL.test(t) && !cur.space && cur.end === '') return true;   // っ・ん などで始まる切れ端
+    if (cur.space) return cur.pure === 'latin' && (kind === 'latin' || kind === 'digit');
+    if (cur.end === 'close') return kind === 'hira' && FUNC.has(t);
+    if (cur.joiner) return kind === 'kata' || kind === cur.pure;
+    switch (kind) {
+      // 助詞の後に付くのは助詞（から＋では など）と「で＋ある」だけ。ほかは新しい文節
+      case 'hira':
+        if (!ENDERS.has(cur.lastTok)) return true;
+        return ENDERS.has(t) || (t.length === 1 && FUNC.has(t)) ||
+          (cur.lastTok === 'で' && /^(ある|あっ|あり|あれ|あろ)$/u.test(t));
+      case 'kanji': return cur.pure === 'kanji' || cur.pure === 'digit';
+      case 'kata': return cur.pure === 'kata';
+      case 'digit': return cur.pure === 'digit';
+      case 'latin': return cur.pure === 'latin';
+      default: return false;
+    }
+  }
+
+  function chunk(text, maxLen) {
+    const out = [];
+    const lines = text.replace(/\r\n?/g, '\n').split(/\n+/);
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let cur = null, open = '';
+      const push = () => { if (cur) out.push(cur); cur = null; };
+      const start = (t, kind) => {
+        cur = { text: open + t, len: visible(t), pure: kind, lastTok: t, end: '', space: false, joiner: false, para: false };
+        open = '';
+      };
+      for (const t of tokens(line)) {
+        if (/^\s+$/u.test(t)) { if (cur) cur.space = true; continue; }
+        if (OPEN.test(t)) { push(); open += t; continue; }
+        if (CLOSE.test(t)) {
+          const target = cur || out[out.length - 1];
+          if (!target) { open += t; continue; }
+          target.text += t;
+          target.end = STOP.test(t) ? 'stop' : COMMA.test(t) ? (target.end === 'stop' ? 'stop' : 'comma') : (target.end || 'close');
+          target.lastTok = t;
+          continue;
+        }
+        if (t === '・' && cur) { cur.text += t; cur.joiner = true; continue; }
+        let kind = kindOf(t);
+        if (kind === 'mixed' && kindOfChar(t[0]) === 'hira') kind = 'hira';   // 「いた事」のような切れ端
+        if (!cur) { start(t, kind); continue; }
+        const add = visible(t) + (cur.space ? 1 : 0);
+        const limit = dependent(t) ? maxLen + SLACK : maxLen;
+        if (attaches(cur, t, kind) && cur.len + add <= limit) {
+          cur.text += (cur.space ? ' ' : '') + t;
+          cur.len += add;
+          if (cur.pure !== kind) cur.pure = 'mixed';
+          cur.lastTok = t;
+          cur.space = false;
+          cur.joiner = false;
+        } else {
+          push();
+          start(t, kind);
+        }
+      }
+      if (open && out.length) out[out.length - 1].text += open;
+      push();
+      if (out.length) out[out.length - 1].para = true;
+    }
+    return out.map(({ text, len, end, para }) => ({ text, len, end, para }));
+  }
+
+  // 表示時間（ミリ秒）。1 文字あたり 60000/cpm、短いまとまりは 2 文字分、句読点と段落の後は少し長く
+  function duration(c, cpm) {
+    const per = 60000 / cpm;
+    let ms = per * Math.max(c.len, 2);
+    if (c.end === 'comma') ms += per * 2;
+    if (c.end === 'stop') ms += per * 4;
+    if (c.para) ms += per * 4;
+    return ms;
+  }
+
+  return { chunk, duration, hasSegmenter: !!segmenter };
+})();
+
+/* ════════════════════════════════════════════════════════════
+   画面
+   ════════════════════════════════════════════════════════════ */
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    editView: $('editView'), readView: $('readView'), source: $('source'),
+    cpm: $('cpm'), cpmOut: $('cpmOut'), maxLen: $('maxLen'), maxLenOut: $('maxLenOut'), info: $('info'),
+    stage: $('stage'), word: $('word'), seek: $('seek'), remain: $('remain'), speed: $('speed'),
+    btnPlay: $('btnPlay'),
+  };
+  const STORE = 'halv-rsvp-v1';
+  const SAMPLE = '吾輩は猫である。名前はまだ無い。\nどこで生れたかとんと見当がつかぬ。何でも薄暗いじめじめした所でニャーニャー泣いていた事だけは記憶している。吾輩はここで始めて人間というものを見た。しかもあとで聞くとそれは書生という人間中で一番獰悪な種族であったそうだ。\n（夏目漱石『吾輩は猫である』より）';
+
+  let chunks = [], pos = 0, timer = null, playing = false;
+  const cpm = () => Number(el.cpm.value);
+
+  // 保存（この端末のこのブラウザだけ）
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORE) || '{}');
+      if (typeof s.text === 'string') el.source.value = s.text;
+      if (s.cpm) el.cpm.value = s.cpm;
+      if (s.maxLen) el.maxLen.value = s.maxLen;
+    } catch (e) {}
+  }
+  function save() {
+    try { localStorage.setItem(STORE, JSON.stringify({ text: el.source.value, cpm: cpm(), maxLen: Number(el.maxLen.value) })); } catch (e) {}
+  }
+
+  function fmtTime(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+  function updateInfo() {
+    el.cpmOut.textContent = el.cpm.value;
+    el.maxLenOut.textContent = el.maxLen.value;
+    const text = el.source.value;
+    if (!text.trim()) { el.info.textContent = RSVP.hasSegmenter ? '' : 'このブラウザでは語の区切りを文字の種類で推定します。'; return; }
+    const cs = RSVP.chunk(text, Number(el.maxLen.value));
+    const total = cs.reduce((a, c) => a + RSVP.duration(c, cpm()), 0);
+    el.info.textContent = cs.length + ' 区切り・約 ' + fmtTime(total);
+  }
+  function remainingMs() {
+    let ms = 0;
+    for (let i = pos; i < chunks.length; i++) ms += RSVP.duration(chunks[i], cpm());
+    return ms;
+  }
+
+  // 長い区切りが表示面からはみ出すときだけ、字を小さくして収める
+  function fit() {
+    el.word.style.fontSize = '';
+    const room = el.stage.clientWidth, need = el.word.scrollWidth;
+    if (need > room && room > 0) {
+      el.word.style.fontSize = (parseFloat(getComputedStyle(el.word).fontSize) * room / need * 0.96) + 'px';
+    }
+  }
+  window.addEventListener('resize', () => { if (!el.readView.hidden) fit(); });
+
+  function render() {
+    const atEnd = pos >= chunks.length;
+    el.word.classList.toggle('end', atEnd);
+    el.word.textContent = atEnd ? 'おわり（Space でもう一度）' : chunks[pos].text;
+    fit();
+    el.seek.max = Math.max(chunks.length - 1, 0);
+    el.seek.value = Math.min(pos, chunks.length - 1);
+    el.remain.textContent = fmtTime(remainingMs());
+    el.speed.textContent = cpm() + ' 字/分';
+    el.btnPlay.textContent = playing ? '❚❚' : '▶';
+    el.btnPlay.setAttribute('aria-label', playing ? '一時停止' : '再生');
+  }
+
+  function tick() {
+    if (!playing) return;
+    if (pos >= chunks.length) { stop(); return; }
+    render();
+    timer = setTimeout(() => { pos++; tick(); }, RSVP.duration(chunks[pos], cpm()));
+  }
+  function play() {
+    if (!chunks.length) return;
+    if (pos >= chunks.length) pos = 0;
+    playing = true;
+    clearTimeout(timer);
+    tick();
+  }
+  function stop() { playing = false; clearTimeout(timer); render(); }
+  const toggle = () => (playing ? stop() : play());
+  function step(d) {
+    stop();
+    pos = Math.min(Math.max(pos + d, 0), chunks.length - 1);
+    render();
+  }
+  function setSpeed(d) {
+    el.cpm.value = Math.min(Math.max(cpm() + d, Number(el.cpm.min)), Number(el.cpm.max));
+    save(); updateInfo(); render();
+  }
+
+  function openReader() {
+    chunks = RSVP.chunk(el.source.value, Number(el.maxLen.value));
+    if (!chunks.length) { el.source.focus(); return; }
+    save();
+    pos = 0;
+    el.editView.hidden = true;
+    el.readView.hidden = false;
+    render();
+    el.stage.focus();
+    timer = setTimeout(play, 600);   // 最初の区切りに目を合わせる間（その間に止めれば始まらない）
+  }
+  function closeReader() {
+    stop();
+    el.readView.hidden = true;
+    el.editView.hidden = false;
+    updateInfo();
+    el.source.focus();
+  }
+
+  $('btnStart').addEventListener('click', openReader);
+  $('btnSample').addEventListener('click', () => { el.source.value = SAMPLE; save(); updateInfo(); });
+  $('btnClear').addEventListener('click', () => { el.source.value = ''; save(); updateInfo(); el.source.focus(); });
+  $('btnEdit').addEventListener('click', closeReader);
+  $('btnPrev').addEventListener('click', () => step(-1));
+  $('btnNext').addEventListener('click', () => step(1));
+  $('btnSlower').addEventListener('click', () => setSpeed(-50));
+  $('btnFaster').addEventListener('click', () => setSpeed(50));
+  el.btnPlay.addEventListener('click', toggle);
+  // マウスで押した後はフォーカスを表示面へ移す（Space がボタンにも効いて二度切り替わらないように）
+  el.readView.querySelectorAll('button').forEach((b) => b.addEventListener('click', (e) => { if (e.detail > 0 && !el.readView.hidden) el.stage.focus(); }));
+  el.stage.addEventListener('click', toggle);
+  el.seek.addEventListener('input', () => { const v = Number(el.seek.value); stop(); pos = v; render(); });
+  el.source.addEventListener('input', () => { save(); updateInfo(); });
+  el.cpm.addEventListener('input', () => { save(); updateInfo(); });
+  el.maxLen.addEventListener('input', () => { save(); updateInfo(); });
+
+  document.addEventListener('keydown', (e) => {
+    if (el.readView.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target instanceof HTMLInputElement && e.target.type === 'range' && e.key.startsWith('Arrow')) return;
+    if (e.target instanceof HTMLButtonElement && (e.key === ' ' || e.key === 'Enter')) return;   // ボタンそのものに任せる
+    const k = e.key;
+    if (k === ' ' || k === 'Spacebar') { e.preventDefault(); toggle(); }
+    else if (k === 'ArrowLeft') { e.preventDefault(); step(-1); }
+    else if (k === 'ArrowRight') { e.preventDefault(); step(1); }
+    else if (k === 'ArrowUp') { e.preventDefault(); setSpeed(50); }
+    else if (k === 'ArrowDown') { e.preventDefault(); setSpeed(-50); }
+    else if (k === 'Escape') { e.preventDefault(); closeReader(); }
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && playing) stop(); });
+
+  load();
+  updateInfo();
+})();
+</script>
+</body>
+</html>
