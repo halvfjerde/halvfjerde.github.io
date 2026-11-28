@@ -11,6 +11,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Zen+Old+Mincho:wght@400&display=swap" rel="stylesheet">
 <!-- 고딕 자리의 라틴 文字·數字: Halv Sans (Alegreya Sans) -->
 <link rel="stylesheet" href="/fonts/sans/sans.css?v=1">
+<!-- 한글: 本文 은바탕, UI 은돋움 (블로그·사전과 같은 것) -->
+<link rel="stylesheet" href="/fonts/un/unbatang.css?v=2">
+<link rel="stylesheet" href="/fonts/un/undotum.css?v=2">
 <!-- 寫硏 書體 (TypeSquare): 本文 石井明朝 オールド R, UI 石井ゴシック R. 登錄한 도메인에서만 나오고, 없으면 Zen Old Mincho 로 -->
 <script type="text/javascript" src="//typesquare.com/accessor/ko/script/typesquare.js?ee85a1e0da0743cc9ca6031dd3b19c5d" charset="utf-8"></script>
 <style>
@@ -35,10 +38,10 @@
   --color-muted-3: #78736a;
   --color-muted-4: #a19b90;
 
-  --font-mincho: "Newsreader", "IshiiMincho Old R", "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-mincho: "Newsreader", "IshiiMincho Old R", "UnBatang", "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", "AppleMyungjo", serif;
   /* 입력欄用: TypeSquare 는 textarea 의 글꼴을 다루지 못하고 이름을 바꿔 버리므로, 寫硏 書體를 빼고 Zen Old Mincho 로 */
-  --font-mincho-plain: "Newsreader", "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
-  --font-gothic: "Halv Sans", "IshiiGothic R", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-mincho-plain: "Newsreader", "UnBatang", "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", "AppleMyungjo", serif;
+  --font-gothic: "Halv Sans", "IshiiGothic R", "UnDotum", "Hiragino Sans", "Yu Gothic", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --weight-regular: 350;
 
   --fs-caption: 0.85rem;
@@ -481,6 +484,8 @@ const RSVP = (() => {
     return k || 'other';
   };
   const visible = (s) => [...s.replace(PUNCT, '')].length;
+  // 한글: 띄어 쓴 곳이 경계(어절). 붙여 쓴 것은 漢字·括弧 뒤의 토씨까지 한 덩어리로
+  const HANGUL = /[\uAC00-\uD7A3\u1100-\u11FF\u3130-\u318F]/u;
   // 前のまとまりから離さない語（長さの上限を少し超えてもよい）
   const SMALL = /^[っゃゅょぁぃぅぇぉゎんーッャュョァィゥェォヮン]/u;
   const dependent = (t) => FUNC.has(t) || SMALL.test(t);
@@ -547,7 +552,7 @@ const RSVP = (() => {
       let cur = null, open = '';
       const push = () => { if (cur) out.push(cur); cur = null; };
       const start = (t, kind) => {
-        cur = { text: open + t, len: visible(t), pure: kind, lastTok: t, end: '', space: false, joiner: false, para: false };
+        cur = { text: open + t, len: visible(t), pure: kind, lastTok: t, end: '', space: false, joiner: false, para: false, hangul: HANGUL.test(t) };
         open = '';
       };
       for (const t of tokens(line)) {
@@ -567,13 +572,15 @@ const RSVP = (() => {
         if (!cur) { start(t, kind); continue; }
         const add = visible(t) + (cur.space ? 1 : 0);
         const limit = dependent(t) ? maxLen + SLACK : maxLen;
-        if (attaches(cur, t, kind) && cur.len + add <= limit) {
+        const eojeol = !cur.space && (cur.hangul || HANGUL.test(t)) && cur.end !== 'comma' && cur.end !== 'stop';
+        if (eojeol || (attaches(cur, t, kind) && cur.len + add <= limit)) {
           cur.text += (cur.space ? ' ' : '') + t;
           cur.len += add;
           if (cur.pure !== kind) cur.pure = 'mixed';
           cur.lastTok = t;
           cur.space = false;
           cur.joiner = false;
+          if (HANGUL.test(t)) cur.hangul = true;
         } else {
           push();
           start(t, kind);
