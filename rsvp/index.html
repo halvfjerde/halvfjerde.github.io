@@ -684,6 +684,29 @@ const RSVP = (() => {
     if (need > room && room > 0) {
       el.word.style.fontSize = (parseFloat(getComputedStyle(el.word).fontSize) * room / need * 0.96) + 'px';
     }
+    center();
+  }
+
+  // 上下の目盛りのちょうど真ん中に字の墨（実際に描かれる部分）が来るようにずらす。
+  // 行の高さは先頭の Newsreader の寸法で決まり、漢字・仮名・한글はその中で上に寄るため。
+  // 区切りごとの墨ではなく、文字種ごとの基準字（国・한）で測る（区切りごとに上下に揺れないように）
+  const ctx = document.createElement('canvas').getContext('2d');
+  const probe = document.createElement('span');
+  probe.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline';
+  function center() {
+    el.word.style.transform = '';
+    const t = el.word.textContent;
+    const ref = /[\u3040-\u30FF\u3400-\u9FFF\uF900-\uFAFF々〆]/u.test(t) ? '国' : /[\uAC00-\uD7A3]/u.test(t) ? '한' : '';
+    if (!ref || el.word.classList.contains('is-end')) return;
+    const cs = getComputedStyle(el.word);
+    ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const m = ctx.measureText(ref);
+    const inkMid = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2;   // 基準線から上へ
+    el.word.append(probe);
+    const baseline = probe.getBoundingClientRect().top;
+    probe.remove();
+    const box = el.stage.getBoundingClientRect();
+    el.word.style.transform = `translateY(${(box.top + box.height / 2) - (baseline - inkMid)}px)`;
   }
 
   function render() {
@@ -793,6 +816,8 @@ const RSVP = (() => {
     srcTimer = setTimeout(() => tsFeed(el.source.value), 1200);
   });
   window.addEventListener('resize', () => { if (!el.readView.hidden) fit(); });
+  // 字体が後から届いたら（TypeSquare・Google Fonts）測り直す
+  if (document.fonts) document.fonts.addEventListener('loadingdone', () => { if (!el.readView.hidden) fit(); });
 
   document.addEventListener('keydown', (e) => {
     if (el.readView.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
